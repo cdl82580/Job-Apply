@@ -268,6 +268,63 @@
     @keyframes rot { to { transform: rotate(360deg); } }
 
     .hidden { display: none !important; }
+
+    /* ── Select ──────────────────────────────────────────────────── */
+    select {
+      width: 100%;
+      padding: .5rem .75rem;
+      border: 1px solid #D1D5DB;
+      border-radius: 6px;
+      font-size: .9rem;
+      font-family: inherit;
+      color: var(--text);
+      background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right .75rem center;
+      appearance: none;
+      cursor: pointer;
+    }
+    select:focus {
+      outline: none;
+      border-color: var(--border);
+      box-shadow: 0 0 0 3px rgba(43,108,176,.12);
+    }
+
+    /* ── Prep card collapsible ───────────────────────────────────── */
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .card-head h2 { font-size: 1rem; font-weight: 700; color: var(--primary); margin: 0; }
+    .card-head:hover h2 { color: var(--border); }
+    .chevron { font-size: .7rem; color: var(--muted); transition: transform .2s; }
+    .chevron.open { transform: rotate(180deg); }
+    .card-body { margin-top: 1.25rem; }
+
+    /* ── Source mode toggle ──────────────────────────────────────── */
+    .src-toggle { display: flex; gap: .5rem; margin-bottom: .75rem; }
+    .src-btn {
+      padding: .3rem .85rem;
+      border: 1px solid #D1D5DB;
+      border-radius: 6px;
+      font-size: .825rem;
+      font-weight: 500;
+      background: white;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .src-btn.active {
+      background: var(--fill);
+      border-color: var(--border);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* Smaller textarea overrides for prep form */
+    #prepFocus  { min-height: 60px; }
+    #prepJdText { min-height: 130px; }
   </style>
 </head>
 <body>
@@ -346,6 +403,89 @@
       <span class="drive-btn-arrow">&#x2197;</span>
     </a>
     <button class="btn btn-ghost" id="newRunBtn">&#x2190; New Application</button>
+  </div>
+
+  <!-- ── Interview Prep Form ──────────────────────────────────── -->
+  <div class="card" id="prepCard">
+    <div class="card-head" id="prepToggle">
+      <h2>Interview Prep</h2>
+      <span class="chevron" id="prepChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="prepBody">
+      <div class="field">
+        <label>Job</label>
+        <div class="src-toggle">
+          <button type="button" class="src-btn active" id="srcDropBtn">From existing run</button>
+          <button type="button" class="src-btn" id="srcPasteBtn">Paste JD</button>
+        </div>
+        <select id="prepRunSel">
+          <option value="">— select a job —</option>
+        </select>
+        <textarea id="prepJdText" class="hidden" rows="5"
+          placeholder="Paste the full job description here…"></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="prepCompany">Company</label>
+          <input id="prepCompany" type="text" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="field">
+          <label for="prepRole">Role Title</label>
+          <input id="prepRole" type="text" placeholder="e.g. Solutions Engineer">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="prepRound">Interview Round</label>
+          <select id="prepRound">
+            <option>Phone Screen</option>
+            <option>Hiring Manager</option>
+            <option>Peer</option>
+            <option>Technical</option>
+            <option>Executive</option>
+            <option>Panel</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="prepFocus">Focus / Slant <span class="opt">(optional)</span></label>
+        <textarea id="prepFocus" rows="2"
+          placeholder="e.g. lean into the agentic AI angle, they mentioned MCP"></textarea>
+      </div>
+      <button class="btn" type="button" id="prepSubmitBtn">Generate Prep Doc</button>
+      <div class="inline-err" id="prepFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── Prep Progress ─────────────────────────────────────────── -->
+  <div class="card hidden" id="prepProgressCard">
+    <div class="progress-header">
+      <h2>Interview Prep</h2>
+      <span class="badge badge-running" id="prepBadge">Running</span>
+    </div>
+    <div class="log" id="prepLog"></div>
+    <div class="inline-err" id="prepErr"></div>
+  </div>
+
+  <!-- ── Prep Results ──────────────────────────────────────────── -->
+  <div class="card hidden" id="prepResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="prepResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="prepResRole"></span>
+        <span class="result-sep">&middot;</span>
+        <span style="color:var(--muted);font-size:.875rem" id="prepResRound"></span>
+      </div>
+    </div>
+    <div class="file-grid" id="prepFileGrid"></div>
+    <a class="drive-btn hidden" id="prepDriveBtn" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <button class="btn btn-ghost" id="newPrepBtn">&#x2190; New Prep</button>
   </div>
 
 </div><!-- /container -->
@@ -537,6 +677,241 @@
     hide('queueNote');
     form.reset();
     logEl.textContent = '';
+  });
+
+  // ── Interview Prep ────────────────────────────────────────────────
+
+  let _prepJobPosting   = '';
+  let _prepCompanyCtx   = '';
+  let _prepRoleCtx      = '';
+  let _prepRoundCtx     = '';
+
+  // Collapsible toggle
+  document.getElementById('prepToggle').addEventListener('click', async () => {
+    const body    = document.getElementById('prepBody');
+    const chevron = document.getElementById('prepChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) {
+      body.classList.add('hidden');
+      chevron.classList.remove('open');
+    } else {
+      body.classList.remove('hidden');
+      chevron.classList.add('open');
+      if (document.getElementById('prepRunSel').options.length <= 1) {
+        await loadPrepRuns();
+      }
+    }
+  });
+
+  // Load existing run folders into the dropdown
+  async function loadPrepRuns() {
+    try {
+      const res  = await apiFetch('/api/runs');
+      const data = await res.json();
+      const sel  = document.getElementById('prepRunSel');
+      sel.innerHTML = '<option value="">— select a job —</option>';
+      for (const r of data.runs) {
+        const opt   = document.createElement('option');
+        opt.value   = r.folder;
+        const label = r.folder.replace(/_/g, ' · ');
+        opt.textContent = r.has_job_posting ? label : label + ' (no JD saved)';
+        if (!r.has_job_posting) opt.disabled = true;
+        sel.appendChild(opt);
+      }
+    } catch (e) { console.error('loadPrepRuns', e); }
+  }
+
+  // Source mode toggle
+  let prepSrcMode = 'dropdown';
+
+  document.getElementById('srcDropBtn').addEventListener('click', () => {
+    prepSrcMode = 'dropdown';
+    document.getElementById('srcDropBtn').classList.add('active');
+    document.getElementById('srcPasteBtn').classList.remove('active');
+    document.getElementById('prepRunSel').classList.remove('hidden');
+    document.getElementById('prepJdText').classList.add('hidden');
+  });
+
+  document.getElementById('srcPasteBtn').addEventListener('click', () => {
+    prepSrcMode = 'paste';
+    document.getElementById('srcPasteBtn').classList.add('active');
+    document.getElementById('srcDropBtn').classList.remove('active');
+    document.getElementById('prepRunSel').classList.add('hidden');
+    document.getElementById('prepJdText').classList.remove('hidden');
+  });
+
+  // Folder selection → autofill company/role + load stored JD
+  document.getElementById('prepRunSel').addEventListener('change', async (e) => {
+    const folder = e.target.value;
+    _prepJobPosting = '';
+    if (!folder) return;
+
+    const idx = folder.indexOf('_');
+    if (idx > 0) {
+      document.getElementById('prepCompany').value = folder.slice(0, idx);
+      document.getElementById('prepRole').value    = folder.slice(idx + 1);
+    }
+
+    try {
+      const res = await apiFetch(`/api/runs/${encodeURIComponent(folder)}/job_posting`);
+      if (res.ok) {
+        const d = await res.json();
+        _prepJobPosting = d.job_posting;
+      }
+    } catch (err) { console.error('loadJD', err); }
+  });
+
+  // Submit prep
+  document.getElementById('prepSubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('prepFormErr');
+    errEl.style.display = 'none';
+
+    const company = document.getElementById('prepCompany').value.trim();
+    const role    = document.getElementById('prepRole').value.trim();
+    const round   = document.getElementById('prepRound').value;
+    const focus   = document.getElementById('prepFocus').value.trim();
+
+    let jd = '';
+    if (prepSrcMode === 'dropdown') {
+      jd = _prepJobPosting;
+      if (!jd) {
+        errEl.textContent = 'Select a run with a saved job posting, or switch to Paste JD.';
+        errEl.style.display = 'block';
+        return;
+      }
+    } else {
+      jd = document.getElementById('prepJdText').value.trim();
+      if (!jd) {
+        errEl.textContent = 'Please paste a job description.';
+        errEl.style.display = 'block';
+        return;
+      }
+    }
+
+    if (!company || !role) {
+      errEl.textContent = 'Company and role are required.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    _prepCompanyCtx = company;
+    _prepRoleCtx    = role;
+    _prepRoundCtx   = round;
+
+    document.getElementById('prepLog').textContent = '';
+    document.getElementById('prepErr').style.display = 'none';
+    hide('prepResultsCard');
+    hide('prepDriveBtn');
+    show('prepProgressCard');
+    setPrepBadge('running');
+    const btn = document.getElementById('prepSubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Generating…';
+
+    let prep_id;
+    try {
+      const res = await apiFetch('/api/prep', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          job_posting: jd, company, role,
+          round_type:  round,
+          focus:       focus || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      ({ prep_id } = await res.json());
+    } catch (err) {
+      if (err.message === '401') return;
+      document.getElementById('prepLog').textContent += '❌ Failed to start: ' + err.message + '\n';
+      setPrepBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Generate Prep Doc';
+      return;
+    }
+
+    const prepLog = document.getElementById('prepLog');
+    const es = new EventSource(`/api/prep/${prep_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        prepLog.textContent += msg.message + '\n';
+        prepLog.scrollTop = prepLog.scrollHeight;
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setPrepBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Generate Prep Doc';
+        showPrepResults(prep_id, msg);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setPrepBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Prep Doc';
+        document.getElementById('prepErr').textContent = '❌ ' + msg.message;
+        document.getElementById('prepErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('prepBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setPrepBadge('error');
+      prepLog.textContent += '\n⚠ Connection lost.';
+      btn.disabled = false;
+      btn.textContent = 'Generate Prep Doc';
+    };
+  });
+
+  function setPrepBadge(status) {
+    const b = document.getElementById('prepBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  function showPrepResults(prep_id, msg) {
+    show('prepResultsCard');
+    document.getElementById('prepResultsCard').classList.add('results-appear');
+
+    document.getElementById('prepResCompany').textContent = _prepCompanyCtx;
+    document.getElementById('prepResRole').textContent    = _prepRoleCtx;
+    document.getElementById('prepResRound').textContent   = _prepRoundCtx;
+
+    const grid = document.getElementById('prepFileGrid');
+    grid.innerHTML = '';
+    if (msg.files?.prep) {
+      const a     = document.createElement('a');
+      a.className = 'file-card';
+      a.href      = `/api/prep/${prep_id}/files/${encodeURIComponent(msg.files.prep)}`;
+      a.download  = msg.files.prep;
+      a.title     = msg.files.prep;
+      a.innerHTML = `
+        <div class="file-card-icon">📋</div>
+        <div class="file-card-label">Interview Prep</div>
+        <div class="file-card-desc">Questions, stories &amp; what to ask — ${_prepRoundCtx}</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    if (msg.folder_url) {
+      const btn = document.getElementById('prepDriveBtn');
+      btn.href = msg.folder_url;
+      show('prepDriveBtn');
+    }
+  }
+
+  document.getElementById('newPrepBtn').addEventListener('click', () => {
+    document.getElementById('prepResultsCard').classList.remove('results-appear');
+    hide('prepResultsCard');
+    hide('prepDriveBtn');
+    document.getElementById('prepFileGrid').innerHTML = '';
+    hide('prepProgressCard');
+    document.getElementById('prepLog').textContent = '';
   });
 </script>
 </body>

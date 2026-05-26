@@ -49,11 +49,17 @@ from scripts import storage
 from apply import (
     DEFAULT_MODEL,
     MASTER_RESUME,
+    OUTPUT_DIR,
     PROFILE_FILE,
+    ROUND_TYPES,
+    InterviewPrepConfig,
+    InterviewPrepResult,
     WorkflowConfig,
     WorkflowError,
     WorkflowResult,
+    generate_interview_prep,
     run_workflow,
+    safe_filename,
 )
 
 # ---------------------------------------------------------------------------
@@ -185,10 +191,11 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 # ---------------------------------------------------------------------------
-# In-memory run store + lock
+# In-memory stores
 # ---------------------------------------------------------------------------
 
-_runs: dict[str, dict[str, Any]] = {}
+_runs:  dict[str, dict[str, Any]] = {}
+_preps: dict[str, dict[str, Any]] = {}
 _workflow_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
@@ -212,6 +219,14 @@ class RunRequest(BaseModel):
     company: str
     role: str
     contact: str | None = None
+    model: str | None = None
+
+class PrepRequest(BaseModel):
+    job_posting: str
+    company: str
+    role: str
+    round_type: str
+    focus: str | None = None
     model: str | None = None
 
 # ---------------------------------------------------------------------------
@@ -510,6 +525,180 @@ async def get_file(run_id: str, filename: str, request: Request):
         raise HTTPException(404, "Run not complete")
 
     result: WorkflowResult = run["result"]
+    file_path = (result.run_dir / filename).resolve()
+    try:
+        file_path.relative_to(result.run_dir.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename")
+
+    if not file_path.exists():
+        raise HTTPException(404, "File not found")
+
+    return FileResponse(
+        file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Run listing (for interview prep dropdown)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/runs")
+async def list_runs(request: Request):
+    _require_user(request)
+    runs = []
+    if OUTPUT_DIR.exists():
+        dirs = sorted(OUTPUT_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+        for d in dirs:
+            if d.is_dir():
+                runs.append({
+                    "folder":          d.name,
+                    "has_job_posting": (d / "job_posting.txt").exists(),
+                })
+    return {"runs": runs}
+
+
+@app.get("/api/runs/{folder}/job_posting")
+async def get_run_job_posting(folder: str, request: Request):
+    _require_user(request)
+    try:
+        path = (OUTPUT_DIR / folder / "job_posting.txt").resolve()
+        path.relative_to(OUTPUT_DIR.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid folder")
+    if not path.exists():
+        raise HTTPException(404, "Job posting not saved for this run")
+    return {"job_posting": path.read_text(encoding="utf-8")}
+
+
+# ---------------------------------------------------------------------------
+# Interview prep endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/prep")
+async def create_prep(req: PrepRequest, request: Request, response: Response):
+    user_data = _require_user(request)
+    user_id   = user_data["user_id"]
+
+    if req.round_type not in ROUND_TYPES:
+        raise HTTPException(400, f"round_type must be one of: {', '.join(ROUND_TYPES)}")
+
+    resume_bytes = storage.get_resume(user_id)
+    if not resume_bytes:
+        raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+
+    profile_text = storage.get_profile(user_id)
+    if not profile_text:
+        raise HTTPException(400, "No profile guide saved. Add one in your profile.")
+
+    prep_id = str(uuid.uuid4())
+    q: Queue[dict | None] = Queue()
+    _preps[prep_id] = {"queue": q, "status": "queued", "result": None, "error": None}
+
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+
+    def _thread():
+        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+        tmp.write(resume_bytes)
+        tmp.close()
+        resume_path = Path(tmp.name)
+
+        try:
+            _preps[prep_id]["status"] = "running"
+
+            def progress(msg: str):
+                q.put({"type": "progress", "message": msg})
+
+            config = InterviewPrepConfig(
+                round_type=req.round_type,
+                focus=req.focus or "",
+                model=req.model or DEFAULT_MODEL,
+                progress=progress,
+                master_resume=resume_path,
+                profile_text=profile_text,
+            )
+            try:
+                result: InterviewPrepResult = generate_interview_prep(
+                    job_posting=req.job_posting,
+                    company=req.company,
+                    role=req.role,
+                    config=config,
+                )
+                _preps[prep_id]["result"] = result
+                _preps[prep_id]["status"] = "done"
+                q.put({
+                    "type":       "done",
+                    "prep_id":    prep_id,
+                    "folder_url": result.folder_url,
+                    "files": {
+                        "prep": result.prep_path.name,
+                    },
+                })
+            except WorkflowError as exc:
+                _preps[prep_id]["status"] = "error"
+                _preps[prep_id]["error"]  = str(exc)
+                q.put({"type": "error", "message": str(exc)})
+            except Exception as exc:
+                msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                _preps[prep_id]["status"] = "error"
+                _preps[prep_id]["error"]  = msg
+                q.put({"type": "error", "message": msg})
+            finally:
+                q.put(None)
+        finally:
+            resume_path.unlink(missing_ok=True)
+
+    threading.Thread(target=_thread, daemon=True).start()
+    return {"prep_id": prep_id}
+
+
+@app.get("/api/prep/{prep_id}/stream")
+async def stream_prep(prep_id: str, request: Request):
+    _require_user(request)
+    if prep_id not in _preps:
+        raise HTTPException(404, "Prep run not found")
+
+    q    = _preps[prep_id]["queue"]
+    loop = asyncio.get_event_loop()
+
+    async def generate():
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: q.get(timeout=30))
+            except Empty:
+                yield ": keepalive\n\n"
+                continue
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/prep/{prep_id}/status")
+async def prep_status(prep_id: str, request: Request):
+    _require_user(request)
+    prep = _preps.get(prep_id)
+    if not prep:
+        raise HTTPException(404, "Prep run not found")
+    return {"prep_id": prep_id, "status": prep["status"], "error": prep.get("error")}
+
+
+@app.get("/api/prep/{prep_id}/files/{filename}")
+async def get_prep_file(prep_id: str, filename: str, request: Request):
+    _require_user(request)
+    prep = _preps.get(prep_id)
+    if not prep or prep["status"] != "done" or not prep.get("result"):
+        raise HTTPException(404, "Prep not complete")
+
+    result: InterviewPrepResult = prep["result"]
     file_path = (result.run_dir / filename).resolve()
     try:
         file_path.relative_to(result.run_dir.resolve())

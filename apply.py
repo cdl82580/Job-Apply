@@ -73,6 +73,15 @@ SCRIPTS_DIR   = Path("scripts/office")
 
 DEFAULT_MODEL = "claude-opus-4-5-20251101"
 
+ROUND_TYPES = (
+    "Phone Screen",
+    "Hiring Manager",
+    "Peer",
+    "Technical",
+    "Executive",
+    "Panel",
+)
+
 # ---------------------------------------------------------------------------
 # WorkflowError / WorkflowConfig / WorkflowResult
 # ---------------------------------------------------------------------------
@@ -103,6 +112,25 @@ class WorkflowResult:
     cover_letter_path: Path
     framing_angle:     str
     folder_url:        str | None = None
+
+
+@dataclass
+class InterviewPrepConfig:
+    """Settings for a single interview-prep run."""
+    round_type:    str
+    focus:         str
+    model:         str                    = DEFAULT_MODEL
+    progress:      Callable[[str], None]  = field(default=print)
+    profile_text:  str | None             = None
+    master_resume: Path | None            = None
+
+
+@dataclass
+class InterviewPrepResult:
+    """Paths produced by a completed interview-prep run."""
+    prep_path:  Path
+    run_dir:    Path
+    folder_url: str | None = None
 
 # ---------------------------------------------------------------------------
 # Anthropic client — lazy init so import never fails on missing API key
@@ -1071,6 +1099,73 @@ def step8_upload(
         return None
 
 # ---------------------------------------------------------------------------
+# Drive: targeted single-file upload (used by interview prep)
+# ---------------------------------------------------------------------------
+
+def _upload_single_to_drive(
+    file_path: Path,
+    folder_name: str,
+    config: WorkflowConfig,
+) -> str | None:
+    """Upload *one* file to the Job Applications Drive folder.
+
+    Finds or creates the named subfolder, then uploads the file.
+    Returns the folder's webViewLink, or None on any failure/skip.
+    """
+    try:
+        from googleapiclient.http import MediaFileUpload
+    except ImportError:
+        config.progress("  ⚠ google-api-python-client not installed — skipping Drive upload")
+        return None
+
+    try:
+        service = _gdrive_service(config)
+        if service is None:
+            return None
+
+        existing = service.files().list(
+            q=(
+                f"name='{folder_name}' and "
+                f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and "
+                "mimeType='application/vnd.google-apps.folder' and trashed=false"
+            ),
+            fields="files(id, webViewLink)",
+            pageSize=1,
+        ).execute().get("files", [])
+
+        if existing:
+            folder_id  = existing[0]["id"]
+            folder_url = existing[0]["webViewLink"]
+            config.progress(f"  ✓ Using existing Drive subfolder: {folder_name}")
+        else:
+            rf = service.files().create(
+                body={
+                    "name":     folder_name,
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents":  [GDRIVE_PARENT_FOLDER_ID],
+                },
+                fields="id, webViewLink",
+            ).execute()
+            folder_id  = rf["id"]
+            folder_url = rf["webViewLink"]
+            config.progress(f"  ✓ Created Drive subfolder: {folder_name}")
+
+        media = MediaFileUpload(str(file_path), mimetype=_MIME_DOCX, resumable=False)
+        service.files().create(
+            body={"name": file_path.name, "parents": [folder_id]},
+            media_body=media,
+            fields="id",
+        ).execute()
+        config.progress(f"  ✓ Uploaded {file_path.name}")
+        return folder_url
+
+    except Exception as exc:
+        config.progress(f"  ⚠ Drive upload failed: {exc}")
+        config.progress("    File is still available for download below.")
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Public workflow entry point
 # ---------------------------------------------------------------------------
 
@@ -1106,6 +1201,9 @@ def run_workflow(
     role_safe    = safe_filename(role)
     run_dir      = OUTPUT_DIR / f"{company_safe}_{role_safe}"
     run_dir.mkdir(exist_ok=True)
+
+    # Persist job posting so interview prep can retrieve it later
+    (run_dir / "job_posting.txt").write_text(job_posting, encoding="utf-8")
 
     resume_out = run_dir / f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}.docx"
     ats_out    = run_dir / f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}_ATS.docx"
@@ -1166,6 +1264,308 @@ def run_workflow(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Interview Prep
+# ---------------------------------------------------------------------------
+
+PREP_SYSTEM = """\
+You are an expert interview coach preparing Corey Laverdiere for a specific interview round.
+You know his background deeply: integration engineering, AI/ML solutions delivery,
+professional services, and customer-facing technical roles.
+
+Your job is to produce sharp, specific interview prep content:
+- A narrative anchor (a through-line he can use to frame the conversation, not a rehearsed speech)
+- The 5 most likely questions for this specific round and focus, with prepared answers
+- 4 STAR-format stories drawn from actual resume experience, mapped to JD requirements
+- 5 sharp questions to ask the interviewer, calibrated to the round type
+
+All content must be in Corey's voice: direct, specific, first-person, no corporate filler.
+Every prepared answer must be specific enough that it couldn't apply to any other candidate.
+
+Return ONLY valid JSON. No preamble, no markdown fences.
+"""
+
+
+def _build_prep_docx_js(
+    data: dict,
+    company: str,
+    role: str,
+    round_type: str,
+    focus: str,
+    output_path: Path,
+    colors: dict,
+) -> str:
+    """Return a Node.js script that produces the interview prep DOCX."""
+    primary  = colors.get("primary", "1A3C5E")
+    border_c = colors.get("border",  "2B6CB0")
+
+    paras: list[str] = []
+
+    def tr(text: str, bold: bool = False, italic: bool = False,
+           size: int = 22, color: str = "111827") -> str:
+        cleaned = " ".join(text.split())
+        escaped = escape_js_string(cleaned)
+        props   = [f'text: "{escaped}"', 'font: "Calibri"',
+                   f'size: {size}', f'color: "{color}"']
+        if bold:   props.append("bold: true")
+        if italic: props.append("italic: true")
+        return "new TextRun({ " + ", ".join(props) + " })"
+
+    def add(children_strs: list[str], before: int = 0, after: int = 80,
+            left: int = 0, border_bottom: bool = False) -> None:
+        spacing = f"before: {before}, after: {after}"
+        indent  = f", indent: {{ left: {left} }}" if left else ""
+        border  = (
+            f', border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 4, '
+            f'color: "{border_c}", space: 4 }} }}'
+        ) if border_bottom else ""
+        paras.append(
+            f'      new Paragraph({{ spacing: {{ {spacing} }}{indent}{border}, '
+            f'children: [{", ".join(children_strs)}] }})'
+        )
+
+    def section(title: str) -> None:
+        add([tr(title, bold=True, size=24, color=primary)],
+            before=220, after=60, border_bottom=True)
+
+    # Header — same visual as cover letter
+    paras.append(
+        f'      new Paragraph({{ spacing: {{ after: 0 }}, '
+        f'children: [{tr("COREY LAVERDIERE", bold=True, size=40, color=primary)}] }})'
+    )
+    paras.append(
+        f'      new Paragraph({{ '
+        f'border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 6, '
+        f'color: "{border_c}", space: 4 }} }}, '
+        f'spacing: {{ after: 140 }}, '
+        f'children: [{tr(APPLICANT_CONTACT_LINE, size=20, color="6B7280")}] }})'
+    )
+
+    # Context strip
+    ctx       = f"Interview Prep  ·  {company}  ·  {role}  ·  {round_type}"
+    ctx_after = 20 if focus.strip() else 140
+    add([tr(ctx, bold=True, color=primary)], after=ctx_after)
+    if focus.strip():
+        add([tr(f"Focus: {focus}", italic=True, size=20, color="6B7280")], after=140)
+
+    # Your Narrative
+    section("Your Narrative")
+    add([tr(data.get("narrative", ""))], after=0)
+
+    # Top Questions
+    section("Top Questions")
+    for i, item in enumerate(data.get("questions", []), 1):
+        add([tr(f"Q{i}:  {item.get('q', '')}", bold=True)],
+            before=(120 if i > 1 else 60), after=40)
+        add([tr(item.get("answer", ""))], after=0)
+
+    # Stories
+    section("Stories to Have Ready")
+    for i, story in enumerate(data.get("stories", []), 1):
+        hdr = f"{story.get('title', '')}  —  {story.get('theme', '')}"
+        add([tr(hdr, bold=True)], before=(120 if i > 1 else 60), after=40)
+        add([tr(f"Situation: {story.get('s', '')}", italic=True)], after=20)
+        add([tr(f"Action: {story.get('a', '')}")],                  after=20)
+        add([tr(f"Result: {story.get('r', '')}", italic=True)],     after=0)
+
+    # Questions to Ask
+    section("Questions to Ask")
+    for q in data.get("questions_to_ask", []):
+        add([tr(f"•  {q}")], after=60, left=360)
+
+    children_js  = ",\n".join(paras)
+    out_path_str = str(output_path).replace("\\", "/")
+
+    return f"""\
+const {{ Document, Packer, Paragraph, TextRun, BorderStyle }} = require('docx');
+const fs = require('fs');
+
+const doc = new Document({{
+  styles: {{ default: {{ document: {{ run: {{ font: "Calibri", size: 22 }} }} }} }},
+  sections: [{{
+    properties: {{
+      page: {{
+        size: {{ width: 12240, height: 15840 }},
+        margin: {{ top: 1080, right: 1080, bottom: 1080, left: 1080 }}
+      }}
+    }},
+    children: [
+{children_js}
+    ]
+  }}]
+}});
+
+Packer.toBuffer(doc).then(buffer => {{
+  fs.writeFileSync('{out_path_str}', buffer);
+  console.log('Interview prep written.');
+}});
+"""
+
+
+def generate_interview_prep(
+    job_posting: str,
+    company: str,
+    role: str,
+    config: InterviewPrepConfig,
+) -> InterviewPrepResult:
+    """
+    Generate a tailored interview prep DOCX.
+
+    Args:
+        job_posting: Full text of the job posting.
+        company:     Company name.
+        role:        Role title.
+        config:      InterviewPrepConfig — round type, focus, model, profile, resume path.
+
+    Returns:
+        InterviewPrepResult with the path to the generated DOCX.
+
+    Raises:
+        WorkflowError on any unrecoverable error.
+    """
+    wfc = WorkflowConfig(
+        model=config.model,
+        progress=config.progress,
+        master_resume=config.master_resume,
+        profile_text=config.profile_text,
+    )
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    company_safe = safe_filename(company)
+    role_safe    = safe_filename(role)
+    round_safe   = safe_filename(config.round_type.replace(" ", ""))
+    run_dir      = OUTPUT_DIR / f"{company_safe}_{role_safe}"
+    run_dir.mkdir(exist_ok=True)
+
+    prep_out = run_dir / (
+        f"InterviewPrep_{APPLICANT_NAME}_{company_safe}_{role_safe}_{round_safe}.docx"
+    )
+
+    config.progress(f"\n\U0001f4cb Interview Prep Generator")
+    config.progress(f"   Company : {company}")
+    config.progress(f"   Role    : {role}")
+    config.progress(f"   Round   : {config.round_type}")
+    if config.focus:
+        config.progress(f"   Focus   : {config.focus}")
+
+    # Step 1: Read inputs
+    print_step(1, "Reading Inputs", wfc)
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise WorkflowError("ANTHROPIC_API_KEY environment variable not set")
+    resume_text = extract_resume_text(wfc)
+    profile     = wfc.profile_text if wfc.profile_text is not None else read_file(PROFILE_FILE)
+    config.progress(
+        f"  ✓ Inputs loaded "
+        f"({len(resume_text)} chars resume, {len(profile)} chars profile)"
+    )
+
+    # Step 2: Generate content with Claude
+    print_step(2, "Generating Interview Prep Content", wfc)
+
+    focus_note = config.focus or "General — cover the most likely topics for this round type"
+    prompt = f"""
+Job Posting:
+---
+{job_posting}
+---
+
+Candidate Resume:
+---
+{resume_text[:6000]}
+---
+
+Profile & Voice Guide:
+---
+{profile}
+---
+
+Company: {company}
+Role: {role}
+Interview Round: {config.round_type}
+Focus / Slant: {focus_note}
+
+Produce a JSON object with exactly these keys:
+{{
+  "narrative": "string — 2-3 sentences Corey can use to anchor the conversation. First person. Specific to this round and company. Under 80 words.",
+  "questions": [
+    {{
+      "q": "string — the likely interview question (under 25 words)",
+      "answer": "string — prepared answer, 3-5 sentences, first person, specific, quantified where possible. Under 80 words."
+    }}
+  ],
+  "stories": [
+    {{
+      "title": "string — short story name (3-5 words)",
+      "theme": "string — the competency or JD requirement this demonstrates (5-8 words)",
+      "s": "string — Situation: 1-2 sentences, max 40 words",
+      "a": "string — Action: 2-3 sentences, max 60 words",
+      "r": "string — Result: 1-2 sentences with numbers if possible, max 40 words"
+    }}
+  ],
+  "questions_to_ask": [
+    "string — a sharp, specific question to ask the interviewer, max 30 words"
+  ]
+}}
+
+Constraints:
+- questions: exactly 5 items, weighted toward this round ({config.round_type}) and focus: {focus_note}
+- stories: exactly 4 items, drawn from actual resume content, mapped to the top JD requirements
+- questions_to_ask: exactly 5 items, calibrated for a {config.round_type} interview
+
+Round-specific guidance for "{config.round_type}":
+- Phone Screen: culture fit, career motivation, logistics, high-level experience. QTA: team structure, 90-day success, next steps.
+- Hiring Manager: role vision, leadership alignment, team dynamics, growth. QTA: biggest current challenges, how success is measured, what the team needs now.
+- Peer: collaboration style, day-to-day workflow, technical problem-solving. QTA: team dynamics, tooling, what they wish they'd known before joining.
+- Technical: system design, architecture tradeoffs, specific technical depth. QTA: stack decisions, engineering culture, biggest technical challenges.
+- Executive: strategic impact, ROI, company direction, big-picture fit. QTA: company priorities, how AI/automation fits the roadmap, 3-year bet.
+- Panel: multiple angles — mix role-fit, technical, and cultural questions.
+
+Return ONLY valid JSON. No preamble, no markdown fences.
+"""
+
+    raw = claude(PREP_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$",     "", raw.strip())
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise WorkflowError(f"Failed to parse prep JSON: {e}\n\nRaw:\n{raw[:2000]}")
+
+    config.progress(
+        f"  ✓ Generated: {len(data.get('questions', []))} questions, "
+        f"{len(data.get('stories', []))} stories, "
+        f"{len(data.get('questions_to_ask', []))} questions to ask"
+    )
+
+    # Step 2b: Brand colors
+    print_step("2b", "Fetching Brand Colors", wfc)
+    colors = get_brand_color(company)
+
+    # Step 3: Build DOCX
+    print_step(3, "Building Interview Prep DOCX", wfc)
+    js      = _build_prep_docx_js(
+        data, company, role, config.round_type, config.focus, prep_out, colors
+    )
+    js_path = Path(f"interview_prep_gen_{os.urandom(4).hex()}.js")
+    write_file(js_path, js)
+    result  = run(["node", str(js_path)], check=False, config=wfc)
+    js_path.unlink(missing_ok=True)
+    if result.returncode != 0:
+        raise WorkflowError(f"Interview prep JS failed:\n{result.stderr}")
+    config.progress(f"  ✓ Interview prep written to {prep_out}")
+
+    # Step 4: Upload to Drive
+    print_step(8, "Uploading to Google Drive", wfc)
+    folder_url = _upload_single_to_drive(prep_out, f"{company_safe}_{role_safe}", wfc)
+
+    return InterviewPrepResult(
+        prep_path=prep_out,
+        run_dir=run_dir,
+        folder_url=folder_url,
+    )
+
 
 def _print_result(result: WorkflowResult):
     print(f"\n{'='*60}")
