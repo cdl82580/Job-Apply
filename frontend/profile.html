@@ -70,6 +70,16 @@
     .header-right { display: flex; align-items: center; gap: .75rem; }
     .back { font-size: .875rem; color: var(--border); text-decoration: none; font-weight: 600; }
     .back:hover { text-decoration: underline; }
+    .back-icon { display: none; }
+
+    @media (max-width: 620px) {
+      body { padding: 1.25rem .75rem; }
+      header { margin-bottom: 1.5rem; }
+      .logo-img { width: 30px; height: 30px; }
+      .logo { font-size: 1rem; }
+      .back-full { display: none; }
+      .back-icon { display: flex; align-items: center; color: var(--border); }
+    }
 
     .theme-toggle {
       background: none; border: 1px solid var(--card-border);
@@ -176,7 +186,12 @@
     </div>
     <div class="header-right">
       <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
-      <a class="back" href="/">← Back to App</a>
+      <a class="back" href="/" title="Back to App">
+        <span class="back-full">← Back to App</span>
+        <span class="back-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </span>
+      </a>
     </div>
   </header>
 

@@ -112,6 +112,32 @@
     }
     .theme-toggle:hover { border-color: var(--border); color: var(--text); }
 
+    /* ── Responsive header ───────────────────────────────────────── */
+    /* Icon versions of action links — hidden by default, shown on mobile */
+    .link-full { }
+    .link-icon { display: none; }
+
+    @media (max-width: 620px) {
+      body { padding: 1.25rem .75rem; }
+      header { align-items: center; margin-bottom: 1.5rem; }
+      .header-left { gap: .6rem; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; }
+      header h1 { font-size: 1.15rem; }
+      header p  { font-size: .8rem; }
+      .header-actions { gap: .5rem; margin-top: 0; }
+      .header-user { display: none; }
+      .link-full { display: none; }
+      .link-icon { display: flex; align-items: center; }
+      .header-link { padding: .2rem; }
+    }
+
+    @media (max-width: 400px) {
+      .app-logo, .app-logo img { width: 30px; height: 30px; }
+      header h1 { font-size: 1rem; }
+      header p  { display: none; }
+      .header-left { gap: .5rem; }
+    }
+
     /* ── Card ────────────────────────────────────────────────────── */
     .card {
       background: var(--bg-card);
@@ -351,8 +377,18 @@
         <span id="themeIcon"></span>
       </button>
       <span class="header-user" id="headerUser"></span>
-      <a class="header-link" href="/profile.html">Profile</a>
-      <button class="header-link" id="logoutBtn">Sign Out</button>
+      <a class="header-link" href="/profile.html" title="Profile">
+        <span class="link-full">Profile</span>
+        <span class="link-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+      </a>
+      <button class="header-link" id="logoutBtn" title="Sign Out">
+        <span class="link-full">Sign Out</span>
+        <span class="link-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </span>
+      </button>
     </div>
   </header>
 
