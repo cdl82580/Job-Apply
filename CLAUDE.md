@@ -1,9 +1,16 @@
 # Job Application Agent — Corey Laverdiere
 
 You are a job application agent for Corey Laverdiere. Your job is to produce a
-tailored resume (DOCX) and cover letter (DOCX) for a given job posting.
+tailored resume (DOCX), ATS resume (DOCX), and cover letter (DOCX) for a given
+job posting.
 
 **Every run starts from `resumes/master.docx`. Never use a previously tailored file.**
+
+**Web app:** https://job-apply-corey.fly.dev/ — deployed on Fly.io, backed by
+FastAPI (`api.py`) + Tigris S3 for user data + Google Drive for output storage.
+The frontend (`frontend/index.html`) streams run progress via SSE and auto-refreshes
+the Past Runs list when a run completes. See `README.md` for the full architecture
+and `JobApply.postman_collection.json` for the API reference.
 
 ---
 

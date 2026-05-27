@@ -1,0 +1,453 @@
+{
+  "info": {
+    "name": "Job Apply API",
+    "description": "Complete API reference for the Job Application Agent web app (https://job-apply-corey.fly.dev/).\n\nAuth model: stateless HMAC session cookie (`session`). The login and register endpoints set the cookie automatically; all protected requests must include it.\n\nTwo run types exist:\n- **Application run** — produces resume, ATS resume, and cover letter DOCXs\n- **Interview prep run** — produces a question bank + story map DOCX\n\nBoth run types are async: POST to start → stream SSE progress → done/error event contains file names → download files.\n\nBase URL variable: `{{base_url}}` defaults to `https://job-apply-corey.fly.dev`. Override with `http://localhost:8000` for local dev.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://job-apply-corey.fly.dev",
+      "type": "string",
+      "description": "Base URL. Change to http://localhost:8000 for local development."
+    },
+    {
+      "key": "run_id",
+      "value": "",
+      "type": "string",
+      "description": "UUID returned by POST /api/run. Set this after starting a run."
+    },
+    {
+      "key": "prep_id",
+      "value": "",
+      "type": "string",
+      "description": "UUID returned by POST /api/prep. Set this after starting a prep run."
+    },
+    {
+      "key": "folder_id",
+      "value": "",
+      "type": "string",
+      "description": "Google Drive folder ID returned by GET /api/gdrive/runs."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/health",
+            "description": "Liveness check. Returns `{\"status\": \"ok\", \"storage\": true/false}` where `storage` indicates whether Tigris S3 is reachable. No auth required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"status\": \"ok\", \"storage\": true}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Session-based auth using an HMAC-signed cookie. The cookie is `HttpOnly`, `SameSite=Lax`, `Secure`, and expires in 30 days. No CSRF token needed for same-origin requests from the frontend.",
+      "item": [
+        {
+          "name": "POST /api/auth/register",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/register",
+            "description": "Create a new account. Accepts `multipart/form-data` so the master resume DOCX can be uploaded in the same request as the account details.\n\nOn success, sets the session cookie and returns `{\"ok\": true, \"display_name\": \"...\"}`. Password must be at least 8 characters. Resume must be a `.docx` file.",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "display_name", "value": "Corey Laverdiere", "type": "text", "description": "Display name shown in the app header." },
+                { "key": "email",        "value": "you@example.com",  "type": "text", "description": "Used as login credential and Google Drive silo key." },
+                { "key": "password",     "value": "minimum8chars",    "type": "text", "description": "Minimum 8 characters. Stored as scrypt hash." },
+                { "key": "profile_text", "value": "Paste your full profile.md contents here", "type": "text", "description": "Voice guide used by Claude when writing resume bullets and cover letter copy." },
+                { "key": "resume",       "value": "",                 "type": "file", "description": "Your master.docx. This is the source every run starts from." }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true, \"display_name\": \"Corey Laverdiere\"}"
+            },
+            {
+              "name": "400 Email already exists",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\"detail\": \"An account with that email already exists.\"}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "description": "Authenticate with email and password. On success, sets the session cookie and returns `{\"ok\": true, \"display_name\": \"...\"}`. Failed attempts return 401 with a generic message (no user enumeration timing leak).",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"you@example.com\",\n  \"password\": \"your-password\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true, \"display_name\": \"Corey Laverdiere\"}"
+            },
+            {
+              "name": "401 Bad credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\"detail\": \"Incorrect email or password.\"}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/logout",
+            "description": "Clears the session cookie and the Fly.io machine-affinity cookie. No body needed. Always returns 200."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "description": "Returns the current authenticated user. Useful for verifying a session is still valid, and for the frontend to display the user's name. Returns 401 if the session cookie is missing or expired."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"user_id\": \"uuid\",\n  \"email\": \"you@example.com\",\n  \"display_name\": \"Corey Laverdiere\",\n  \"has_resume\": true,\n  \"has_profile\": true\n}"
+            },
+            {
+              "name": "401 Not authenticated",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\"detail\": \"Not authenticated\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "description": "Profile endpoints manage the user's display name, profile guide text, master resume DOCX, and password. All require a valid session cookie.",
+      "item": [
+        {
+          "name": "GET /api/profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/profile",
+            "description": "Returns the full profile for the current user: display name, email, profile guide text, whether a resume is on file, and the stored resume filename."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"display_name\": \"Corey Laverdiere\",\n  \"email\": \"you@example.com\",\n  \"profile_text\": \"## Voice & Tone Rules\\n...\",\n  \"has_resume\": true,\n  \"resume_filename\": \"master.docx\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT /api/profile",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/profile",
+            "description": "Update the user's display name and/or profile guide text. Both fields are optional — send only what you want to change. The profile text is the voice/story guide passed to Claude on every run.",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"display_name\": \"Corey L.\",\n  \"profile_text\": \"Updated profile guide text…\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/profile/resume",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/profile/resume",
+            "description": "Replace the user's master resume. Must be a `.docx` file of at least 1 KB. This becomes the source file for all future runs. Does not affect previously generated output.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "resume", "value": "", "type": "file", "description": "New master.docx file." }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true}"
+            },
+            {
+              "name": "400 Invalid file",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\"detail\": \"Resume must be a .docx file.\"}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/profile/password",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/profile/password",
+            "description": "Change password. Requires the current password for verification. On success, sends a confirmation email via Resend (if `RESEND_API_KEY` is configured) and returns `{\"ok\": true, \"emailed\": true/false}`.",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"old-password\",\n  \"new_password\": \"new-password-min8\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"ok\": true, \"emailed\": true}"
+            },
+            {
+              "name": "401 Wrong current password",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\"detail\": \"Current password is incorrect.\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Application Runs",
+      "description": "Start and monitor a resume + cover letter generation run.\n\n**Lifecycle:**\n1. `POST /api/run` → returns `run_id`, kicks off background thread\n2. `GET /api/run/{id}/stream` → SSE stream; events are `progress`, `done`, or `error`\n3. On `done`, the event payload contains `files` (keys: `resume`, `ats`, `cover_letter`) with filenames\n4. `GET /api/run/{id}/files/{name}` → download each file\n\nRuns are serialised server-side behind a lock — only one runs at a time. If a second request comes in while one is active, it queues and starts automatically when the first finishes.",
+      "item": [
+        {
+          "name": "POST /api/run",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/run",
+            "description": "Start a new application run. The server fetches the user's master resume and profile from Tigris, then invokes the full Claude workflow in a background thread.\n\nReturns a `run_id` UUID immediately. Use the SSE stream endpoint to follow progress.",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_posting\": \"Paste the full job description here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK — run started",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"run_id\": \"550e8400-e29b-41d4-a716-446655440000\"}"
+            },
+            {
+              "name": "400 No resume on file",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\"detail\": \"No master resume uploaded. Add one in your profile.\"}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/run/{run_id}/stream",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/run/{{run_id}}/stream",
+            "description": "Server-Sent Events stream for a run. Each event is a JSON object on the `data:` line.\n\nEvent types:\n- `progress` — `{\"type\": \"progress\", \"message\": \"...\"}` — one log line from the agent\n- `done` — `{\"type\": \"done\", \"run_id\": \"...\", \"framing_angle\": \"...\", \"folder_url\": \"...\", \"files\": {\"resume\": \"...\", \"ats\": \"...\", \"cover_letter\": \"...\"}}` — run complete\n- `error` — `{\"type\": \"error\", \"message\": \"...\"}` — run failed\n\nKeep-alive comments (`: keepalive`) are sent every 30 s if no message is in flight.",
+            "header": [
+              { "key": "Accept", "value": "text/event-stream" }
+            ]
+          }
+        },
+        {
+          "name": "GET /api/run/{run_id}/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/run/{{run_id}}/status",
+            "description": "Poll the status of a run without opening an SSE connection. Returns one of: `queued`, `running`, `done`, `error`. Useful for checking whether a run is still active after a page reload."
+          },
+          "response": [
+            {
+              "name": "200 Running",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"run_id\": \"...\", \"status\": \"running\", \"error\": null}"
+            },
+            {
+              "name": "200 Done",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"run_id\": \"...\", \"status\": \"done\", \"error\": null}"
+            },
+            {
+              "name": "200 Error",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"run_id\": \"...\", \"status\": \"error\", \"error\": \"Replacement failed for tagline\"}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/run/{run_id}/files/{filename}",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/run/{{run_id}}/files/Resume_CoreyLaverdiere_Acme_SolutionsEngineer.docx",
+            "description": "Download an output file from a completed run. The filename comes from the `files` object in the `done` SSE event.\n\nReturns the DOCX as `application/vnd.openxmlformats-officedocument.wordprocessingml.document`. Returns 403 if the run belongs to a different user, 404 if the run is not yet complete.",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Interview Prep Runs",
+      "description": "Start and monitor an interview prep generation run.\n\n**Lifecycle:** identical to Application Runs but uses `/api/prep/*` paths. The `done` event returns `files.prep` (a single DOCX filename).\n\n`round_type` must be one of: `Phone Screen`, `Hiring Manager`, `Peer`, `Technical`, `Executive`, `Panel`.",
+      "item": [
+        {
+          "name": "POST /api/prep",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/prep",
+            "description": "Start an interview prep run for a given job, company, role, and round type. Optionally pass a `focus` string to steer the angle (e.g. \"lean into the agentic AI angle\").\n\nReturns a `prep_id` UUID. Follow with the SSE stream endpoint.",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_posting\": \"Paste the full job description here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"focus\": \"Lean into the agentic AI angle, they mentioned MCP\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK — prep started",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"prep_id\": \"550e8400-e29b-41d4-a716-446655440000\"}"
+            },
+            {
+              "name": "400 Invalid round_type",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\"detail\": \"round_type must be one of: Phone Screen, Hiring Manager, Peer, Technical, Executive, Panel\"}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/prep/{prep_id}/stream",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/prep/{{prep_id}}/stream",
+            "description": "SSE stream for a prep run. Same event format as the application run stream. The `done` event payload: `{\"type\": \"done\", \"prep_id\": \"...\", \"folder_url\": \"...\", \"files\": {\"prep\": \"InterviewPrep_Acme_HiringManager.docx\"}}`.",
+            "header": [
+              { "key": "Accept", "value": "text/event-stream" }
+            ]
+          }
+        },
+        {
+          "name": "GET /api/prep/{prep_id}/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/prep/{{prep_id}}/status",
+            "description": "Poll the status of a prep run. Same shape as the run status endpoint: `queued | running | done | error`."
+          }
+        },
+        {
+          "name": "GET /api/prep/{prep_id}/files/{filename}",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/prep/{{prep_id}}/files/InterviewPrep_Acme_SolutionsEngineer_HiringManager.docx",
+            "description": "Download the prep DOCX from a completed prep run. Filename comes from `files.prep` in the `done` SSE event. Returns 403 if the prep belongs to a different user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Google Drive",
+      "description": "Proxy endpoints for listing run folders and fetching saved job descriptions from the user's Google Drive silo. Drive is configured server-side; clients do not need Drive credentials.",
+      "item": [
+        {
+          "name": "GET /api/gdrive/runs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/gdrive/runs",
+            "description": "List all run folders belonging to the current user from Google Drive. Returns both user-siloed folders and legacy flat folders.\n\nEach entry: `{\"id\": \"drive-folder-id\", \"name\": \"Acme_SolutionsEngineer\", \"web_view_link\": \"https://drive.google.com/…\", \"source\": \"user\" | \"legacy\"}`.\n\nUsed by the Past Runs panel and the Interview Prep dropdown. The Past Runs list auto-refreshes after each completed run — no manual reload needed."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"runs\": [\n    {\n      \"id\": \"1abc2def3ghi\",\n      \"name\": \"Acme_SolutionsEngineer\",\n      \"web_view_link\": \"https://drive.google.com/drive/folders/1abc2def3ghi\",\n      \"source\": \"user\"\n    }\n  ],\n  \"drive_configured\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/gdrive/runs/{folder_id}/job_posting",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/gdrive/runs/{{folder_id}}/job_posting",
+            "description": "Fetch the `job_posting.txt` saved inside a specific Drive folder. Used by the Interview Prep form to pre-fill the job description when a user picks a past run from the dropdown.\n\nReturns 404 if no `job_posting.txt` exists in that folder."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"job_posting\": \"We are looking for a Solutions Engineer who…\"}"
+            },
+            {
+              "name": "404 Not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\"detail\": \"No job posting found in this Drive folder\"}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
