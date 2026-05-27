@@ -1031,8 +1031,11 @@ def _gdrive_service(config: WorkflowConfig):
     return build("drive", "v3", credentials=creds)
 
 
-def _gdrive_get_or_create_folder(service, name: str, parent_id: str) -> tuple[str, str]:
-    """Return (folder_id, webViewLink) for a named subfolder, creating it if absent."""
+def _gdrive_get_or_create_folder(service, name: str, parent_id: str) -> tuple[str, str, bool]:
+    """Return (folder_id, webViewLink, created) for a named subfolder.
+
+    created=True when the folder was just made; False when it already existed.
+    """
     existing = service.files().list(
         q=(
             f"name='{name}' and '{parent_id}' in parents and "
@@ -1043,14 +1046,32 @@ def _gdrive_get_or_create_folder(service, name: str, parent_id: str) -> tuple[st
     ).execute().get("files", [])
 
     if existing:
-        return existing[0]["id"], existing[0]["webViewLink"]
+        return existing[0]["id"], existing[0]["webViewLink"], False
 
     created = service.files().create(
         body={"name": name, "mimeType": "application/vnd.google-apps.folder",
               "parents": [parent_id]},
         fields="id, webViewLink",
     ).execute()
-    return created["id"], created["webViewLink"]
+    return created["id"], created["webViewLink"], True
+
+
+def _set_link_viewer(service, folder_id: str, progress: callable) -> None:
+    """Grant 'anyone with the link' viewer access to a Drive folder.
+
+    Silently ignores errors — the most common cause is the permission
+    already existing (Drive returns a 409 in that case).
+    """
+    try:
+        service.permissions().create(
+            fileId=folder_id,
+            body={"type": "anyone", "role": "reader"},
+            fields="id",
+        ).execute()
+        progress("  ✓ Drive folder set to 'anyone with the link' viewer access")
+    except Exception as exc:
+        # 409 = permission already exists; any other error is non-fatal
+        progress(f"  ⚠ Could not set Drive folder permissions: {exc}")
 
 
 def step8_upload(
@@ -1081,16 +1102,18 @@ def step8_upload(
 
         # Resolve the parent folder (user subfolder, or root if CLI/no user)
         if config.user_label:
-            user_folder_id, _ = _gdrive_get_or_create_folder(
+            user_folder_id, _, user_created = _gdrive_get_or_create_folder(
                 service, config.user_label, GDRIVE_PARENT_FOLDER_ID
             )
             config.progress(f"  ✓ Drive user folder: {config.user_label}")
+            if user_created:
+                _set_link_viewer(service, user_folder_id, config.progress)
             run_parent_id = user_folder_id
         else:
             run_parent_id = GDRIVE_PARENT_FOLDER_ID
 
         run_folder_name = f"{company_safe}_{role_safe}"
-        run_folder_id, folder_url = _gdrive_get_or_create_folder(
+        run_folder_id, folder_url, _ = _gdrive_get_or_create_folder(
             service, run_folder_name, run_parent_id
         )
         config.progress(f"  ✓ Drive run folder: {run_folder_name}")
@@ -1143,14 +1166,16 @@ def _upload_single_to_drive(
             return None
 
         if config.user_label:
-            user_folder_id, _ = _gdrive_get_or_create_folder(
+            user_folder_id, _, user_created = _gdrive_get_or_create_folder(
                 service, config.user_label, GDRIVE_PARENT_FOLDER_ID
             )
+            if user_created:
+                _set_link_viewer(service, user_folder_id, config.progress)
             run_parent_id = user_folder_id
         else:
             run_parent_id = GDRIVE_PARENT_FOLDER_ID
 
-        folder_id, folder_url = _gdrive_get_or_create_folder(
+        folder_id, folder_url, _ = _gdrive_get_or_create_folder(
             service, folder_name, run_parent_id
         )
         config.progress(f"  ✓ Drive folder: {folder_name}")
