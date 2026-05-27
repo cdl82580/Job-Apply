@@ -58,6 +58,8 @@ from apply import (
     WorkflowError,
     WorkflowResult,
     generate_interview_prep,
+    get_gdrive_job_posting,
+    list_gdrive_run_folders,
     run_workflow,
     safe_filename,
 )
@@ -550,6 +552,34 @@ async def get_file(run_id: str, filename: str, request: Request):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+# ---------------------------------------------------------------------------
+# Google Drive — run listing + job posting fetch
+# ---------------------------------------------------------------------------
+
+@app.get("/api/gdrive/runs")
+async def gdrive_list_runs(request: Request):
+    """List this user's run folders from Google Drive (user subfolder + legacy flat)."""
+    user_data  = _require_user(request)
+    user_label = user_data["email"]
+    config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
+    try:
+        folders = list_gdrive_run_folders(user_label, config)
+        return {"runs": folders, "drive_configured": len(folders) >= 0}
+    except Exception as exc:
+        return {"runs": [], "drive_configured": False, "error": str(exc)}
+
+
+@app.get("/api/gdrive/runs/{folder_id}/job_posting")
+async def gdrive_get_job_posting(folder_id: str, request: Request):
+    """Fetch job_posting.txt from a specific Drive folder (by Drive folder ID)."""
+    _require_user(request)
+    config = WorkflowConfig(progress=lambda _: None)
+    text = get_gdrive_job_posting(folder_id, config)
+    if text is None:
+        raise HTTPException(404, "No job posting found in this Drive folder")
+    return {"job_posting": text}
 
 
 # ---------------------------------------------------------------------------

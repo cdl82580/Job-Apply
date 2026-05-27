@@ -356,6 +356,70 @@
 
     #prepFocus  { min-height: 60px; }
     #prepJdText { min-height: 130px; }
+
+    /* ── Past Runs list ──────────────────────────────────────────── */
+    .run-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: .6rem 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .run-row:last-child { border-bottom: none; }
+    .run-row-name {
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .run-row-badge {
+      font-size: .7rem;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+      background: var(--fill);
+      color: var(--muted);
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .run-row-link {
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--border);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .run-row-link:hover { text-decoration: underline; }
+    .past-runs-empty {
+      color: var(--muted);
+      font-size: .875rem;
+      padding: .5rem 0;
+    }
+    .past-runs-loading {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      color: var(--muted);
+      font-size: .875rem;
+      padding: .5rem 0;
+    }
+    .spin-muted {
+      display: inline-block;
+      width: 13px; height: 13px;
+      border: 2px solid var(--card-border);
+      border-top-color: var(--muted);
+      border-radius: 50%;
+      animation: rot .7s linear infinite;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -453,6 +517,23 @@
       <span class="drive-btn-arrow">&#x2197;</span>
     </a>
     <button class="btn btn-ghost" id="newRunBtn">&#x2190; New Application</button>
+  </div>
+
+  <!-- ── Past Runs ────────────────────────────────────────────── -->
+  <div class="card" id="pastRunsCard">
+    <div class="card-head" id="pastRunsToggle">
+      <h2>Past Runs</h2>
+      <span class="chevron" id="pastRunsChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="pastRunsBody">
+      <div class="past-runs-loading" id="pastRunsLoading">
+        <span class="spin-muted"></span> Loading from Google Drive…
+      </div>
+      <div id="pastRunsList"></div>
+      <div class="past-runs-empty hidden" id="pastRunsEmpty">
+        No past runs found in Google Drive.
+      </div>
+    </div>
   </div>
 
   <!-- ── Interview Prep Form ──────────────────────────────────── -->
@@ -743,12 +824,63 @@
     logEl.textContent = '';
   });
 
+  // ── Past Runs ─────────────────────────────────────────────────────
+  let _pastRunsLoaded = false;
+
+  document.getElementById('pastRunsToggle').addEventListener('click', async () => {
+    const body    = document.getElementById('pastRunsBody');
+    const chevron = document.getElementById('pastRunsChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open');
+                  if (!_pastRunsLoaded) await loadPastRuns(); }
+  });
+
+  async function loadPastRuns() {
+    _pastRunsLoaded = true;
+    const listEl  = document.getElementById('pastRunsList');
+    const emptyEl = document.getElementById('pastRunsEmpty');
+    const loadEl  = document.getElementById('pastRunsLoading');
+    listEl.innerHTML = '';
+    emptyEl.classList.add('hidden');
+    try {
+      const res  = await apiFetch('/api/gdrive/runs');
+      const data = await res.json();
+      loadEl.classList.add('hidden');
+      if (!data.runs || data.runs.length === 0) {
+        emptyEl.classList.remove('hidden'); return;
+      }
+      for (const r of data.runs) {
+        const idx     = r.name.indexOf('_');
+        const company = idx > 0 ? r.name.slice(0, idx) : r.name;
+        const role    = idx > 0 ? r.name.slice(idx + 1) : '';
+        const label   = role ? `${company} · ${role}` : company;
+        const row = document.createElement('div');
+        row.className = 'run-row';
+        row.innerHTML = `
+          <span class="run-row-name" title="${r.name}">${label}</span>
+          ${r.source === 'legacy' ? '<span class="run-row-badge">legacy</span>' : ''}
+          ${r.web_view_link
+            ? `<a class="run-row-link" href="${r.web_view_link}" target="_blank" rel="noopener">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open in Drive</a>`
+            : ''}`;
+        listEl.appendChild(row);
+      }
+    } catch (e) {
+      loadEl.classList.add('hidden');
+      emptyEl.textContent = 'Could not load from Google Drive.';
+      emptyEl.classList.remove('hidden');
+    }
+  }
+
   // ── Interview Prep ────────────────────────────────────────────────
 
-  let _prepJobPosting   = '';
-  let _prepCompanyCtx   = '';
-  let _prepRoleCtx      = '';
-  let _prepRoundCtx     = '';
+  let _prepJobPosting = '';
+  let _prepCompanyCtx = '';
+  let _prepRoleCtx    = '';
+  let _prepRoundCtx   = '';
+  let _prepFolderMap  = {};   // Drive folder_id → {name, source, web_view_link}
 
   // Collapsible toggle
   document.getElementById('prepToggle').addEventListener('click', async () => {
@@ -767,22 +899,33 @@
     }
   });
 
-  // Load existing run folders into the dropdown
+  // Load run folders from Google Drive into the prep dropdown
   async function loadPrepRuns() {
+    _prepFolderMap = {};
+    const sel = document.getElementById('prepRunSel');
+    sel.innerHTML = '<option value="">— loading from Drive… —</option>';
     try {
-      const res  = await apiFetch('/api/runs');
+      const res  = await apiFetch('/api/gdrive/runs');
       const data = await res.json();
-      const sel  = document.getElementById('prepRunSel');
       sel.innerHTML = '<option value="">— select a job —</option>';
+      if (!data.runs || data.runs.length === 0) {
+        sel.innerHTML = '<option value="" disabled>No runs found in Drive — paste JD instead</option>';
+        return;
+      }
       for (const r of data.runs) {
+        _prepFolderMap[r.id] = r;
         const opt   = document.createElement('option');
-        opt.value   = r.folder;
-        const label = r.folder.replace(/_/g, ' · ');
-        opt.textContent = r.has_job_posting ? label : label + ' (no JD saved)';
-        if (!r.has_job_posting) opt.disabled = true;
+        opt.value   = r.id;
+        const idx   = r.name.indexOf('_');
+        const label = idx > 0
+          ? `${r.name.slice(0, idx)} · ${r.name.slice(idx + 1)}`
+          : r.name;
+        opt.textContent = r.source === 'legacy' ? label + '  ↩' : label;
         sel.appendChild(opt);
       }
-    } catch (e) { console.error('loadPrepRuns', e); }
+    } catch (e) {
+      sel.innerHTML = '<option value="" disabled>Could not load from Drive</option>';
+    }
   }
 
   // Source mode toggle
@@ -804,23 +947,29 @@
     document.getElementById('prepJdText').classList.remove('hidden');
   });
 
-  // Folder selection → autofill company/role + load stored JD
+  // Folder selection → autofill company/role + fetch JD from Drive
   document.getElementById('prepRunSel').addEventListener('change', async (e) => {
-    const folder = e.target.value;
+    const folderId = e.target.value;
     _prepJobPosting = '';
-    if (!folder) return;
+    document.getElementById('prepFormErr').style.display = 'none';
+    if (!folderId) return;
 
-    const idx = folder.indexOf('_');
+    const meta = _prepFolderMap[folderId] || {};
+    const name = meta.name || '';
+    const idx  = name.indexOf('_');
     if (idx > 0) {
-      document.getElementById('prepCompany').value = folder.slice(0, idx);
-      document.getElementById('prepRole').value    = folder.slice(idx + 1);
+      document.getElementById('prepCompany').value = name.slice(0, idx);
+      document.getElementById('prepRole').value    = name.slice(idx + 1);
     }
 
     try {
-      const res = await apiFetch(`/api/runs/${encodeURIComponent(folder)}/job_posting`);
+      const res = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
       if (res.ok) {
-        const d = await res.json();
-        _prepJobPosting = d.job_posting;
+        _prepJobPosting = (await res.json()).job_posting;
+      } else {
+        const errEl = document.getElementById('prepFormErr');
+        errEl.textContent = 'No saved JD for this run — paste the job description below or switch to Paste JD.';
+        errEl.style.display = 'block';
       }
     } catch (err) { console.error('loadJD', err); }
   });

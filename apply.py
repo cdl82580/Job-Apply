@@ -1096,9 +1096,16 @@ def step8_upload(
         config.progress(f"  ✓ Drive run folder: {run_folder_name}")
 
         for f in sorted(run_dir.iterdir()):
-            if f.name.startswith("~$") or f.suffix not in (".docx", ".pdf"):
+            if f.name.startswith("~$"):
                 continue
-            mime  = _MIME_DOCX if f.suffix == ".docx" else "application/pdf"
+            if f.suffix == ".docx":
+                mime = _MIME_DOCX
+            elif f.suffix == ".pdf":
+                mime = "application/pdf"
+            elif f.name == "job_posting.txt":
+                mime = "text/plain; charset=utf-8"
+            else:
+                continue
             media = MediaFileUpload(str(f), mimetype=mime, resumable=False)
             service.files().create(
                 body={"name": f.name, "parents": [run_folder_id]},
@@ -1160,6 +1167,104 @@ def _upload_single_to_drive(
     except Exception as exc:
         config.progress(f"  ⚠ Drive upload failed: {exc}")
         config.progress("    File is still available for download below.")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Drive: list run folders + fetch job posting (used by /api/gdrive/runs)
+# ---------------------------------------------------------------------------
+
+_FOLDER_MIME = "application/vnd.google-apps.folder"
+
+
+def list_gdrive_run_folders(user_label: str, config: WorkflowConfig) -> list[dict]:
+    """Return all run folders visible to this user from Google Drive.
+
+    Checks two locations:
+      1. Job Applications/{user_label}/  — current per-user structure
+      2. Job Applications/ root          — legacy flat runs (skips email-named subfolders)
+
+    Each entry: {name, id, web_view_link, source ("user" | "legacy")}
+    Returns [] if Drive is not configured or an error occurs.
+    """
+    service = _gdrive_service(config)
+    if service is None:
+        return []
+
+    results: list[dict] = []
+    seen_ids: set[str]  = set()
+
+    try:
+        # ── 1. User's personal subfolder ──────────────────────────────
+        user_roots = service.files().list(
+            q=(
+                f"name='{user_label}' and '{GDRIVE_PARENT_FOLDER_ID}' in parents and "
+                f"mimeType='{_FOLDER_MIME}' and trashed=false"
+            ),
+            fields="files(id)",
+            pageSize=1,
+        ).execute().get("files", [])
+
+        if user_roots:
+            user_root_id = user_roots[0]["id"]
+            for f in service.files().list(
+                q=f"'{user_root_id}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
+                fields="files(id, name, webViewLink)",
+                orderBy="modifiedTime desc",
+                pageSize=100,
+            ).execute().get("files", []):
+                results.append({
+                    "name":          f["name"],
+                    "id":            f["id"],
+                    "web_view_link": f.get("webViewLink", ""),
+                    "source":        "user",
+                })
+                seen_ids.add(f["id"])
+
+        # ── 2. Legacy flat root ────────────────────────────────────────
+        for f in service.files().list(
+            q=(
+                f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and "
+                f"mimeType='{_FOLDER_MIME}' and trashed=false"
+            ),
+            fields="files(id, name, webViewLink)",
+            orderBy="modifiedTime desc",
+            pageSize=100,
+        ).execute().get("files", []):
+            if f["id"] in seen_ids:
+                continue
+            # Skip user account folders (named like emails)
+            if "@" in f["name"]:
+                continue
+            results.append({
+                "name":          f["name"],
+                "id":            f["id"],
+                "web_view_link": f.get("webViewLink", ""),
+                "source":        "legacy",
+            })
+
+    except Exception:
+        pass  # best-effort; return whatever we collected
+
+    return results
+
+
+def get_gdrive_job_posting(folder_id: str, config: WorkflowConfig) -> str | None:
+    """Fetch the text of job_posting.txt from a Drive folder. Returns None if absent."""
+    service = _gdrive_service(config)
+    if service is None:
+        return None
+    try:
+        files = service.files().list(
+            q=f"name='job_posting.txt' and '{folder_id}' in parents and trashed=false",
+            fields="files(id)",
+            pageSize=1,
+        ).execute().get("files", [])
+        if not files:
+            return None
+        content = service.files().get_media(fileId=files[0]["id"]).execute()
+        return content.decode("utf-8") if isinstance(content, bytes) else str(content)
+    except Exception:
         return None
 
 
