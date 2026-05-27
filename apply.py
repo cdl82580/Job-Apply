@@ -1074,6 +1074,65 @@ def _set_link_viewer(service, folder_id: str, progress: callable) -> None:
         progress(f"  ⚠ Could not set Drive folder permissions: {exc}")
 
 
+def _convert_docx_to_pdf_via_drive(
+    service,
+    docx_path: Path,
+    pdf_name: str,
+    folder_id: str,
+    progress: callable,
+) -> None:
+    """Convert a local DOCX to PDF using Drive's conversion pipeline.
+
+    Steps:
+      1. Upload the DOCX with mimeType=Google Doc — Drive converts on ingest.
+      2. Export the resulting Google Doc as PDF bytes.
+      3. Upload the PDF to the run folder.
+      4. Delete the temporary Google Doc.
+
+    Best-effort: any exception is logged and swallowed so the caller is
+    never blocked by a PDF conversion failure.
+    """
+    try:
+        import io
+        from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
+
+        # Step 1: upload DOCX as Google Doc (Drive handles the conversion)
+        gdoc = service.files().create(
+            body={"name": f"_tmp_{docx_path.stem}",
+                  "mimeType": "application/vnd.google-apps.document"},
+            media_body=MediaFileUpload(str(docx_path), mimetype=_MIME_DOCX),
+            fields="id",
+        ).execute()
+        gdoc_id = gdoc["id"]
+
+        try:
+            # Step 2: export as PDF
+            pdf_bytes = service.files().export(
+                fileId=gdoc_id,
+                mimeType="application/pdf",
+            ).execute()
+
+            # Step 3: upload PDF to the run folder
+            service.files().create(
+                body={"name": pdf_name, "parents": [folder_id]},
+                media_body=MediaIoBaseUpload(
+                    io.BytesIO(pdf_bytes), mimetype="application/pdf"
+                ),
+                fields="id",
+            ).execute()
+            progress(f"  ✓ Generated PDF: {pdf_name}")
+
+        finally:
+            # Step 4: always clean up the temp Google Doc
+            try:
+                service.files().delete(fileId=gdoc_id).execute()
+            except Exception:
+                pass
+
+    except Exception as exc:
+        progress(f"  ⚠ PDF generation skipped: {exc}")
+
+
 def step8_upload(
     run_dir: Path,
     company_safe: str,
@@ -1136,6 +1195,17 @@ def step8_upload(
                 fields="id",
             ).execute()
             config.progress(f"  ✓ Uploaded {f.name}")
+
+        # Convert the styled (non-ATS) resume to PDF via Drive
+        styled_resume = run_dir / f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}.docx"
+        if styled_resume.exists():
+            _convert_docx_to_pdf_via_drive(
+                service,
+                styled_resume,
+                f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}.pdf",
+                run_folder_id,
+                config.progress,
+            )
 
         return folder_url
 
