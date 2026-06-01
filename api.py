@@ -46,6 +46,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from scripts import storage
+from routers.applications import router as applications_router
+from routers.companies import router as companies_router
+from routers.auth_google import router as auth_google_router
 from apply import (
     DEFAULT_MODEL,
     MASTER_RESUME,
@@ -190,10 +193,15 @@ def _send_email(to: str, subject: str, body: str) -> bool:
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Job Application Agent")
+app.include_router(applications_router)
+app.include_router(companies_router)
+app.include_router(auth_google_router)
 
 _PUBLIC_PATHS = frozenset({
     "/login.html", "/register.html",
     "/api/auth/login", "/api/auth/register",
+    "/api/auth/google", "/api/auth/google/callback",
+    "/api/companies/search",
     "/api/health",
     "/favicon.ico",
 })

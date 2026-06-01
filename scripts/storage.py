@@ -80,12 +80,6 @@ def exists(key: str) -> bool:
 # User accounts
 # ---------------------------------------------------------------------------
 
-def save_user(user: dict[str, Any]) -> None:
-    """Persist a user record. Also writes a user_id → email index entry."""
-    put_text(f"users/{_email_key(user['email'])}.json", json.dumps(user))
-    put_text(f"user_ids/{user['user_id']}.txt", user["email"])
-
-
 def get_user_by_email(email: str) -> dict[str, Any] | None:
     data = get_text(f"users/{_email_key(email)}.json")
     return json.loads(data) if data else None
@@ -94,6 +88,23 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
 def get_user_by_id(user_id: str) -> dict[str, Any] | None:
     email = get_text(f"user_ids/{user_id}.txt")
     return get_user_by_email(email.strip()) if email else None
+
+
+def get_user_by_google_id(google_id: str) -> dict[str, Any] | None:
+    """Look up a user by their Google OAuth sub (stored in user record as google_id).
+    Uses an index file to avoid scanning all user records."""
+    email = get_text(f"google_ids/{google_id}.txt")
+    if email:
+        return get_user_by_email(email.strip())
+    return None
+
+
+def save_user(user: dict[str, Any]) -> None:
+    """Persist a user record. Also writes index entries for user_id and google_id."""
+    put_text(f"users/{_email_key(user['email'])}.json", json.dumps(user))
+    put_text(f"user_ids/{user['user_id']}.txt", user["email"])
+    if user.get("google_id"):
+        put_text(f"google_ids/{user['google_id']}.txt", user["email"])
 
 
 # ---------------------------------------------------------------------------
