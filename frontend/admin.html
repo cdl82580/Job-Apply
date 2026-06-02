@@ -167,6 +167,35 @@
             border-top-color: white; border-radius: 50%; animation: rot .7s linear infinite; }
     @keyframes rot { to { transform: rotate(360deg); } }
     .empty { color: var(--muted); font-size: .875rem; padding: 1rem 0; text-align: center; }
+
+    /* ── Pagination ──────────────────────────────────────────────── */
+    .pagination-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem; flex-wrap: wrap;
+    }
+    .pagination-bar.hidden { display: none; }
+    .pagination-info  { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .pagination-controls { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+    .page-btn {
+      min-width: 32px; padding: .3rem .55rem;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      background: var(--input-bg); color: var(--text);
+      font-size: .8rem; font-family: inherit; cursor: pointer; line-height: 1.4;
+      transition: border-color .12s, color .12s;
+    }
+    .page-btn:hover:not(:disabled):not(.active) { border-color: var(--border); color: var(--primary); }
+    .page-btn:disabled { opacity: .38; cursor: not-allowed; }
+    .page-btn.active   { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .page-ellipsis     { padding: 0 .25rem; color: var(--muted); font-size: .8rem; user-select: none; }
+    .pag-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem; margin-top: .875rem; flex-wrap: wrap;
+    }
+    .per-page-sel {
+      padding: .25rem .45rem; font-size: .8rem; font-family: inherit;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      background: var(--input-bg); color: var(--text); cursor: pointer;
+    }
     .app-sort-th:hover { color: var(--primary); }
     .app-sort-th.sort-active { color: var(--primary); }
     .sort-arrow { font-size: .65rem; opacity: .45; vertical-align: middle; }
@@ -318,7 +347,26 @@
       </tr></thead>
       <tbody id="usersBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
     </table>
-    <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="usersCount"></div>
+    <div class="pag-footer" style="margin-top:.75rem">
+      <div class="pagination-bar hidden" id="usersPagBar">
+        <div class="pagination-info" id="usersPagInfo"></div>
+        <div class="pagination-controls">
+          <button class="page-btn" id="usersPrev">← Prev</button>
+          <div id="usersPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+          <button class="page-btn" id="usersNext">Next →</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
+        <span id="usersCount"></span>
+        &nbsp;·&nbsp; Per page
+        <select id="usersPerPage" class="per-page-sel">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- ── Applications tab ──────────────────────────────────────── -->
@@ -354,7 +402,26 @@
       </tr></thead>
       <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
     </table>
-    <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="appsCount"></div>
+    <div class="pag-footer" style="margin-top:.75rem">
+      <div class="pagination-bar hidden" id="appsPagBar">
+        <div class="pagination-info" id="appsPagInfo"></div>
+        <div class="pagination-controls">
+          <button class="page-btn" id="appsPrev">← Prev</button>
+          <div id="appsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+          <button class="page-btn" id="appsNext">Next →</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
+        <span id="appsCount"></span>
+        &nbsp;·&nbsp; Per page
+        <select id="appsPerPage" class="per-page-sel">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
@@ -376,7 +443,7 @@
       <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
       <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
     </div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount" style="display:inline"></div>
     <table>
       <thead><tr>
         <th>Type</th>
@@ -390,6 +457,25 @@
       </tr></thead>
       <tbody id="runsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
+    <div class="pag-footer" style="margin-top:.875rem">
+      <div class="pagination-bar hidden" id="runsPagBar">
+        <div class="pagination-info" id="runsPagInfo"></div>
+        <div class="pagination-controls">
+          <button class="page-btn" id="runsPrev">← Prev</button>
+          <div id="runsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+          <button class="page-btn" id="runsNext">Next →</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
+        Per page
+        <select id="runsPerPage" class="per-page-sel">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- ── Audit Log tab ────────────────────────────────────────── -->
@@ -695,6 +781,11 @@ let _appsSortDir = 'asc';
 let _usersSortCol = 'created_at';
 let _usersSortDir = 'asc';
 
+// Pagination state
+let _usersPage = 1; let _usersPerPage = 25;
+let _appsPage  = 1; let _appsPerPage  = 25;
+let _runsPage  = 1; let _runsPerPage  = 25;
+
 const APP_STATUS_ORDER = {
   'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'On Hold': 3,
   'Researching': 4, 'Offer': 5, 'Rejected': 6, 'Not Applying': 7,
@@ -766,6 +857,39 @@ function updateStats() {
   document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
 }
 
+// ── Shared pagination helper ─────────────────────────────────────────
+const _pagCallbacks = {};   // prefix → goToPage(n) function
+
+function renderPagBar(prefix, page, pages, total, perPage) {
+  const bar  = document.getElementById(`${prefix}PagBar`);
+  const info = document.getElementById(`${prefix}PagInfo`);
+  const prev = document.getElementById(`${prefix}Prev`);
+  const next = document.getElementById(`${prefix}Next`);
+  const nums = document.getElementById(`${prefix}PageNums`);
+
+  bar.classList.toggle('hidden', total <= perPage);
+  info.textContent = total
+    ? `Showing ${(page-1)*perPage+1}–${Math.min(page*perPage,total)} of ${total.toLocaleString()}`
+    : '';
+  prev.disabled = page <= 1;
+  next.disabled = page >= pages;
+  nums.innerHTML = '';
+  const cb = _pagCallbacks[prefix];
+  if (!cb) return;
+  for (const p of pageRange(page, pages)) {
+    if (p === '…') {
+      const s = document.createElement('span'); s.className = 'page-ellipsis'; s.textContent = '…';
+      nums.appendChild(s);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'page-btn' + (p === page ? ' active' : '');
+      btn.textContent = p;
+      btn.addEventListener('click', () => cb(p));
+      nums.appendChild(btn);
+    }
+  }
+}
+
 // ── Render users ─────────────────────────────────────────────────────
 function renderUsers() {
   const q            = document.getElementById('userSearch').value.trim().toLowerCase();
@@ -818,10 +942,17 @@ function renderUsers() {
     th.querySelector('.sort-arrow').textContent = active ? (_usersSortDir === 'asc' ? '↑' : '↓') : '↕';
   });
 
-  const tbody = document.getElementById('usersBody');
-  document.getElementById('usersCount').textContent = `${list.length} user${list.length !== 1 ? 's' : ''}`;
+  const total  = list.length;
+  const pages  = Math.max(1, Math.ceil(total / _usersPerPage));
+  _usersPage   = Math.min(_usersPage, pages);
+  const start  = (_usersPage - 1) * _usersPerPage;
+  list         = list.slice(start, start + _usersPerPage);
 
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
+  const tbody = document.getElementById('usersBody');
+  document.getElementById('usersCount').textContent = `${total} user${total !== 1 ? 's' : ''}`;
+  renderPagBar('users', _usersPage, pages, total, _usersPerPage);
+
+  if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
   tbody.innerHTML = '';
 
   for (const u of list) {
@@ -885,12 +1016,19 @@ function renderApps() {
     arrow.textContent = active ? (_appsSortDir === 'asc' ? '↑' : '↓') : '↕';
   });
 
-  const tbody = document.getElementById('appsBody');
-  document.getElementById('appsCount').textContent = `${list.length} application${list.length !== 1 ? 's' : ''}`;
+  const total  = list.length;
+  const pages  = Math.max(1, Math.ceil(total / _appsPerPage));
+  _appsPage    = Math.min(_appsPage, pages);
+  const start  = (_appsPage - 1) * _appsPerPage;
+  const pageItems = list.slice(start, start + _appsPerPage);
 
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No applications match.</td></tr>'; return; }
+  const tbody = document.getElementById('appsBody');
+  document.getElementById('appsCount').textContent = `${total} application${total !== 1 ? 's' : ''}`;
+  renderPagBar('apps', _appsPage, pages, total, _appsPerPage);
+
+  if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No applications match.</td></tr>'; return; }
   tbody.innerHTML = '';
-  for (const a of list.slice(0, 200)) {
+  for (const a of pageItems) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><div class="company-cell">
@@ -912,11 +1050,6 @@ function renderApps() {
                 data-uid="${a._user_id}" data-aid="${a.id}"
                 data-label="${esc(a.company)} — ${esc(a.role_title)}">Delete</button>
       </div></td>`;
-    tbody.appendChild(tr);
-  }
-  if (list.length > 200) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
     tbody.appendChild(tr);
   }
 }
@@ -944,8 +1077,12 @@ function filterAndRenderRuns() {
     return _runsSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
-  document.getElementById('runsCount').textContent = `${list.length} run${list.length !== 1 ? 's' : ''}`;
-  renderRuns(list);
+  const total = list.length;
+  const pages = Math.max(1, Math.ceil(total / _runsPerPage));
+  _runsPage   = Math.min(_runsPage, pages);
+  document.getElementById('runsCount').textContent = `${total} run${total !== 1 ? 's' : ''}`;
+  renderPagBar('runs', _runsPage, pages, total, _runsPerPage);
+  renderRuns(list.slice((_runsPage - 1) * _runsPerPage, _runsPage * _runsPerPage));
 }
 
 function renderRuns(runs) {
@@ -973,17 +1110,22 @@ function renderRuns(runs) {
   }
 }
 
-// Runs filter change handlers
+// Runs filters — reset to page 1
 ['runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
-  document.getElementById(id).addEventListener('change', filterAndRenderRuns);
-  document.getElementById(id).addEventListener('input',  filterAndRenderRuns);
+  document.getElementById(id).addEventListener('change', () => { _runsPage = 1; filterAndRenderRuns(); });
+  document.getElementById(id).addEventListener('input',  () => { _runsPage = 1; filterAndRenderRuns(); });
 });
+document.getElementById('runsPerPage').addEventListener('change', e => {
+  _runsPerPage = parseInt(e.target.value); _runsPage = 1; filterAndRenderRuns();
+});
+document.getElementById('runsPrev').addEventListener('click', () => { _runsPage--; filterAndRenderRuns(); });
+document.getElementById('runsNext').addEventListener('click', () => { _runsPage++; filterAndRenderRuns(); });
 
-// Created column sort
+// Created column sort — reset to page 1
 document.getElementById('runsSortTh').addEventListener('click', () => {
   _runsSortDir = _runsSortDir === 'desc' ? 'asc' : 'desc';
   document.getElementById('runsSortArrow').textContent = _runsSortDir === 'asc' ? '↑' : '↓';
-  filterAndRenderRuns();
+  _runsPage = 1; filterAndRenderRuns();
 });
 
 // ── Delegated click handler ──────────────────────────────────────────
@@ -1008,11 +1150,18 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── Filters ──────────────────────────────────────────────────────────
+// Apps per-page + pagination controls
+document.getElementById('appsPerPage').addEventListener('change', e => {
+  _appsPerPage = parseInt(e.target.value); _appsPage = 1; renderApps();
+});
+document.getElementById('appsPrev').addEventListener('click', () => { _appsPage--; renderApps(); });
+document.getElementById('appsNext').addEventListener('click', () => { _appsPage++; renderApps(); });
+
+// Apps filters — reset to page 1
 ['appSearch','appUserFilter','appStatusFilter',
  'appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo'].forEach(id => {
-  document.getElementById(id).addEventListener('input',  renderApps);
-  document.getElementById(id).addEventListener('change', renderApps);
+  document.getElementById(id).addEventListener('input',  () => { _appsPage = 1; renderApps(); });
+  document.getElementById(id).addEventListener('change', () => { _appsPage = 1; renderApps(); });
 });
 
 // Column header sort
@@ -1026,7 +1175,7 @@ document.getElementById('appsHead').addEventListener('click', e => {
     _appsSortCol = col;
     _appsSortDir = 'asc';
   }
-  renderApps();
+  _appsPage = 1; renderApps();
 });
 
 // ── User edit modal ──────────────────────────────────────────────────
@@ -1449,22 +1598,32 @@ document.getElementById('tab-auditlog').addEventListener('click', e => {
   loadAudit(1);
 });
 
-// User filters
+// User filters — reset to page 1 on any change
 ['userSearch','userRoleFilter','userVerifiedFilter',
  'userLoginFrom','userLoginTo','userJoinedFrom','userJoinedTo'].forEach(id => {
-  document.getElementById(id).addEventListener('input',  renderUsers);
-  document.getElementById(id).addEventListener('change', renderUsers);
+  document.getElementById(id).addEventListener('input',  () => { _usersPage = 1; renderUsers(); });
+  document.getElementById(id).addEventListener('change', () => { _usersPage = 1; renderUsers(); });
 });
+document.getElementById('usersPerPage').addEventListener('change', e => {
+  _usersPerPage = parseInt(e.target.value); _usersPage = 1; renderUsers();
+});
+document.getElementById('usersPrev').addEventListener('click', () => { _usersPage--; renderUsers(); });
+document.getElementById('usersNext').addEventListener('click', () => { _usersPage++; renderUsers(); });
 
-// User column sort
+// User column sort — reset page
 document.getElementById('usersHead').addEventListener('click', e => {
   const th = e.target.closest('.usr-sort-th');
   if (!th) return;
   const col = th.dataset.col;
   _usersSortDir = (_usersSortCol === col && _usersSortDir === 'asc') ? 'desc' : 'asc';
   _usersSortCol = col;
-  renderUsers();
+  _usersPage = 1; renderUsers();
 });
+
+// Register page-number button callbacks for each paginated tab
+_pagCallbacks['users'] = p => { _usersPage = p; renderUsers(); };
+_pagCallbacks['apps']  = p => { _appsPage  = p; renderApps(); };
+_pagCallbacks['runs']  = p => { _runsPage  = p; filterAndRenderRuns(); };
 
 // ── Init ─────────────────────────────────────────────────────────────
 loadAll();
