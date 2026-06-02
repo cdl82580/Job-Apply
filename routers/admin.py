@@ -877,8 +877,6 @@ async def test_webhook(webhook_id: str, request: Request):
         if fresh and fresh.get("recent_deliveries"):
             result["delivery"] = fresh["recent_deliveries"][0]
     t = _th.Thread(target=_run); t.start(); t.join(timeout=15)
-    user_audit.log(admin["user_id"], "webhook_tested", admin["email"],
-                   webhook_id=webhook_id)
     return result.get("delivery", {"success": None, "error": "timeout"})
 
 
