@@ -1,13 +1,10 @@
 {
-  "_metadata": {
-    "major_version": 1,
-    "minor_version": 1
-  },
+  "_metadata": { "major_version": 1, "minor_version": 1 },
   "display_information": {
     "name": "Job Apply",
-    "description": "Generate tailored resumes, ATS resumes, cover letters, and interview prep cards — all from Slack.",
+    "description": "AI-powered job application agent — resumes, cover letters, interview prep, and application tracking, all from Slack.",
     "background_color": "#1A3C5E",
-    "long_description": "Job Apply bot lets you kick off a full application workflow or generate an interview prep card without leaving Slack.\n\nCommands:\n  /apply     — paste a job posting, enter company + role, get resume + ATS resume + cover letter\n  /prep      — paste a job posting, pick a round type, get a tailored interview prep card\n  /jobstatus — check that the backend API is healthy\n\nAll output files are uploaded to your Google Drive automatically."
+    "long_description": "Job Apply lets you run the full application workflow without leaving Slack.\n\n🤖 Agent Runs\n  /apply — Generate tailored resume, ATS resume & cover letter\n  /prep — Generate an interview prep reference card\n  /runs — List your recent Drive run folders\n\n📋 Application Tracker\n  /tracker — Pipeline summary grouped by status\n  /track-list — List applications (optional: filter by status)\n  /track-view — View full details of an application\n  /track-add — Add a new application record\n  /track-update — Update an application's status\n  /track-note — Add a comment to an application\n  /track-delete — Delete an application (with confirmation)\n\n🔍 Lookup & Info\n  /company — Search company info (logo, domain, description)\n  /me — Show your account details\n  /activity — Show your 10 most recent audit events\n\n🛠️ System\n  /jobstatus — Check API health\n  /resend-verify — Resend email verification\n  /help — Full command reference"
   },
   "features": {
     "bot_user": {
@@ -15,34 +12,27 @@
       "always_online": true
     },
     "slash_commands": [
-      {
-        "command": "/apply",
-        "description": "Generate a tailored resume + cover letter for a job posting",
-        "usage_hint": "(opens a form)",
-        "should_escape": false
-      },
-      {
-        "command": "/prep",
-        "description": "Generate an interview prep card for an upcoming round",
-        "usage_hint": "(opens a form)",
-        "should_escape": false
-      },
-      {
-        "command": "/jobstatus",
-        "description": "Check the status of the Job Apply API backend",
-        "usage_hint": "(no arguments needed)",
-        "should_escape": false
-      }
+      { "command": "/apply",         "description": "Generate a tailored resume, ATS resume & cover letter for a job posting",     "usage_hint": "(opens a form)",                      "should_escape": false },
+      { "command": "/prep",          "description": "Generate an interview prep reference card for an upcoming round",             "usage_hint": "(opens a form)",                      "should_escape": false },
+      { "command": "/runs",          "description": "List your recent agent run folders from Google Drive",                        "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/tracker",       "description": "Show your application pipeline summary grouped by status",                    "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/track-list",    "description": "List your applications, optionally filtered by status",                       "usage_hint": "[status] e.g. interviewing, applied", "should_escape": false },
+      { "command": "/track-view",    "description": "View full details of a specific application",                                 "usage_hint": "(opens a selector)",                  "should_escape": false },
+      { "command": "/track-add",     "description": "Add a new job application record to your tracker",                           "usage_hint": "(opens a form)",                      "should_escape": false },
+      { "command": "/track-update",  "description": "Update an application's status and optionally add a note",                   "usage_hint": "(opens a selector)",                  "should_escape": false },
+      { "command": "/track-note",    "description": "Add a comment or note to an application",                                    "usage_hint": "(opens a selector)",                  "should_escape": false },
+      { "command": "/track-delete",  "description": "Delete an application record (requires confirmation)",                       "usage_hint": "(opens a selector)",                  "should_escape": false },
+      { "command": "/company",       "description": "Search company info — name, domain, and description via BrandFetch",         "usage_hint": "[company name] e.g. Salesforce",      "should_escape": false },
+      { "command": "/me",            "description": "Show your account details, role, and verification status",                   "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/activity",      "description": "Show your 10 most recent audit log events",                                  "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/jobstatus",     "description": "Check the Job Apply API health and storage status",                          "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/resend-verify", "description": "Resend your email verification link",                                        "usage_hint": "(no arguments)",                      "should_escape": false },
+      { "command": "/help",          "description": "Show the full Job Apply command reference",                                  "usage_hint": "(no arguments)",                      "should_escape": false }
     ]
   },
   "oauth_config": {
     "scopes": {
-      "bot": [
-        "commands",
-        "chat:write",
-        "im:write",
-        "im:history"
-      ]
+      "bot": ["commands", "chat:write", "im:write", "im:history"]
     }
   },
   "settings": {
@@ -53,9 +43,7 @@
     },
     "event_subscriptions": {
       "request_url": "https://YOUR_BOT_HOST/slack/events",
-      "bot_events": [
-        "message.im"
-      ]
+      "bot_events": ["message.im"]
     },
     "org_deploy_enabled": false,
     "token_rotation_enabled": false

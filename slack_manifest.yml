@@ -4,60 +4,127 @@ _metadata:
 
 display_information:
   name: Job Apply
-  description: Generate tailored resumes, ATS resumes, cover letters, and interview prep cards — all from Slack.
+  description: AI-powered job application agent — resumes, cover letters, interview prep, and application tracking, all from Slack.
   background_color: "#1A3C5E"
   long_description: |
-    Job Apply bot lets you kick off a full application workflow or generate an
-    interview prep card without leaving Slack.
+    Job Apply lets you run the full application workflow without leaving Slack.
 
-    Commands:
-      /apply    — paste a job posting, enter company + role, get resume + ATS resume + cover letter
-      /prep     — paste a job posting, pick a round type, get a tailored interview prep card
-      /jobstatus — check that the backend API is healthy
+    🤖 Agent Runs
+      /apply        — Generate tailored resume, ATS resume & cover letter
+      /prep         — Generate an interview prep reference card
+      /runs         — List your recent Drive run folders
 
-    All output files are uploaded to your Google Drive automatically.
+    📋 Application Tracker
+      /tracker      — Pipeline summary grouped by status
+      /track-list   — List applications (optional: filter by status)
+      /track-view   — View full details of an application
+      /track-add    — Add a new application record
+      /track-update — Update an application's status
+      /track-note   — Add a comment to an application
+      /track-delete — Delete an application (with confirmation)
+
+    🔍 Lookup & Info
+      /company      — Search company info (logo, domain, description)
+      /me           — Show your account details
+      /activity     — Show your 10 most recent audit events
+
+    🛠️ System
+      /jobstatus    — Check API health
+      /resend-verify — Resend email verification
+      /help         — Full command reference
 
 features:
   bot_user:
     display_name: Job Apply
     always_online: true
   slash_commands:
+    # Agent
     - command: /apply
-      description: Generate a tailored resume + cover letter for a job posting
+      description: Generate a tailored resume, ATS resume & cover letter for a job posting
       usage_hint: (opens a form)
       should_escape: false
     - command: /prep
-      description: Generate an interview prep card for an upcoming round
+      description: Generate an interview prep reference card for an upcoming round
       usage_hint: (opens a form)
       should_escape: false
+    - command: /runs
+      description: List your recent agent run folders from Google Drive
+      usage_hint: (no arguments)
+      should_escape: false
+    # Tracker
+    - command: /tracker
+      description: Show your application pipeline summary grouped by status
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /track-list
+      description: List your applications, optionally filtered by status
+      usage_hint: "[status] e.g. interviewing, applied, rejected"
+      should_escape: false
+    - command: /track-view
+      description: View full details of a specific application
+      usage_hint: (opens a selector)
+      should_escape: false
+    - command: /track-add
+      description: Add a new job application record to your tracker
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /track-update
+      description: Update an application's status and optionally add a note
+      usage_hint: (opens a selector)
+      should_escape: false
+    - command: /track-note
+      description: Add a comment or note to an application
+      usage_hint: (opens a selector)
+      should_escape: false
+    - command: /track-delete
+      description: Delete an application record (requires confirmation)
+      usage_hint: (opens a selector)
+      should_escape: false
+    # Lookup
+    - command: /company
+      description: Search company info — name, domain, and description via BrandFetch
+      usage_hint: "[company name] e.g. Salesforce"
+      should_escape: false
+    - command: /me
+      description: Show your account details, role, and verification status
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /activity
+      description: Show your 10 most recent audit log events
+      usage_hint: (no arguments)
+      should_escape: false
+    # System
     - command: /jobstatus
-      description: Check the status of the Job Apply API backend
-      usage_hint: (no arguments needed)
+      description: Check the Job Apply API health and storage status
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /resend-verify
+      description: Resend your email verification link
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /help
+      description: Show the full Job Apply command reference
+      usage_hint: (no arguments)
       should_escape: false
 
 oauth_config:
   scopes:
     bot:
-      - commands          # register slash commands
-      - chat:write        # post DMs and messages
-      - im:write          # open DM channels to send results back
-      - im:history        # read DM channel so the bot can respond in threads
+      - commands      # register slash commands
+      - chat:write    # post messages and DMs
+      - im:write      # open DM channels
+      - im:history    # read DMs (for future conversational features)
 
 settings:
-  # Set to true and add SLACK_APP_TOKEN (xapp-...) to use Socket Mode instead
-  # of a public Request URL — useful for local dev or when you don't have a
-  # stable HTTPS URL.
   socket_mode_enabled: false
-  # Interactivity must be enabled for modals (/apply and /prep forms).
-  # Set the Request URL to: https://<your-bot-host>/slack/events
+  # Interactivity required for modal commands (/apply, /prep, /track-add, etc.)
+  # Set Request URL to: https://<your-bot-host>/slack/events
   interactivity:
     is_enabled: true
     request_url: https://YOUR_BOT_HOST/slack/events
-  # Slash command Request URL (same endpoint as interactivity).
-  # Update this after you have a public URL for the bot.
   event_subscriptions:
     request_url: https://YOUR_BOT_HOST/slack/events
     bot_events:
-      - message.im       # receive DMs (optional, for future conversational features)
+      - message.im
   org_deploy_enabled: false
   token_rotation_enabled: false
