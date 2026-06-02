@@ -866,8 +866,12 @@ function makePlaceholderHtml(company) {
 
 function fmtDate(d) {
   if (!d) return '—';
-  const parts = d.split('T')[0].split('-');
-  return `${parts[1]}/${parts[2]}/${parts[0].slice(2)}`;
+  try {
+    return new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+  } catch (_) {
+    const parts = d.split('T')[0].split('-');
+    return `${parts[1]}/${parts[2]}/${parts[0].slice(2)}`;
+  }
 }
 
 // ── Load & render ────────────────────────────────────────────────────
