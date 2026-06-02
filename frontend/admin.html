@@ -167,6 +167,10 @@
             border-top-color: white; border-radius: 50%; animation: rot .7s linear infinite; }
     @keyframes rot { to { transform: rotate(360deg); } }
     .empty { color: var(--muted); font-size: .875rem; padding: 1rem 0; text-align: center; }
+    .app-sort-th:hover { color: var(--primary); }
+    .app-sort-th.sort-active { color: var(--primary); }
+    .sort-arrow { font-size: .65rem; opacity: .45; vertical-align: middle; }
+    .app-sort-th.sort-active .sort-arrow { opacity: 1; }
 
     /* ── Drawer ──────────────────────────────────────────────────── */
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
@@ -299,10 +303,24 @@
         <option>Rejected</option><option>Not Applying</option>
       </select>
     </div>
+    <div class="filter-row" style="margin-top:-.5rem">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0">Applied:</label>
+      <input type="date" id="appAppliedFrom" style="max-width:148px" title="Applied from">
+      <input type="date" id="appAppliedTo"   style="max-width:148px" title="Applied to">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">Updated:</label>
+      <input type="date" id="appUpdatedFrom" style="max-width:148px" title="Updated from">
+      <input type="date" id="appUpdatedTo"   style="max-width:148px" title="Updated to">
+    </div>
     <div id="appsAlert"></div>
     <table>
-      <thead><tr>
-        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th></th>
+      <thead id="appsHead"><tr>
+        <th class="app-sort-th" data-col="company"     style="cursor:pointer;white-space:nowrap">Company   <span class="sort-arrow">↕</span></th>
+        <th class="app-sort-th" data-col="role_title"  style="cursor:pointer;white-space:nowrap">Role      <span class="sort-arrow">↕</span></th>
+        <th class="app-sort-th" data-col="status"      style="cursor:pointer;white-space:nowrap">Status    <span class="sort-arrow">↕</span></th>
+        <th class="app-sort-th" data-col="_user_email" style="cursor:pointer;white-space:nowrap">Owner     <span class="sort-arrow">↕</span></th>
+        <th class="app-sort-th" data-col="date_applied"style="cursor:pointer;white-space:nowrap">Applied   <span class="sort-arrow">↕</span></th>
+        <th class="app-sort-th" data-col="last_updated"style="cursor:pointer;white-space:nowrap">Updated   <span class="sort-arrow">↕</span></th>
+        <th></th>
       </tr></thead>
       <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
     </table>
@@ -544,7 +562,19 @@ function showAlert(elId, msg, type = 'err') {
 let _users    = [];
 let _allApps  = [];
 let _allRuns  = [];
-let _runsSortDir = 'desc';  // 'asc' | 'desc'
+let _runsSortDir = 'desc';
+let _appsSortCol = '';
+let _appsSortDir = 'asc';
+
+const APP_STATUS_ORDER = {
+  'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'On Hold': 3,
+  'Researching': 4, 'Offer': 5, 'Rejected': 6, 'Not Applying': 7,
+};
+
+function _appSortVal(a, col) {
+  if (col === 'status') return APP_STATUS_ORDER[a.status] ?? 99;
+  return (a[col] || '').toString().toLowerCase();
+}
 let _pendingRoleUserId = null;
 let _pendingDeleteUserId = null;
 let _pendingDeleteAppId  = null;
@@ -633,14 +663,39 @@ function renderUsers() {
 
 // ── Render apps ──────────────────────────────────────────────────────
 function renderApps() {
-  const q    = document.getElementById('appSearch').value.trim().toLowerCase();
-  const uid  = document.getElementById('appUserFilter').value;
-  const stat = document.getElementById('appStatusFilter').value;
+  const q            = document.getElementById('appSearch').value.trim().toLowerCase();
+  const uid          = document.getElementById('appUserFilter').value;
+  const stat         = document.getElementById('appStatusFilter').value;
+  const appliedFrom  = document.getElementById('appAppliedFrom').value;
+  const appliedTo    = document.getElementById('appAppliedTo').value;
+  const updatedFrom  = document.getElementById('appUpdatedFrom').value;
+  const updatedTo    = document.getElementById('appUpdatedTo').value;
 
   let list = _allApps;
-  if (q)    list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q));
-  if (uid)  list = list.filter(a => a._user_id === uid);
-  if (stat) list = list.filter(a => a.status === stat);
+  if (q)           list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q));
+  if (uid)         list = list.filter(a => a._user_id === uid);
+  if (stat)        list = list.filter(a => a.status === stat);
+  if (appliedFrom) list = list.filter(a => (a.date_applied||'') >= appliedFrom);
+  if (appliedTo)   list = list.filter(a => (a.date_applied||'') <= appliedTo + 'T23:59:59Z');
+  if (updatedFrom) list = list.filter(a => (a.last_updated||'') >= updatedFrom);
+  if (updatedTo)   list = list.filter(a => (a.last_updated||'') <= updatedTo + 'T23:59:59Z');
+
+  // Sort
+  if (_appsSortCol) {
+    list = [...list].sort((a, b) => {
+      const av = _appSortVal(a, _appsSortCol), bv = _appSortVal(b, _appsSortCol);
+      let cmp = typeof av === 'number' ? av - bv : av < bv ? -1 : av > bv ? 1 : 0;
+      return _appsSortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  // Update header arrows
+  document.querySelectorAll('.app-sort-th').forEach(th => {
+    const arrow = th.querySelector('.sort-arrow');
+    const active = th.dataset.col === _appsSortCol;
+    th.classList.toggle('sort-active', active);
+    arrow.textContent = active ? (_appsSortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
 
   const tbody = document.getElementById('appsBody');
   document.getElementById('appsCount').textContent = `${list.length} application${list.length !== 1 ? 's' : ''}`;
@@ -770,9 +825,24 @@ document.addEventListener('click', e => {
 });
 
 // ── Filters ──────────────────────────────────────────────────────────
-['appSearch','appUserFilter','appStatusFilter'].forEach(id => {
-  document.getElementById(id).addEventListener('input', renderApps);
+['appSearch','appUserFilter','appStatusFilter',
+ 'appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo'].forEach(id => {
+  document.getElementById(id).addEventListener('input',  renderApps);
   document.getElementById(id).addEventListener('change', renderApps);
+});
+
+// Column header sort
+document.getElementById('appsHead').addEventListener('click', e => {
+  const th = e.target.closest('.app-sort-th');
+  if (!th) return;
+  const col = th.dataset.col;
+  if (_appsSortCol === col) {
+    _appsSortDir = _appsSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _appsSortCol = col;
+    _appsSortDir = 'asc';
+  }
+  renderApps();
 });
 
 // ── Role modal ───────────────────────────────────────────────────────
