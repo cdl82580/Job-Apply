@@ -906,7 +906,7 @@ function renderRuns(runs) {
       <td style="font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(folderLabel)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email || '—')}</td>
       <td><span style="font-size:.8rem;font-weight:600;color:${statusColor}">${esc(r.status)}</span></td>
-      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${r.created_at ? fmtDate(r.created_at) : '—'}</td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${r.created_at ? fmtDateTime(r.created_at) : '—'}</td>
       <td>${r.web_view_link ? `<a class="btn btn-ghost btn-sm" href="${esc(r.web_view_link)}" target="_blank" rel="noopener">Drive ↗</a>` : '<span style="color:var(--muted);font-size:.8rem">—</span>'}</td>`;
     tbody.appendChild(tr);
   }
