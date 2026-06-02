@@ -943,6 +943,300 @@ def jobstatus_command(ack, respond):
 
 
 # ---------------------------------------------------------------------------
+# /me — account info
+# ---------------------------------------------------------------------------
+
+@app.command("/me")
+def me_command(ack, respond):
+    ack()
+    try:
+        r = _api("get", "/api/auth/me")
+        r.raise_for_status()
+        u = r.json()
+    except Exception as exc:
+        respond(f":x: Could not load account: {exc}")
+        return
+
+    verified = ":white_check_mark: Verified" if u.get("email_verified", True) else ":x: Not verified"
+    respond(
+        f":bust_in_silhouette: *{u.get('display_name') or u.get('email')}*\n"
+        f"• Email: `{u.get('email')}`  ·  {verified}\n"
+        f"• Role: `{u.get('role', 'user')}`\n"
+        f"• Resume on file: {'✓' if u.get('has_resume') else '—'}  ·  "
+        f"Profile guide: {'✓' if u.get('has_profile') else '—'}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# /runs — recent agent run folders from Drive
+# ---------------------------------------------------------------------------
+
+@app.command("/runs")
+def runs_command(ack, respond):
+    ack()
+    try:
+        r = _api("get", "/api/gdrive/runs")
+        r.raise_for_status()
+        runs = r.json().get("runs", [])
+    except Exception as exc:
+        respond(f":x: Could not load runs: {exc}")
+        return
+
+    if not runs:
+        respond("No agent runs found in Drive yet.")
+        return
+
+    shown = runs[:10]
+    lines = []
+    for run in shown:
+        name  = run.get("name", "")
+        idx   = name.find("_")
+        label = f"{name[:idx]} · {name[idx+1:].replace('_',' ')}" if idx > 0 else name
+        link  = run.get("web_view_link", "")
+        badge = " ↩" if run.get("source") == "legacy" else ""
+        lines.append(f"• {'<' + link + '|' + label + '>' if link else label}{badge}")
+
+    header = f":file_folder: *Recent Agent Runs* ({len(runs)} total)"
+    if len(runs) > 10:
+        lines.append(f"_…and {len(runs) - 10} more — <{API_BASE}|open the app> to see all._")
+    respond(header + "\n" + "\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# /activity — recent personal audit events
+# ---------------------------------------------------------------------------
+
+@app.command("/activity")
+def activity_command(ack, respond):
+    ack()
+    try:
+        r = _api("get", "/api/audit/me")
+        r.raise_for_status()
+        events = r.json()[:10]
+    except Exception as exc:
+        respond(f":x: Could not load activity: {exc}")
+        return
+
+    if not events:
+        respond("No recent activity found.")
+        return
+
+    lines = []
+    for e in events:
+        action = e.get("action", "?")
+        ts     = (e.get("timestamp") or "")[:16].replace("T", " ")
+        det    = e.get("details") or {}
+        det_str = ""
+        if det:
+            first = next(((k, v) for k, v in det.items() if v), None)
+            if first:
+                det_str = f" · `{first[0]}`: {str(first[1])[:50]}"
+        lines.append(f"• `{action}` _{ts}_{det_str}")
+
+    respond(f":scroll: *Your Recent Activity*\n" + "\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# /company — BrandFetch company lookup
+# ---------------------------------------------------------------------------
+
+@app.command("/company")
+def company_command(ack, respond, body):
+    ack()
+    query = body.get("text", "").strip()
+    if not query:
+        respond("Usage: `/company [company name]`\nExample: `/company Salesforce`")
+        return
+    try:
+        r = _api("get", "/api/companies/search", params={"q": query})
+        r.raise_for_status()
+        results = r.json()
+    except Exception as exc:
+        respond(f":x: Search failed: {exc}")
+        return
+
+    if not results:
+        respond(f":mag: No results found for *{query}*.")
+        return
+
+    lines = []
+    for c in results[:5]:
+        name   = c.get("name", "?")
+        domain = c.get("domain", "")
+        desc   = c.get("description", "")
+        line   = f"• *{name}*"
+        if domain:
+            line += f"  `{domain}`"
+        if desc:
+            line += f"\n  _{desc}_"
+        lines.append(line)
+
+    respond(f":mag: *Company search: {query}*\n\n" + "\n\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# /resend-verify — resend email verification
+# ---------------------------------------------------------------------------
+
+@app.command("/resend-verify")
+def resend_verify_command(ack, respond):
+    ack()
+    try:
+        r = _api("post", "/api/auth/resend-verification")
+        r.raise_for_status()
+        data = r.json()
+    except Exception as exc:
+        respond(f":x: Failed: {exc}")
+        return
+
+    if data.get("already_verified"):
+        respond(":white_check_mark: Your email is already verified — nothing to do.")
+    elif data.get("sent"):
+        respond(":email: Verification email sent! Check your inbox.")
+    else:
+        respond(":warning: Could not send — check that RESEND_API_KEY is configured.")
+
+
+# ---------------------------------------------------------------------------
+# /track-view — view full application details
+# ---------------------------------------------------------------------------
+
+@app.command("/track-view")
+def track_view_command(ack, body, client, respond):
+    ack()
+    try:
+        options = _app_options()
+    except Exception as exc:
+        respond(f":x: Could not load applications: {exc}")
+        return
+
+    if not options:
+        respond("No applications found. Use `/track-add` to create one.")
+        return
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "track_view_submit",
+            "title": {"type": "plain_text", "text": "View Application"},
+            "submit": {"type": "plain_text", "text": "View"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "app_id",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Select an application…"},
+                        "options": options,
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("track_view_submit")
+def track_view_view_submit(ack, body, client, view):
+    ack()
+    app_id  = view["state"]["values"]["app_id"]["value"]["selected_option"]["value"]
+    channel = body["user"]["id"]
+    try:
+        a = _get_app(app_id)
+        lines = [
+            f":briefcase: *{a.get('company')} — {a.get('role_title')}*",
+            f"• Status: `{a.get('status')}` | Priority: `{a.get('priority')}`",
+        ]
+        if a.get("date_applied"):
+            lines.append(f"• Applied: {a['date_applied'][:10]}")
+        if a.get("location"):
+            lines.append(f"• Location: {a['location']}")
+        if a.get("salary_range"):
+            lines.append(f"• Salary: {a['salary_range']}")
+        if a.get("recruiter_name"):
+            rec = a["recruiter_name"]
+            if a.get("recruiter_email"):
+                rec += f" <{a['recruiter_email']}>"
+            lines.append(f"• Recruiter: {rec}")
+        if a.get("url"):
+            lines.append(f"• <{a['url']}|Job Posting ↗>")
+        comments = a.get("comments", [])
+        if comments:
+            lines.append(f"\n:speech_balloon: *Notes ({len(comments)}):*")
+            for c in comments[-3:]:
+                lines.append(f"  › {c['text'][:120]}")
+        client.chat_postMessage(channel=channel, text="\n".join(lines))
+    except Exception as exc:
+        client.chat_postMessage(channel=channel, text=f":x: Could not load application: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# /help — command reference
+# ---------------------------------------------------------------------------
+
+@app.command("/help")
+def help_command(ack, respond):
+    ack()
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "📖  Job Apply — Command Reference"},
+        },
+
+        # Agent runs
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*🤖  Agent Runs*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/apply* — Generate resume, ATS resume & cover letter for a job\n"
+            "*/prep* — Generate an interview prep document\n"
+            "*/runs* — List your recent agent run folders from Drive"
+        )}},
+        {"type": "divider"},
+
+        # Tracker
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*📋  Application Tracker*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/tracker* — Pipeline summary grouped by status\n"
+            "*/track-list `[status]`* — List applications (optional: filter by status)\n"
+            "*/track-view* — View full details of an application\n"
+            "*/track-add* — Add a new application record\n"
+            "*/track-update* — Update an application's status (+ optional note)\n"
+            "*/track-note* — Add a comment/note to an application\n"
+            "*/track-delete* — Delete an application (two-step confirm)"
+        )}},
+        {"type": "divider"},
+
+        # Lookup
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*🔍  Lookup & Info*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/company `[name]`* — Search company info — logo, domain, description\n"
+            "*/me* — Show your account details and verification status\n"
+            "*/activity* — Show your 10 most recent audit events"
+        )}},
+        {"type": "divider"},
+
+        # System
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*🛠️  System*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/jobstatus* — Check API health and storage status\n"
+            "*/resend-verify* — Resend your email verification\n"
+            "*/help* — Show this command reference"
+        )}},
+        {"type": "divider"},
+
+        # Footer
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn",
+                          "text": f"Job Apply Agent · <{API_BASE}|Open App> · <{API_BASE}/admin.html|Admin Dashboard>"}],
+        },
+    ]
+    respond(blocks=blocks, text="Job Apply — Command Reference")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
