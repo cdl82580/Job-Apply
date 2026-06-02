@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile — Job Application Agent</title>
   <link rel="icon" href="/favicon.png" type="image/png">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     (function(){
       var t = localStorage.getItem('theme') ||
@@ -164,11 +165,6 @@
       cursor: default;
       resize: none;
     }
-    /* Textarea in view mode: auto-height so all content is visible */
-    .card.view-mode textarea[data-field] {
-      overflow: hidden;
-      min-height: unset;
-    }
     .card-header {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 1.25rem;
@@ -199,6 +195,72 @@
       border-radius: 50%; animation: rot .7s linear infinite;
     }
     @keyframes rot { to { transform: rotate(360deg); } }
+
+    /* ── Markdown toolbar ────────────────────────────────────────── */
+    .md-toolbar {
+      display: flex; gap: .25rem; flex-wrap: wrap; align-items: center;
+      padding: .375rem .625rem;
+      background: var(--bg-page);
+      border: 1px solid var(--input-border);
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+    }
+    .md-toolbar ~ textarea { border-radius: 0 0 6px 6px; }
+    .md-sep { width: 1px; height: 16px; background: var(--card-border); margin: 0 .15rem; }
+    .md-btn {
+      padding: .2rem .45rem; min-width: 26px; text-align: center;
+      border: 1px solid var(--input-border); border-radius: 4px;
+      background: var(--input-bg); color: var(--text);
+      font-size: .775rem; font-family: 'SF Mono', 'Fira Code', monospace;
+      font-weight: 700; cursor: pointer; line-height: 1.4;
+      transition: background .1s, border-color .1s;
+    }
+    .md-btn:hover { background: var(--fill); border-color: var(--border); color: var(--primary); }
+
+    /* ── Markdown preview ────────────────────────────────────────── */
+    .markdown-preview {
+      font-size: .9rem; line-height: 1.7; color: var(--text);
+      padding: .25rem 0;
+    }
+    .markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+    .markdown-preview h4 {
+      color: var(--primary); font-weight: 700; margin: 1.25rem 0 .5rem;
+      line-height: 1.3;
+    }
+    .markdown-preview h1 { font-size: 1.25rem; }
+    .markdown-preview h2 { font-size: 1.1rem; }
+    .markdown-preview h3 { font-size: 1rem; }
+    .markdown-preview h4 { font-size: .9rem; }
+    .markdown-preview p  { margin: 0 0 .75rem; }
+    .markdown-preview ul, .markdown-preview ol {
+      margin: 0 0 .75rem; padding-left: 1.5rem;
+    }
+    .markdown-preview li { margin-bottom: .2rem; }
+    .markdown-preview strong { font-weight: 700; }
+    .markdown-preview em    { font-style: italic; }
+    .markdown-preview code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: .82rem; padding: .1rem .35rem;
+      background: var(--fill); border: 1px solid var(--card-border);
+      border-radius: 4px; color: var(--primary);
+    }
+    .markdown-preview pre {
+      background: var(--fill); border: 1px solid var(--card-border);
+      border-radius: 6px; padding: .875rem 1rem; overflow-x: auto;
+      margin: 0 0 .75rem;
+    }
+    .markdown-preview pre code {
+      background: none; border: none; padding: 0;
+      font-size: .82rem; color: var(--text);
+    }
+    .markdown-preview blockquote {
+      border-left: 3px solid var(--border); margin: 0 0 .75rem;
+      padding: .25rem 0 .25rem 1rem; color: var(--muted);
+    }
+    .markdown-preview hr {
+      border: none; border-top: 1px solid var(--card-border); margin: 1rem 0;
+    }
+    .markdown-preview a { color: var(--border); }
 
     .account-info { font-size: .875rem; color: var(--muted); margin-bottom: 1rem; }
     .account-info strong { color: var(--text); }
@@ -297,13 +359,32 @@
       <button class="edit-toggle-btn" id="profileEditBtn">&#x270E; Edit</button>
     </div>
     <p style="font-size:.825rem;color:var(--muted);margin:0 0 .875rem">
-      This tells the AI how to write in your voice. The more detail the better.
+      This tells the AI how to write in your voice. Markdown is supported.
     </p>
     <form id="profileForm">
-      <div class="field">
-        <textarea id="profile_text" name="profile_text" data-field></textarea>
+      <!-- Markdown preview (view mode) -->
+      <div class="markdown-preview" id="profilePreview"></div>
+
+      <!-- Markdown toolbar (edit mode only) -->
+      <div class="md-toolbar hidden" id="mdToolbar">
+        <button type="button" class="md-btn" data-md="bold"   title="Bold">B</button>
+        <button type="button" class="md-btn" data-md="italic" title="Italic"><em>I</em></button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-btn" data-md="h2"     title="Heading 2">H2</button>
+        <button type="button" class="md-btn" data-md="h3"     title="Heading 3">H3</button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-btn" data-md="ul"     title="Bullet list">• List</button>
+        <button type="button" class="md-btn" data-md="ol"     title="Numbered list">1. List</button>
+        <div class="md-sep"></div>
+        <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
+        <button type="button" class="md-btn" data-md="hr"     title="Divider">—</button>
       </div>
-      <div class="btn-row">
+
+      <!-- Textarea (edit mode only) -->
+      <textarea id="profile_text" name="profile_text" data-field class="hidden"
+                style="min-height:280px;border-radius:0 0 6px 6px"></textarea>
+
+      <div class="btn-row" style="margin-top:.875rem">
         <button class="btn hidden" type="submit" id="profileBtn">Save</button>
         <button class="btn btn-ghost hidden" type="button" id="profileCancelBtn">Cancel</button>
       </div>
@@ -367,7 +448,7 @@
     document.getElementById('accountInfo').innerHTML = `Signed in as <strong>${d.email}</strong>`;
     document.getElementById('display_name').value  = d.display_name ?? '';
     document.getElementById('profile_text').value  = d.profile_text ?? '';
-    syncHeight(document.getElementById('profile_text'));
+    renderPreview(d.profile_text ?? '');
 
     // Email verification indicator
     const row   = document.getElementById('emailVerifyRow');
@@ -417,14 +498,50 @@
     setTimeout(() => { toastEl.style.display = 'none'; }, 5000);
   });
 
-  // ── Textarea auto-expand ─────────────────────────────────────────
-  function syncHeight(el) {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
+  // ── Markdown helpers ─────────────────────────────────────────────
+  marked.use({ breaks: true, gfm: true });
+
+  function renderPreview(text) {
+    const preview = document.getElementById('profilePreview');
+    preview.innerHTML = marked.parse(text || '*No profile content yet.*');
+    preview.classList.remove('hidden');
+    document.getElementById('profile_text').classList.add('hidden');
+    document.getElementById('mdToolbar').classList.add('hidden');
   }
-  function resetHeight(el) {
-    el.style.height = '';
+
+  function showEditor() {
+    document.getElementById('profilePreview').classList.add('hidden');
+    document.getElementById('profile_text').classList.remove('hidden');
+    document.getElementById('mdToolbar').classList.remove('hidden');
   }
+
+  // ── Markdown toolbar ─────────────────────────────────────────────
+  document.getElementById('mdToolbar').addEventListener('click', e => {
+    const btn = e.target.closest('[data-md]');
+    if (!btn) return;
+    const ta    = document.getElementById('profile_text');
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const sel   = ta.value.slice(start, end);
+    const before = ta.value.slice(0, start);
+    const after  = ta.value.slice(end);
+    let insert = '';
+
+    switch (btn.dataset.md) {
+      case 'bold':   insert = `**${sel || 'bold text'}**`; break;
+      case 'italic': insert = `*${sel || 'italic text'}*`; break;
+      case 'h2':     insert = `\n## ${sel || 'Heading'}\n`; break;
+      case 'h3':     insert = `\n### ${sel || 'Heading'}\n`; break;
+      case 'ul':     insert = `\n- ${sel || 'item'}\n`; break;
+      case 'ol':     insert = `\n1. ${sel || 'item'}\n`; break;
+      case 'code':   insert = sel.includes('\n') ? `\`\`\`\n${sel || 'code'}\n\`\`\`` : `\`${sel || 'code'}\``; break;
+      case 'hr':     insert = `\n\n---\n\n`; break;
+    }
+    ta.value = before + insert + after;
+    const cursor = before.length + insert.length;
+    ta.setSelectionRange(cursor, cursor);
+    ta.focus();
+  });
 
   // ── Edit toggle helpers ──────────────────────────────────────────
   function enterEdit(cardId, editBtnId, saveBtnId, cancelBtnId) {
@@ -493,15 +610,14 @@
   document.getElementById('profileEditBtn').addEventListener('click', () => {
     _origProfile = document.getElementById('profile_text').value;
     enterEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
-    const ta = document.getElementById('profile_text');
-    resetHeight(ta);   // restore resizable/scrollable textarea
-    ta.focus();
+    showEditor();
+    document.getElementById('profile_text').focus();
   });
   document.getElementById('profileCancelBtn').addEventListener('click', () => {
     const ta = document.getElementById('profile_text');
     ta.value = _origProfile;
     exitEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
-    syncHeight(ta);    // re-expand to full content height
+    renderPreview(_origProfile);
   });
 
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
@@ -516,8 +632,9 @@
     toast('profileToast', res.ok ? '✓ Profile saved.' : (body.detail ?? 'Error'), res.ok ? 'ok' : 'err');
     btn.disabled = false; btn.textContent = 'Save';
     if (res.ok) {
+      const saved = document.getElementById('profile_text').value;
       exitEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
-      syncHeight(document.getElementById('profile_text'));
+      renderPreview(saved);
     }
   });
 
