@@ -34,6 +34,7 @@ def _now() -> str:
 _INDEX_FIELDS = {
     "id", "company", "domain", "company_logo_url", "role_title",
     "status", "date_applied", "last_updated", "created_at", "priority", "dua",
+    "url",
 }
 
 
