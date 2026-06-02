@@ -472,6 +472,7 @@
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
     <div class="filter-row" id="runsFilterRow">
+      <input type="text" id="runsSearch" placeholder="Search by folder name or ID…" style="max-width:220px">
       <select id="runsTypeFilter">
         <option value="">All types</option>
         <option value="resume">Resume</option>
@@ -539,7 +540,8 @@
   <div class="tab-pane" id="tab-auditlog">
     <!-- Filter row 1 -->
     <div class="filter-row">
-      <input type="text" id="auditActorFilter" placeholder="Filter by actor…" style="max-width:220px">
+      <input type="text" id="auditIdFilter"    placeholder="Filter by event ID…" style="max-width:200px">
+      <input type="text" id="auditActorFilter" placeholder="Filter by actor…"    style="max-width:200px">
       <select id="auditActionFilter"><option value="">All actions</option></select>
       <select id="auditUserFilter"><option value="">All users</option></select>
       <select id="auditSourceFilter">
@@ -572,6 +574,7 @@
 
     <table>
       <thead><tr>
+        <th style="white-space:nowrap">Event ID</th>
         <th class="aud-sort-th" data-col="timestamp" style="cursor:pointer;white-space:nowrap">Timestamp <span class="sort-arrow">↓</span></th>
         <th class="aud-sort-th" data-col="action"    style="cursor:pointer;white-space:nowrap">Action <span class="sort-arrow">↕</span></th>
         <th class="aud-sort-th" data-col="actor"     style="cursor:pointer;white-space:nowrap">Actor <span class="sort-arrow">↕</span></th>
@@ -581,7 +584,7 @@
         <th>IP</th>
         <th>Details</th>
       </tr></thead>
-      <tbody id="auditBody"><tr><td colspan="8" class="empty">Load events to begin.</td></tr></tbody>
+      <tbody id="auditBody"><tr><td colspan="9" class="empty">Load events to begin.</td></tr></tbody>
     </table>
 
     <!-- Pagination -->
@@ -619,6 +622,10 @@
   <div class="drawer-body view-mode" id="drawerBody">
     <div class="inline-err" id="drawerErr"></div>
     <div class="owner-chip" id="ownerChip">👤 <span id="ownerLabel"></span></div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+      <span style="font-size:.75rem;font-weight:600;color:var(--muted)">Application ID:</span>
+      <code id="drawerAppId" style="font-size:.75rem;font-family:'SF Mono','Fira Code',monospace;color:var(--muted);user-select:all"></code>
+    </div>
 
     <div class="section-label">Company</div>
     <div class="field">
@@ -694,8 +701,12 @@
 <div class="modal-wrap" id="userEditModal">
   <div class="modal" style="max-width:480px">
     <h3>Edit User</h3>
-    <p id="userEditSubtitle" style="font-size:.825rem;color:var(--muted);margin-bottom:1.25rem"></p>
+    <p id="userEditSubtitle" style="font-size:.825rem;color:var(--muted);margin-bottom:.75rem"></p>
     <div style="display:grid;gap:.75rem;margin-bottom:1.25rem">
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem;color:var(--muted)">User ID <span style="font-weight:400">(read-only)</span></label>
+        <input type="text" id="ueUserId" readonly style="width:100%;padding:.45rem .75rem;border:1px solid var(--card-border);border-radius:6px;font-size:.775rem;font-family:'SF Mono','Fira Code',monospace;background:var(--bg-page);color:var(--muted);cursor:default">
+      </div>
       <div>
         <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Display Name</label>
         <input type="text" id="ueDisplayName" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
@@ -990,7 +1001,7 @@ function renderUsers() {
   let list = _users.map(u => ({ ...u, runs_count: runsByEmail[u.email] || 0 }));
 
   // Filters
-  if (q)          list = list.filter(u => (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
+  if (q)          list = list.filter(u => (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q) || (u.user_id||'').toLowerCase().includes(q));
   if (roleFilter) list = list.filter(u => u.role === roleFilter);
   if (verFilter === 'yes') list = list.filter(u => u.email_verified !== false);
   if (verFilter === 'no')  list = list.filter(u => u.email_verified === false);
@@ -1072,7 +1083,7 @@ function renderApps() {
   const updatedTo    = document.getElementById('appUpdatedTo').value;
 
   let list = _allApps;
-  if (q)           list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q));
+  if (q)           list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q) || (a.id||'').toLowerCase().includes(q));
   if (uid)         list = list.filter(a => a._user_id === uid);
   if (stat)        list = list.filter(a => a.status === stat);
   if (appliedFrom) list = list.filter(a => (a.date_applied||'') >= appliedFrom);
@@ -1145,7 +1156,9 @@ function filterAndRenderRuns() {
   const dateFrom = document.getElementById('runsDateFrom').value;   // 'YYYY-MM-DD'
   const dateTo   = document.getElementById('runsDateTo').value;
 
+  const q = document.getElementById('runsSearch').value.trim().toLowerCase();
   let list = _allRuns;
+  if (q)      list = list.filter(r => (r.name||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
   if (type)   list = list.filter(r => r.type === type);
   if (user)   list = list.filter(r => r.user_email === user);
   if (status) list = list.filter(r => r.status === status);
@@ -1193,7 +1206,7 @@ function renderRuns(runs) {
 }
 
 // Runs filters — reset to page 1
-['runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
+['runsSearch','runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { _runsPage = 1; filterAndRenderRuns(); });
   document.getElementById(id).addEventListener('input',  () => { _runsPage = 1; filterAndRenderRuns(); });
 });
@@ -1268,6 +1281,7 @@ function openUserEdit(uid) {
   const u = _users.find(x => x.user_id === uid);
   if (!u) return;
   document.getElementById('userEditSubtitle').textContent = u.email;
+  document.getElementById('ueUserId').value         = uid;
   document.getElementById('ueDisplayName').value    = u.display_name || '';
   document.getElementById('ueEmail').value          = u.email || '';
   document.getElementById('ueRole').value           = u.role || 'user';
@@ -1380,6 +1394,7 @@ async function openDrawer(uid, aid, userEmail) {
   document.getElementById('commentList').innerHTML = '';
   document.getElementById('newCommentText').value = '';
   document.getElementById('ownerLabel').textContent = userEmail || uid;
+  document.getElementById('drawerAppId').textContent = aid;
   overlay.classList.add('open');
   drawer.classList.add('open');
   setDrawerMode('view');
@@ -1551,6 +1566,7 @@ let _auditLoaded    = false;
 
 async function loadAudit(page = 1) {
   _auditPage = page;
+  const eventId  = document.getElementById('auditIdFilter').value.trim();
   const actor    = document.getElementById('auditActorFilter').value.trim();
   const action   = document.getElementById('auditActionFilter').value;
   const userId   = document.getElementById('auditUserFilter').value;
@@ -1559,6 +1575,7 @@ async function loadAudit(page = 1) {
   const toVal    = document.getElementById('auditTo').value;
 
   const params = new URLSearchParams({ page: _auditPage, per_page: _auditPerPage, sort_order: _auditSortOrder });
+  if (eventId) params.set('event_id', eventId);
   if (actor)   params.set('actor',   actor);
   if (action)  params.set('action',  action);
   if (userId)  params.set('user_id', userId);
@@ -1567,7 +1584,7 @@ async function loadAudit(page = 1) {
   if (toVal)   params.set('to_ts',   toVal   + ':59Z');
 
   document.getElementById('auditBody').innerHTML =
-    '<tr><td colspan="8" class="empty"><span class="spin-muted"></span> Loading…</td></tr>';
+    '<tr><td colspan="9" class="empty"><span class="spin-muted"></span> Loading…</td></tr>';
 
   try {
     const res  = await apiFetch(`/api/admin/audit?${params}`);
@@ -1588,7 +1605,7 @@ function renderAudit({ items, total, page, per_page, pages }) {
   renderPagBar('audit', page, pages, total, per_page);
 
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No events match.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No events match.</td></tr>';
     return;
   }
 
@@ -1600,6 +1617,7 @@ function renderAudit({ items, total, page, per_page, pages }) {
     const detShort = det.length > 140 ? det.slice(0, 140) + '…' : det;
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td style="font-size:.68rem;font-family:'SF Mono','Fira Code',monospace;white-space:nowrap;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis" title="${esc(e.id||'')}">${esc((e.id||'—').slice(0,8)+'…')}</td>
       <td style="font-size:.72rem;font-family:'SF Mono','Fira Code',monospace;white-space:nowrap;color:var(--muted)">${esc(e.timestamp||'—')}</td>
       <td style="font-size:.775rem;font-weight:600;white-space:nowrap">${esc(e.action||'—')}</td>
       <td style="font-size:.775rem;color:var(--muted);white-space:nowrap">${esc(e.actor||'—')}</td>
@@ -1631,8 +1649,10 @@ async function initAuditFilters() {
 ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id =>
   document.getElementById(id).addEventListener('change', () => loadAudit(1))
 );
-document.getElementById('auditActorFilter').addEventListener('input', function() {
-  clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
+['auditIdFilter','auditActorFilter'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
+  });
 });
 ['auditFrom','auditTo'].forEach(id =>
   document.getElementById(id).addEventListener('change', () => loadAudit(1))
@@ -1663,7 +1683,7 @@ document.getElementById('appClearFilters').addEventListener('click', () => {
 
 // Clear filters — Agent Runs
 document.getElementById('runsClearFilters').addEventListener('click', () => {
-  ['runsDateFrom','runsDateTo']
+  ['runsSearch','runsDateFrom','runsDateTo']
     .forEach(id => document.getElementById(id).value = '');
   ['runsTypeFilter','runsUserFilter','runsStatusFilter']
     .forEach(id => document.getElementById(id).value = '');
@@ -1672,7 +1692,7 @@ document.getElementById('runsClearFilters').addEventListener('click', () => {
 
 // Clear filters — Audit Log
 document.getElementById('auditClearFilters').addEventListener('click', () => {
-  ['auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
+  ['auditIdFilter','auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
   ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
   loadAudit(1);
 });
@@ -1835,13 +1855,15 @@ function _border(color = 'FFCCCCCC') {
 function _auditParams(allRecords = false) {
   const params = new URLSearchParams({ sort_order: _auditSortOrder });
   if (!allRecords) {
+    const eventId = document.getElementById('auditIdFilter').value.trim();
     const actor  = document.getElementById('auditActorFilter').value.trim();
     const action = document.getElementById('auditActionFilter').value;
     const userId = document.getElementById('auditUserFilter').value;
     const source = document.getElementById('auditSourceFilter').value;
     const from   = document.getElementById('auditFrom').value;
     const to     = document.getElementById('auditTo').value;
-    if (actor)  params.set('actor',   actor);
+    if (eventId) params.set('event_id', eventId);
+    if (actor)   params.set('actor',   actor);
     if (action) params.set('action',  action);
     if (userId) params.set('user_id', userId);
     if (source) params.set('source',  source);
@@ -1876,33 +1898,34 @@ const USER_HEADERS = ['User ID','Display Name','Email','Role','Active','Email Ve
 
 function _appRows(list) {
   return list.map(a => [
-    a.company||'', a.domain||'', a.role_title||'', a.status||'', a.priority||'',
+    a.id||'', a.company||'', a.domain||'', a.role_title||'', a.status||'', a.priority||'',
     a._user_email||'', a.date_applied||'', a.last_updated||'', a.url||'',
     a.recruiter_name||'', a.recruiter_email||'',
     a.location||'', a.salary_range||'', a.job_source||'',
     a.dua ? 'Yes' : 'No',
   ]);
 }
-const APP_HEADERS = ['Company','Domain','Role Title','Status','Priority','Owner Email',
+const APP_HEADERS = ['Application ID','Company','Domain','Role Title','Status','Priority','Owner Email',
                      'Date Applied','Last Updated','URL','Recruiter Name','Recruiter Email',
                      'Location','Salary Range','Job Source','DUA'];
 
 function _runRows(list) {
   return list.map(r => [
+    r.id||'',
     r.type === 'interview_prep' ? 'Interview Prep' : 'Resume',
     r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
   ]);
 }
-const RUN_HEADERS = ['Type','Folder Name','User Email','Status','Created At','Drive URL'];
+const RUN_HEADERS = ['Folder ID','Type','Folder Name','User Email','Status','Created At','Drive URL'];
 
 function _auditRows(events) {
   return events.map(e => [
-    e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
+    e.id||'', e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
     e.source||'', e.entity_label||'', e.ip||'',
     e.details ? JSON.stringify(e.details) : '',
   ]);
 }
-const AUDIT_HEADERS = ['Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
+const AUDIT_HEADERS = ['Event ID','Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
 
 function _today() { return new Date().toISOString().slice(0,10); }
 function _ts()    {

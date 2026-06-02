@@ -538,8 +538,9 @@ async def get_unified_audit_log(
     action:     str | None   = None,
     actor:      str | None   = None,
     user_id:    str | None   = None,
-    source:     str | None   = None,   # "user" | "application"
-    from_ts:    str | None   = None,   # ISO timestamp
+    source:     str | None   = None,
+    event_id:   str | None   = None,
+    from_ts:    str | None   = None,
     to_ts:      str | None   = None,
     sort_order: str          = Query("desc", pattern="^(asc|desc)$"),
 ):
@@ -609,6 +610,9 @@ async def get_unified_audit_log(
         all_events = [e for e in all_events if lc in (e.get("actor") or "").lower()]
     if user_id:
         all_events = [e for e in all_events if e.get("user_id") == user_id]
+    if event_id:
+        lc = event_id.lower()
+        all_events = [e for e in all_events if lc in (e.get("id") or "").lower()]
     if from_ts:
         all_events = [e for e in all_events if (e.get("timestamp") or "") >= from_ts]
     if to_ts:
@@ -647,6 +651,7 @@ async def export_audit_log(
     actor:      str | None = None,
     user_id:    str | None = None,
     source:     str | None = None,
+    event_id:   str | None = None,
     from_ts:    str | None = None,
     to_ts:      str | None = None,
     sort_order: str        = Query("desc", pattern="^(asc|desc)$"),
@@ -690,12 +695,13 @@ async def export_audit_log(
         except Exception:
             pass
 
-    if action:   all_events = [e for e in all_events if e.get("action") == action]
-    if actor:    all_events = [e for e in all_events if actor.lower() in (e.get("actor") or "").lower()]
-    if user_id:  all_events = [e for e in all_events if e.get("user_id") == user_id]
-    if source:   all_events = [e for e in all_events if e.get("source") == source]
-    if from_ts:  all_events = [e for e in all_events if (e.get("timestamp") or "") >= from_ts]
-    if to_ts:    all_events = [e for e in all_events if (e.get("timestamp") or "") <= to_ts]
+    if action:    all_events = [e for e in all_events if e.get("action") == action]
+    if actor:     all_events = [e for e in all_events if actor.lower() in (e.get("actor") or "").lower()]
+    if user_id:   all_events = [e for e in all_events if e.get("user_id") == user_id]
+    if source:    all_events = [e for e in all_events if e.get("source") == source]
+    if event_id:  all_events = [e for e in all_events if event_id.lower() in (e.get("id") or "").lower()]
+    if from_ts:   all_events = [e for e in all_events if (e.get("timestamp") or "") >= from_ts]
+    if to_ts:     all_events = [e for e in all_events if (e.get("timestamp") or "") <= to_ts]
 
     all_events.sort(key=lambda e: e.get("timestamp") or "", reverse=(sort_order == "desc"))
 
