@@ -47,6 +47,8 @@ from pydantic import BaseModel
 
 from scripts import storage
 from scripts import user_audit
+from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
+from scripts.session import create_session_token, verify_session_token
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
@@ -80,7 +82,7 @@ FLY_APP_NAME   = os.environ.get("FLY_APP_NAME", "job-apply-corey")
 # as a Fly.io secret to get persistent sessions across restarts.
 _SESSION_SECRET  = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
 _SESSION_COOKIE  = "session"
-_SESSION_DAYS    = 30
+_SESSION_DAYS    = _SESSION_DAYS_SHARED
 # Bearer token for the Slack bot — set BOT_API_KEY as a Fly.io secret.
 # Requests carrying this token skip cookie auth and run as the primary user account.
 _BOT_API_KEY     = os.environ.get("BOT_API_KEY", "")
@@ -92,29 +94,11 @@ _NOTIFY_EMAIL = os.environ.get("APP_USER_EMAIL", "cdl825@gmail.com")
 # ---------------------------------------------------------------------------
 
 def _create_session(user_id: str, email: str) -> str:
-    payload = base64.urlsafe_b64encode(json.dumps({
-        "user_id": user_id,
-        "email":   email,
-        "exp":     int(time.time()) + 86400 * _SESSION_DAYS,
-    }).encode()).rstrip(b"=").decode()
-    sig = hmac.new(_SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+    return create_session_token(user_id, email, _SESSION_SECRET)
 
 
 def _verify_session(token: str) -> dict | None:
-    try:
-        payload_b64, sig = token.rsplit(".", 1)
-        expected = hmac.new(_SESSION_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            return None
-        # Restore padding for base64 decoding
-        padding = 4 - len(payload_b64) % 4
-        data = json.loads(base64.urlsafe_b64decode(payload_b64 + "=" * padding))
-        if data.get("exp", 0) < time.time():
-            return None
-        return data
-    except Exception:
-        return None
+    return verify_session_token(token, _SESSION_SECRET)
 
 
 def _bot_user(request: Request) -> dict | None:

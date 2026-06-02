@@ -13,7 +13,6 @@ Env vars required:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import secrets
@@ -24,9 +23,12 @@ import uuid
 import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 from scripts import storage
 from scripts import user_audit
+from scripts.session import SESSION_DAYS as _SESSION_DAYS, create_session_token
 
 router = APIRouter(tags=["auth"])
 
@@ -37,24 +39,12 @@ _REDIRECT_URI  = f"{_APP_URL}/api/auth/google/callback"
 
 _GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_KEYS_URL  = "https://www.googleapis.com/oauth2/v3/tokeninfo"
 
 _SESSION_COOKIE = "session"
-_SESSION_DAYS   = 30
 
 
-def _create_session(user_id: str, email: str, secret: str) -> str:
-    """Mirror the token format from api.py — import avoided to prevent circular deps."""
-    import base64
-    import hmac
-
-    payload = base64.urlsafe_b64encode(json.dumps({
-        "user_id": user_id,
-        "email":   email,
-        "exp":     int(time.time()) + 86400 * _SESSION_DAYS,
-    }).encode()).rstrip(b"=").decode()
-    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+_NONCE_COOKIE   = "oauth_nonce"
+_NONCE_MAX_AGE  = 600  # 10 minutes
 
 
 @router.get("/api/auth/google")
@@ -68,7 +58,8 @@ async def google_login(request: Request, returnTo: str = "/"):
     if not returnTo.startswith("/"):
         returnTo = "/"
 
-    state = json.dumps({"returnTo": returnTo})
+    nonce  = secrets.token_urlsafe(16)
+    state  = json.dumps({"returnTo": returnTo, "nonce": nonce})
     params = {
         "client_id":     _CLIENT_ID,
         "redirect_uri":  _REDIRECT_URI,
@@ -79,7 +70,13 @@ async def google_login(request: Request, returnTo: str = "/"):
         "state":         state,
     }
     url = f"{_GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
-    return RedirectResponse(url, status_code=302)
+    response = RedirectResponse(url, status_code=302)
+    response.set_cookie(
+        _NONCE_COOKIE, nonce,
+        max_age=_NONCE_MAX_AGE,
+        httponly=True, samesite="lax", secure=True,
+    )
+    return response
 
 
 @router.get("/api/auth/google/callback")
@@ -92,9 +89,12 @@ async def google_callback(
     fail_base = f"{_APP_URL}/login.html?auth_error="
 
     return_to = "/"
+    state_nonce: str | None = None
     if state:
         try:
-            return_to = json.loads(state).get("returnTo", "/")
+            parsed    = json.loads(state)
+            return_to = parsed.get("returnTo", "/")
+            state_nonce = parsed.get("nonce")
         except Exception:
             pass
     if not return_to.startswith("/"):
@@ -103,6 +103,14 @@ async def google_callback(
     if error or not code:
         msg = urllib.parse.quote(error or "cancelled")
         return RedirectResponse(f"{fail_base}{msg}", status_code=302)
+
+    # Verify CSRF nonce — cookie must match state param
+    cookie_nonce = request.cookies.get(_NONCE_COOKIE)
+    if not state_nonce or not cookie_nonce or not secrets.compare_digest(state_nonce, cookie_nonce):
+        return RedirectResponse(
+            f"{fail_base}{urllib.parse.quote('Invalid or expired login session. Please try again.')}",
+            status_code=302,
+        )
 
     # Exchange code for tokens
     try:
@@ -123,24 +131,16 @@ async def google_callback(
         msg = urllib.parse.quote(f"Token exchange failed: {exc}")
         return RedirectResponse(f"{fail_base}{msg}", status_code=302)
 
-    # Verify the id_token by calling Google's tokeninfo endpoint
+    # Verify the id_token locally using google-auth (caches Google's public keys)
     try:
-        info_resp = requests.get(
-            _GOOGLE_KEYS_URL,
-            params={"id_token": tokens["id_token"]},
-            timeout=10,
+        info = google_id_token.verify_oauth2_token(
+            tokens["id_token"],
+            google_requests.Request(),
+            _CLIENT_ID,
         )
-        info_resp.raise_for_status()
-        info = info_resp.json()
     except Exception as exc:
         msg = urllib.parse.quote(f"Token verification failed: {exc}")
         return RedirectResponse(f"{fail_base}{msg}", status_code=302)
-
-    if info.get("aud") != _CLIENT_ID:
-        return RedirectResponse(
-            f"{fail_base}{urllib.parse.quote('Invalid token audience')}",
-            status_code=302,
-        )
 
     google_id = info.get("sub", "")
     email     = info.get("email", "").strip().lower()
@@ -186,13 +186,14 @@ async def google_callback(
     # Issue session cookie using the same secret as api.py
     from api import _SESSION_SECRET, FLY_MACHINE_ID  # noqa: PLC0415
 
-    token = _create_session(user["user_id"], email, _SESSION_SECRET)
+    token = create_session_token(user["user_id"], email, _SESSION_SECRET)
     response = RedirectResponse(f"{_APP_URL}{return_to}", status_code=302)
     response.set_cookie(
         _SESSION_COOKIE, token,
         max_age=86400 * _SESSION_DAYS,
         httponly=True, samesite="lax", secure=True,
     )
+    response.delete_cookie(_NONCE_COOKIE)   # consumed — clear it
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
     return response

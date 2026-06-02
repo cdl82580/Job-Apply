@@ -55,6 +55,10 @@ def put_bytes(key: str, data: bytes, content_type: str = "application/octet-stre
     _client().put_object(Bucket=BUCKET, Key=key, Body=data, ContentType=content_type)
 
 
+def delete_bytes(key: str) -> None:
+    _client().delete_object(Bucket=BUCKET, Key=key)
+
+
 def put_text(key: str, text: str) -> None:
     put_bytes(key, text.encode("utf-8"), "text/plain; charset=utf-8")
 

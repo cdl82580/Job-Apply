@@ -20,11 +20,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 import uuid
 from typing import Any
 
 from . import storage
+
+_audit_locks: dict[str, threading.Lock] = {}
+_audit_locks_mu = threading.Lock()
+
+
+def _audit_lock(key: str) -> threading.Lock:
+    with _audit_locks_mu:
+        if key not in _audit_locks:
+            _audit_locks[key] = threading.Lock()
+        return _audit_locks[key]
 
 
 def _now() -> str:
@@ -51,9 +62,10 @@ def _read_events(key: str) -> list[dict[str, Any]]:
 
 
 def _append(key: str, event: dict[str, Any]) -> None:
-    events = _read_events(key)
-    events.append(event)
-    storage.put_text(key, json.dumps(events))
+    with _audit_lock(key):
+        events = _read_events(key)
+        events.append(event)
+        storage.put_text(key, json.dumps(events))
 
 
 def _build(action: str, actor: str, ip: str | None, details: dict[str, Any] | None) -> dict[str, Any]:

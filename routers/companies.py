@@ -14,12 +14,14 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
-_BRANDFETCH_KEY = os.environ.get("BRANDFETCH_API_KEY", "1idZFX8Ll28d4x2IVye")
+_BRANDFETCH_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
 _BRANDFETCH_URL = "https://api.brandfetch.io/v2/search/{query}"
 
 
 @router.get("/search")
 async def search_companies(q: str = Query(..., min_length=1)):
+    if not _BRANDFETCH_KEY:
+        raise HTTPException(503, "Company search not configured (BRANDFETCH_API_KEY not set)")
     try:
         resp = requests.get(
             _BRANDFETCH_URL.format(query=q),

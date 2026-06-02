@@ -9,10 +9,23 @@ Key layout:
 from __future__ import annotations
 
 import json
+import threading
 import time
 from typing import Any
 
 from . import storage
+
+# Per-user lock prevents concurrent index read-modify-write races.
+# The dict itself is protected by a secondary meta-lock.
+_user_locks: dict[str, threading.Lock] = {}
+_user_locks_mu = threading.Lock()
+
+
+def _user_lock(user_id: str) -> threading.Lock:
+    with _user_locks_mu:
+        if user_id not in _user_locks:
+            _user_locks[user_id] = threading.Lock()
+        return _user_locks[user_id]
 
 
 # ---------------------------------------------------------------------------
@@ -129,30 +142,37 @@ def get_application(user_id: str, app_id: str) -> dict[str, Any] | None:
 
 def save_application(user_id: str, record: dict[str, Any]) -> None:
     record["last_updated"] = _now()
-    storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
-    _upsert_index(user_id, record)
+    with _user_lock(user_id):
+        storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
+        _upsert_index(user_id, record)
 
 
 def link_run(user_id: str, app_id: str, run_info: dict[str, Any]) -> dict[str, Any] | None:
     """Append a run link to an application. Returns updated record or None if not found."""
-    record = get_application(user_id, app_id)
-    if not record:
-        return None
-    record.setdefault("linked_runs", []).append(run_info)
-    save_application(user_id, record)
+    with _user_lock(user_id):
+        record = get_application(user_id, app_id)
+        if not record:
+            return None
+        record.setdefault("linked_runs", []).append(run_info)
+        record["last_updated"] = _now()
+        storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
+        _upsert_index(user_id, record)
     return record
 
 
 def unlink_run(user_id: str, app_id: str, link_id: str) -> bool:
     """Remove a run link from an application. Returns True if removed."""
-    record = get_application(user_id, app_id)
-    if not record:
-        return False
-    before = len(record.get("linked_runs", []))
-    record["linked_runs"] = [r for r in record.get("linked_runs", []) if r["id"] != link_id]
-    if len(record["linked_runs"]) == before:
-        return False
-    save_application(user_id, record)
+    with _user_lock(user_id):
+        record = get_application(user_id, app_id)
+        if not record:
+            return False
+        before = len(record.get("linked_runs", []))
+        record["linked_runs"] = [r for r in record.get("linked_runs", []) if r["id"] != link_id]
+        if len(record["linked_runs"]) == before:
+            return False
+        record["last_updated"] = _now()
+        storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
+        _upsert_index(user_id, record)
     return True
 
 
@@ -163,11 +183,12 @@ def save_deleted_tombstone(user_id: str, record: dict[str, Any]) -> None:
 
 
 def delete_application(user_id: str, app_id: str) -> bool:
-    if not storage.exists(_app_key(user_id, app_id)):
-        return False
-    try:
-        storage._client().delete_object(Bucket=storage.BUCKET, Key=_app_key(user_id, app_id))
-    except Exception:
-        return False
-    _remove_from_index(user_id, app_id)
+    with _user_lock(user_id):
+        if not storage.exists(_app_key(user_id, app_id)):
+            return False
+        try:
+            storage.delete_bytes(_app_key(user_id, app_id))
+        except Exception:
+            return False
+        _remove_from_index(user_id, app_id)
     return True
