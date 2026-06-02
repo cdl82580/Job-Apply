@@ -137,16 +137,12 @@
       position: relative; flex: 1; min-width: 160px;
     }
     .search-wrap input {
-      width: 100%; padding: .45rem .75rem .45rem 2.25rem;
+      width: 100%; padding: .45rem .75rem;
       border: 1px solid var(--input-border); border-radius: 6px;
       font-size: .875rem; font-family: inherit;
       background: var(--input-bg); color: var(--text);
     }
     .search-wrap input:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
-    .search-icon {
-      position: absolute; left: .65rem; top: 50%; transform: translateY(-50%);
-      color: var(--muted); pointer-events: none; flex-shrink: 0;
-    }
 
     .pill-group { display: flex; gap: .375rem; flex-wrap: wrap; }
     .pill {
@@ -525,7 +521,6 @@
   <!-- ── Filters ──────────────────────────────────────────────────── -->
   <div class="filter-bar">
     <div class="search-wrap">
-      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input type="text" id="searchInput" placeholder="Search company or role…">
     </div>
     <div class="pill-group" id="statusPills">
