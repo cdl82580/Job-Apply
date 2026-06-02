@@ -133,8 +133,9 @@ def main() -> None:
             if priority not in VALID_PRIORITIES:
                 priority = "Medium"
 
-            # Dates: created = first known date, updated = last known date
-            created_at = date_app or last_upd or IMPORT_TS
+            # created_at = earlier of the two dates; updated_at = later
+            date_candidates = [d for d in [date_app, last_upd] if d]
+            created_at = min(date_candidates) if date_candidates else IMPORT_TS
             updated_at = last_upd or date_app or IMPORT_TS
 
             logo_url = (
