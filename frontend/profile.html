@@ -155,6 +155,29 @@
       border-radius: 50%; background: #34D399; margin-right: .4rem;
     }
 
+    /* ── Read-only field mode ────────────────────────────────────── */
+    .card.view-mode [data-field] {
+      pointer-events: none;
+      background: var(--bg-page) !important;
+      border-color: var(--card-border) !important;
+      box-shadow: none !important;
+      cursor: default;
+      resize: none;
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .card-header .card-title { margin: 0; }
+    .edit-toggle-btn {
+      font-size: .775rem; font-weight: 600; padding: .3rem .75rem;
+      border: 1px solid var(--border); border-radius: 5px;
+      background: none; color: var(--border); cursor: pointer;
+      transition: background .12s;
+    }
+    .edit-toggle-btn:hover { background: var(--fill); }
+    .btn-row { display: flex; gap: .5rem; align-items: center; }
+
     .file-drop {
       border: 2px dashed var(--input-border); border-radius: 8px;
       padding: 1rem; text-align: center; cursor: pointer; position: relative;
@@ -220,8 +243,11 @@
   </header>
 
   <!-- Account -->
-  <div class="card">
-    <p class="card-title">Account</p>
+  <div class="card view-mode" id="accountCard">
+    <div class="card-header">
+      <p class="card-title">Account</p>
+      <button class="edit-toggle-btn" id="nameEditBtn">&#x270E; Edit</button>
+    </div>
     <p class="account-info" id="accountInfo">Loading…</p>
     <div class="email-verify-row" id="emailVerifyRow" style="display:none">
       <span class="verify-badge" id="verifyBadge"></span>
@@ -231,9 +257,12 @@
     <form id="nameForm">
       <div class="field">
         <label for="display_name">Display Name</label>
-        <input id="display_name" name="display_name" type="text" required>
+        <input id="display_name" name="display_name" type="text" data-field required>
       </div>
-      <button class="btn" type="submit" id="nameBtn">Save Name</button>
+      <div class="btn-row">
+        <button class="btn hidden" type="submit" id="nameBtn">Save</button>
+        <button class="btn btn-ghost hidden" type="button" id="nameCancelBtn">Cancel</button>
+      </div>
       <div class="toast" id="nameToast"></div>
     </form>
   </div>
@@ -257,16 +286,22 @@
   </div>
 
   <!-- Profile guide -->
-  <div class="card">
-    <p class="card-title">Profile &amp; Voice Guide</p>
+  <div class="card view-mode" id="profileCard">
+    <div class="card-header">
+      <p class="card-title">Profile &amp; Voice Guide</p>
+      <button class="edit-toggle-btn" id="profileEditBtn">&#x270E; Edit</button>
+    </div>
     <p style="font-size:.825rem;color:var(--muted);margin:0 0 .875rem">
       This tells the AI how to write in your voice. The more detail the better.
     </p>
     <form id="profileForm">
       <div class="field">
-        <textarea id="profile_text" name="profile_text"></textarea>
+        <textarea id="profile_text" name="profile_text" data-field></textarea>
       </div>
-      <button class="btn" type="submit" id="profileBtn">Save Profile</button>
+      <div class="btn-row">
+        <button class="btn hidden" type="submit" id="profileBtn">Save</button>
+        <button class="btn btn-ghost hidden" type="button" id="profileCancelBtn">Cancel</button>
+      </div>
       <div class="toast" id="profileToast"></div>
     </form>
   </div>
@@ -376,6 +411,32 @@
     setTimeout(() => { toastEl.style.display = 'none'; }, 5000);
   });
 
+  // ── Edit toggle helpers ──────────────────────────────────────────
+  function enterEdit(cardId, editBtnId, saveBtnId, cancelBtnId) {
+    document.getElementById(cardId).classList.remove('view-mode');
+    document.getElementById(editBtnId).classList.add('hidden');
+    document.getElementById(saveBtnId).classList.remove('hidden');
+    document.getElementById(cancelBtnId).classList.remove('hidden');
+  }
+  function exitEdit(cardId, editBtnId, saveBtnId, cancelBtnId) {
+    document.getElementById(cardId).classList.add('view-mode');
+    document.getElementById(editBtnId).classList.remove('hidden');
+    document.getElementById(saveBtnId).classList.add('hidden');
+    document.getElementById(cancelBtnId).classList.add('hidden');
+  }
+
+  // Account card
+  let _origName = '';
+  document.getElementById('nameEditBtn').addEventListener('click', () => {
+    _origName = document.getElementById('display_name').value;
+    enterEdit('accountCard', 'nameEditBtn', 'nameBtn', 'nameCancelBtn');
+    document.getElementById('display_name').focus();
+  });
+  document.getElementById('nameCancelBtn').addEventListener('click', () => {
+    document.getElementById('display_name').value = _origName;
+    exitEdit('accountCard', 'nameEditBtn', 'nameBtn', 'nameCancelBtn');
+  });
+
   document.getElementById('nameForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('nameBtn');
@@ -386,7 +447,8 @@
     });
     const body = await res.json();
     toast('nameToast', res.ok ? '✓ Name saved.' : (body.detail ?? 'Error'), res.ok ? 'ok' : 'err');
-    btn.disabled = false; btn.textContent = 'Save Name';
+    btn.disabled = false; btn.textContent = 'Save';
+    if (res.ok) exitEdit('accountCard', 'nameEditBtn', 'nameBtn', 'nameCancelBtn');
   });
 
   const resumeFile = document.getElementById('resumeFile');
@@ -411,6 +473,18 @@
     btn.disabled = false; btn.textContent = 'Upload Resume';
   });
 
+  // Profile card
+  let _origProfile = '';
+  document.getElementById('profileEditBtn').addEventListener('click', () => {
+    _origProfile = document.getElementById('profile_text').value;
+    enterEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
+    document.getElementById('profile_text').focus();
+  });
+  document.getElementById('profileCancelBtn').addEventListener('click', () => {
+    document.getElementById('profile_text').value = _origProfile;
+    exitEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
+  });
+
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('profileBtn');
@@ -421,7 +495,8 @@
     });
     const body = await res.json();
     toast('profileToast', res.ok ? '✓ Profile saved.' : (body.detail ?? 'Error'), res.ok ? 'ok' : 'err');
-    btn.disabled = false; btn.textContent = 'Save Profile';
+    btn.disabled = false; btn.textContent = 'Save';
+    if (res.ok) exitEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
   });
 
   document.getElementById('pwForm').addEventListener('submit', async (e) => {
