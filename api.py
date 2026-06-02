@@ -156,6 +156,30 @@ def _hash_password(password: str) -> str:
     return f"scrypt:{salt.hex()}:{dk.hex()}"
 
 
+def _link_run_to_app(
+    user_id: str,
+    app_id: str,
+    run_type: str,
+    result_dir,          # Path
+    folder_url: str,
+) -> None:
+    """Best-effort: link a completed run to an application tracker record."""
+    try:
+        from scripts.applications import link_run as _link
+        gdrive_id = folder_url.rstrip("/").split("/")[-1] if folder_url else ""
+        _link(user_id, app_id, {
+            "id":               str(uuid.uuid4()),
+            "type":             run_type,
+            "folder_name":      result_dir.name if result_dir else "",
+            "folder_url":       folder_url,
+            "gdrive_folder_id": gdrive_id,
+            "linked_at":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "linked_by":        "system",
+        })
+    except Exception:
+        pass  # never let linking failure break the run response
+
+
 def _client_ip(request: Request) -> str | None:
     """Best-effort client IP — respects X-Forwarded-For set by Fly.io proxy."""
     xff = request.headers.get("X-Forwarded-For", "")
@@ -262,6 +286,7 @@ class RunRequest(BaseModel):
     role: str
     contact: str | None = None
     model: str | None = None
+    app_id: str | None = None   # optional: link to application tracker record
 
 class PrepRequest(BaseModel):
     job_posting: str
@@ -271,6 +296,7 @@ class PrepRequest(BaseModel):
     focus: str | None = None
     interviewer: str | None = None
     model: str | None = None
+    app_id: str | None = None   # optional: link to application tracker record
 
 # ---------------------------------------------------------------------------
 # Health
@@ -532,11 +558,23 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     )
                     _runs[run_id]["result"] = result
                     _runs[run_id]["status"] = "done"
+
+                    # Auto-link to application tracker record if requested
+                    if req.app_id:
+                        _link_run_to_app(
+                            user_id=user_id,
+                            app_id=req.app_id,
+                            run_type="resume",
+                            result_dir=result.run_dir,
+                            folder_url=result.folder_url or "",
+                        )
+
                     q.put({
                         "type":          "done",
                         "run_id":        run_id,
                         "framing_angle": result.framing_angle,
                         "folder_url":    result.folder_url,
+                        "app_id":        req.app_id,
                         "files": {
                             "resume":       result.resume_path.name,
                             "ats":          result.ats_path.name,
@@ -745,10 +783,21 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                 )
                 _preps[prep_id]["result"] = result
                 _preps[prep_id]["status"] = "done"
+
+                if req.app_id:
+                    _link_run_to_app(
+                        user_id=user_id,
+                        app_id=req.app_id,
+                        run_type="interview_prep",
+                        result_dir=result.run_dir,
+                        folder_url=result.folder_url or "",
+                    )
+
                 q.put({
                     "type":       "done",
                     "prep_id":    prep_id,
                     "folder_url": result.folder_url,
+                    "app_id":     req.app_id,
                     "files": {
                         "prep": result.prep_path.name,
                     },

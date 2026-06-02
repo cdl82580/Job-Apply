@@ -490,6 +490,12 @@
         <input id="contact" name="contact" type="text"
           placeholder="Name if known — defaults to 'Hiring Team'">
       </div>
+      <div class="field">
+        <label for="appLink">Link to Application <span class="opt">(optional)</span></label>
+        <select id="appLink">
+          <option value="">— select tracker record —</option>
+        </select>
+      </div>
       <div style="display:flex;gap:.75rem;align-items:center;margin-top:.25rem">
         <button class="btn" type="submit" id="submitBtn">Generate</button>
         <span id="queueNote" class="hidden"
@@ -525,6 +531,7 @@
       <span class="drive-btn-text">Open Google Drive Folder</span>
       <span class="drive-btn-arrow">&#x2197;</span>
     </a>
+    <div id="trackerNote" style="display:none;font-size:.8rem;color:var(--success);margin-bottom:.875rem;font-weight:600"></div>
     <button class="btn btn-ghost" id="newRunBtn">&#x2190; New Application</button>
   </div>
 
@@ -652,14 +659,36 @@
     return res;
   }
 
-  // Load user info on startup
+  // Load user info + application dropdown on startup
   (async () => {
     try {
       const res = await apiFetch('/api/auth/me');
       const u   = await res.json();
       document.getElementById('headerUser').textContent = u.display_name || u.email;
     } catch (_) {}
+    loadAppDropdown();
   })();
+
+  async function loadAppDropdown() {
+    try {
+      const res  = await apiFetch('/api/applications');
+      const apps = await res.json();
+      const sel  = document.getElementById('appLink');
+      // Show active statuses first, then rest
+      const ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
+      apps.sort((a, b) => {
+        const oa = ORDER.indexOf(a.status), ob = ORDER.indexOf(b.status);
+        if (oa !== ob) return oa - ob;
+        return a.company.localeCompare(b.company);
+      });
+      for (const a of apps) {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = `${a.company} · ${a.role_title} (${a.status})`;
+        sel.appendChild(opt);
+      }
+    } catch (_) {}
+  }
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -695,6 +724,8 @@
     const raw = Object.fromEntries(new FormData(e.target));
     const body = { job_posting: raw.job_posting, company: raw.company, role: raw.role };
     if (raw.contact.trim()) body.contact = raw.contact.trim();
+    const appId = document.getElementById('appLink').value;
+    if (appId) body.app_id = appId;
     _company = raw.company;
     _role    = raw.role;
 
@@ -822,6 +853,17 @@
       btn.href = msg.folder_url;
       show('driveAnchor');
     }
+
+    // Tracker link indicator
+    const trackerNote = document.getElementById('trackerNote');
+    if (msg.app_id) {
+      const sel = document.getElementById('appLink');
+      const opt = sel.querySelector(`option[value="${msg.app_id}"]`);
+      trackerNote.textContent = `✓ Linked to: ${opt ? opt.textContent : 'tracker record'}`;
+      trackerNote.style.display = 'block';
+    } else {
+      trackerNote.style.display = 'none';
+    }
   }
 
   // ── New run ───────────────────────────────────────────────────────
@@ -832,6 +874,7 @@
     hide('framingEl');
     hide('driveAnchor');
     document.getElementById('fileGrid').innerHTML = '';
+    document.getElementById('trackerNote').style.display = 'none';
     hide('progressCard');
     hide('queueNote');
     form.reset();

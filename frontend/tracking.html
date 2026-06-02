@@ -459,6 +459,30 @@
     }
     .section-label:first-child { margin-top: 0; }
 
+    /* ── Linked runs ─────────────────────────────────────────────── */
+    .run-chip {
+      display: flex; align-items: center; gap: .5rem;
+      background: var(--bg-page); border: 1px solid var(--card-border);
+      border-radius: 6px; padding: .5rem .75rem; margin-bottom: .4rem;
+    }
+    .run-chip-type {
+      font-size: .65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; padding: .15rem .45rem; border-radius: 999px; flex-shrink: 0;
+    }
+    .run-type-resume         { background: #DBEAFE; color: #1D4ED8; }
+    .run-type-interview_prep { background: #EDE9FE; color: #7C3AED; }
+    [data-theme="dark"] .run-type-resume         { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .run-type-interview_prep { background: #2E1065; color: #C4B5FD; }
+    .run-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .825rem; color: var(--text); }
+    .run-chip-date { font-size: .75rem; color: var(--muted); flex-shrink: 0; }
+    .run-chip-link { color: var(--border); text-decoration: none; flex-shrink: 0; font-size: .75rem; font-weight: 600; }
+    .run-chip-link:hover { text-decoration: underline; }
+    .run-chip-unlink {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: .75rem; padding: .1rem .3rem; border-radius: 3px; flex-shrink: 0;
+    }
+    .run-chip-unlink:hover { color: var(--error); }
+
     /* ── Comments ────────────────────────────────────────────────── */
     .comment-list { margin-bottom: 1rem; }
     .comment {
@@ -693,6 +717,13 @@
     </div>
 
     <!-- Comments — only shown in edit mode -->
+    <!-- Linked Runs — edit mode only -->
+    <div id="linkedRunsSection" class="hidden">
+      <div class="section-label">Linked Runs</div>
+      <div id="linkedRunsList" style="margin-bottom:.75rem"></div>
+      <div id="linkedRunsEmpty" class="hidden" style="font-size:.825rem;color:var(--muted);margin-bottom:.75rem">No runs linked yet. Generate a resume or prep doc from the Agent and select this application to link it automatically.</div>
+    </div>
+
     <div id="commentsSection" class="hidden">
       <div class="section-label">Notes &amp; Comments</div>
       <div class="comment-list" id="commentList"></div>
@@ -1115,9 +1146,11 @@ function openDrawer(editId = null) {
     document.getElementById('drawerTitle').textContent = 'Edit Application';
     loadAndFillDrawer(editId);
     document.getElementById('commentsSection').classList.remove('hidden');
+    document.getElementById('linkedRunsSection').classList.remove('hidden');
   } else {
     document.getElementById('drawerTitle').textContent = 'Add Application';
     document.getElementById('commentsSection').classList.add('hidden');
+    document.getElementById('linkedRunsSection').classList.add('hidden');
   }
 
   overlay.classList.add('open');
@@ -1157,6 +1190,8 @@ function resetDrawerForm() {
   document.getElementById('dRecruiterEmail').value = '';
   document.getElementById('commentList').innerHTML = '';
   document.getElementById('newCommentText').value = '';
+  document.getElementById('linkedRunsList').innerHTML = '';
+  document.getElementById('linkedRunsEmpty').classList.add('hidden');
 }
 
 async function loadAndFillDrawer(id) {
@@ -1165,6 +1200,7 @@ async function loadAndFillDrawer(id) {
     const a   = await res.json();
     fillDrawer(a);
     renderComments(a.comments || []);
+    renderLinkedRuns(a.linked_runs || []);
   } catch (_) {
     document.getElementById('drawerErr').textContent = 'Failed to load application.';
     document.getElementById('drawerErr').style.display = 'block';
@@ -1275,6 +1311,47 @@ async function saveDrawer() {
     btn.disabled = false;
     btn.textContent = 'Save';
   }
+}
+
+// ── Linked runs ───────────────────────────────────────────────────────
+
+function renderLinkedRuns(runs) {
+  const listEl  = document.getElementById('linkedRunsList');
+  const emptyEl = document.getElementById('linkedRunsEmpty');
+  listEl.innerHTML = '';
+
+  if (!runs || runs.length === 0) {
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  for (const r of runs) {
+    const chip = document.createElement('div');
+    chip.className = 'run-chip';
+    const typeLabel = r.type === 'interview_prep' ? 'Prep' : 'Resume';
+    const typeClass = `run-type-${r.type || 'resume'}`;
+    const dateStr   = r.linked_at ? fmtDateFull(r.linked_at) : '';
+    chip.innerHTML = `
+      <span class="run-chip-type ${typeClass}">${typeLabel}</span>
+      <span class="run-chip-name" title="${esc(r.folder_name)}">${esc(r.folder_name)}</span>
+      <span class="run-chip-date">${dateStr}</span>
+      ${r.folder_url ? `<a class="run-chip-link" href="${esc(r.folder_url)}" target="_blank" rel="noopener">Drive ↗</a>` : ''}
+      <button class="run-chip-unlink" data-link-id="${r.id}" title="Unlink">✕</button>`;
+    chip.querySelector('.run-chip-unlink').addEventListener('click', () => unlinkRun(r.id, chip));
+    listEl.appendChild(chip);
+  }
+}
+
+async function unlinkRun(linkId, chipEl) {
+  if (!_editId) return;
+  try {
+    await apiFetch(`/api/applications/${_editId}/runs/${linkId}`, { method: 'DELETE' });
+    chipEl.remove();
+    if (!document.getElementById('linkedRunsList').children.length) {
+      document.getElementById('linkedRunsEmpty').classList.remove('hidden');
+    }
+  } catch (_) {}
 }
 
 // ── Comments ──────────────────────────────────────────────────────────

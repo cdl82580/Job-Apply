@@ -86,6 +86,13 @@ class CommentUpdate(BaseModel):
     text: str
 
 
+class RunLinkCreate(BaseModel):
+    type: str             # "resume" | "interview_prep"
+    folder_name: str
+    folder_url: str = ""
+    gdrive_folder_id: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Audit helpers
 # ---------------------------------------------------------------------------
@@ -287,6 +294,64 @@ async def update_comment(
             return c
 
     raise HTTPException(404, "Comment not found")
+
+
+# ---------------------------------------------------------------------------
+# Run links
+# ---------------------------------------------------------------------------
+
+@router.get("/{app_id}/runs")
+async def get_linked_runs(app_id: str, request: Request):
+    record = _get_or_404(request.state.user["user_id"], app_id)
+    return record.get("linked_runs", [])
+
+
+@router.post("/{app_id}/runs", status_code=201)
+async def link_run(app_id: str, body: RunLinkCreate, request: Request):
+    user_id = request.state.user["user_id"]
+    actor   = _actor(request)
+    _get_or_404(user_id, app_id)  # 404 guard
+
+    run_info = {
+        "id":               str(uuid.uuid4()),
+        "type":             body.type,
+        "folder_name":      body.folder_name,
+        "folder_url":       body.folder_url,
+        "gdrive_folder_id": body.gdrive_folder_id,
+        "linked_at":        _now(),
+        "linked_by":        actor,
+    }
+    record = app_store.link_run(user_id, app_id, run_info)
+    if not record:
+        raise HTTPException(404, "Application not found")
+
+    record.setdefault("audit_log", []).append(
+        _audit_entry("run_linked", actor, {
+            "run_id":      run_info["id"],
+            "type":        body.type,
+            "folder_name": body.folder_name,
+        })
+    )
+    app_store.save_application(user_id, record)
+    return run_info
+
+
+@router.delete("/{app_id}/runs/{link_id}", status_code=204)
+async def unlink_run(app_id: str, link_id: str, request: Request):
+    user_id = request.state.user["user_id"]
+    actor   = _actor(request)
+    record  = _get_or_404(user_id, app_id)
+
+    removed = app_store.unlink_run(user_id, app_id, link_id)
+    if not removed:
+        raise HTTPException(404, "Run link not found")
+
+    record = app_store.get_application(user_id, app_id)
+    if record:
+        record.setdefault("audit_log", []).append(
+            _audit_entry("run_unlinked", actor, {"link_id": link_id})
+        )
+        app_store.save_application(user_id, record)
 
 
 @router.delete("/{app_id}/comments/{comment_id}", status_code=204)

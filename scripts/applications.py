@@ -110,6 +110,29 @@ def save_application(user_id: str, record: dict[str, Any]) -> None:
     _upsert_index(user_id, record)
 
 
+def link_run(user_id: str, app_id: str, run_info: dict[str, Any]) -> dict[str, Any] | None:
+    """Append a run link to an application. Returns updated record or None if not found."""
+    record = get_application(user_id, app_id)
+    if not record:
+        return None
+    record.setdefault("linked_runs", []).append(run_info)
+    save_application(user_id, record)
+    return record
+
+
+def unlink_run(user_id: str, app_id: str, link_id: str) -> bool:
+    """Remove a run link from an application. Returns True if removed."""
+    record = get_application(user_id, app_id)
+    if not record:
+        return False
+    before = len(record.get("linked_runs", []))
+    record["linked_runs"] = [r for r in record.get("linked_runs", []) if r["id"] != link_id]
+    if len(record["linked_runs"]) == before:
+        return False
+    save_application(user_id, record)
+    return True
+
+
 def save_deleted_tombstone(user_id: str, record: dict[str, Any]) -> None:
     """Persist a deleted application under a separate key for audit purposes."""
     key = f"applications/{user_id}/_deleted/{record['id']}.json"
