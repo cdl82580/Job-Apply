@@ -32,12 +32,15 @@
   },
   "oauth_config": {
     "scopes": {
-      "bot": ["commands", "chat:write", "im:write", "im:history"]
+      "bot": ["commands", "chat:write", "im:write", "im:history", "im:read"]
     }
   },
   "settings": {
     "socket_mode_enabled": true,
     "interactivity": { "is_enabled": true },
+    "event_subscriptions": {
+      "bot_events": ["message.im", "app_home_opened"]
+    },
     "org_deploy_enabled": false,
     "token_rotation_enabled": false
   }

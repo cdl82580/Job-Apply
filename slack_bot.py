@@ -1237,6 +1237,122 @@ def help_command(ack, respond):
 
 
 # ---------------------------------------------------------------------------
+# App Home tab
+# ---------------------------------------------------------------------------
+
+@app.event("app_home_opened")
+def handle_app_home_opened(client, event, logger):
+    """Render a dynamic home tab with pipeline stats and command reference."""
+    user_id = event["user"]
+
+    # Fetch pipeline data (best-effort — fall back to empty on error)
+    try:
+        apps = _get_apps()
+    except Exception:
+        apps = []
+
+    STATUS_ORDER = [
+        "Interviewing", "Phone Screen", "Applied", "On Hold",
+        "Researching", "Offer", "Rejected", "Not Applying",
+    ]
+    STATUS_EMOJI = {
+        "Interviewing":  "🎯", "Phone Screen": "📞",
+        "Applied":       "✅", "On Hold":       "⏸️",
+        "Researching":   "🔬", "Offer":         "🎉",
+        "Rejected":      "❌", "Not Applying":  "🚫",
+    }
+
+    counts = {s: 0 for s in STATUS_ORDER}
+    for a in apps:
+        s = a.get("status", "")
+        if s in counts:
+            counts[s] += 1
+
+    active   = sum(counts[s] for s in ("Interviewing", "Phone Screen", "Applied", "On Hold"))
+    pipeline = "\n".join(
+        f"{STATUS_EMOJI[s]} *{s}:* {counts[s]}"
+        for s in STATUS_ORDER if counts[s]
+    ) or "_No applications yet — use `/track-add` to get started._"
+
+    blocks = [
+        # Header
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "🧑‍💼  Job Apply Agent"},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "AI-powered job application agent — tailored resumes, "
+                    "cover letters, interview prep, and application tracking.\n"
+                    f"<{API_BASE}|Open web app>  ·  <{API_BASE}/tracking.html|Application Tracker>"
+                ),
+            },
+        },
+        {"type": "divider"},
+
+        # Pipeline summary
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"*📊 Your Pipeline* — "
+                    f"{len(apps)} total · {active} active\n\n"
+                    + pipeline
+                ),
+            },
+        },
+        {"type": "divider"},
+
+        # Quick commands
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*⚡ Quick Commands*"}},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*/apply* — Generate resume + cover letter\n"
+                    "*/prep* — Generate interview prep doc\n"
+                    "*/tracker* — Pipeline summary\n"
+                    "*/track-add* — Add application\n"
+                    "*/track-update* — Update status\n"
+                    "*/track-note* — Add a note"
+                ),
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*/runs* — Recent Drive run folders\n"
+                    "*/whoami* — Account details\n"
+                    "*/activity* — Recent audit events\n"
+                    "*/company [name]* — Company lookup\n"
+                    "*/jobstatus* — API health\n"
+                    "*/help* — Full command reference"
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": f"<{API_BASE}|job-apply-corey.fly.dev>  ·  Powered by Claude"},
+            ],
+        },
+    ]
+
+    try:
+        client.views_publish(user_id=user_id, view={"type": "home", "blocks": blocks})
+    except Exception as exc:
+        logger.error(f"Failed to publish home tab: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

@@ -113,7 +113,8 @@ oauth_config:
       - commands      # register slash commands
       - chat:write    # post messages and DMs
       - im:write      # open DM channels
-      - im:history    # read DMs (for future conversational features)
+      - im:history    # read DMs / Messages tab
+      - im:read       # list DM channels
 
 settings:
   # Socket Mode — requires SLACK_APP_TOKEN (xapp-...) set as a Fly secret.
@@ -121,5 +122,9 @@ settings:
   socket_mode_enabled: true
   interactivity:
     is_enabled: true
+  event_subscriptions:
+    bot_events:
+      - message.im        # receive DMs / Messages tab
+      - app_home_opened   # render the App Home tab
   org_deploy_enabled: false
   token_rotation_enabled: false
