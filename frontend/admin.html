@@ -347,18 +347,15 @@
       </tr></thead>
       <tbody id="usersBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
     </table>
-    <div class="pag-footer" style="margin-top:.75rem">
-      <div class="pagination-bar hidden" id="usersPagBar">
-        <div class="pagination-info" id="usersPagInfo"></div>
-        <div class="pagination-controls">
-          <button class="page-btn" id="usersPrev">← Prev</button>
-          <div id="usersPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
-          <button class="page-btn" id="usersNext">Next →</button>
-        </div>
+    <div class="pagination-bar hidden" id="usersPagBar" style="margin-top:.875rem">
+      <div class="pagination-info" id="usersPagInfo"></div>
+      <div class="pagination-controls">
+        <button class="page-btn" id="usersPrev">← Prev</button>
+        <div id="usersPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+        <button class="page-btn" id="usersNext">Next →</button>
       </div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
-        <span id="usersCount"></span>
-        &nbsp;·&nbsp; Per page
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted)">
+        Per page
         <select id="usersPerPage" class="per-page-sel">
           <option value="10">10</option>
           <option value="25" selected>25</option>
@@ -402,18 +399,15 @@
       </tr></thead>
       <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
     </table>
-    <div class="pag-footer" style="margin-top:.75rem">
-      <div class="pagination-bar hidden" id="appsPagBar">
-        <div class="pagination-info" id="appsPagInfo"></div>
-        <div class="pagination-controls">
-          <button class="page-btn" id="appsPrev">← Prev</button>
-          <div id="appsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
-          <button class="page-btn" id="appsNext">Next →</button>
-        </div>
+    <div class="pagination-bar hidden" id="appsPagBar" style="margin-top:.875rem">
+      <div class="pagination-info" id="appsPagInfo"></div>
+      <div class="pagination-controls">
+        <button class="page-btn" id="appsPrev">← Prev</button>
+        <div id="appsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+        <button class="page-btn" id="appsNext">Next →</button>
       </div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
-        <span id="appsCount"></span>
-        &nbsp;·&nbsp; Per page
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted)">
+        Per page
         <select id="appsPerPage" class="per-page-sel">
           <option value="10">10</option>
           <option value="25" selected>25</option>
@@ -457,16 +451,14 @@
       </tr></thead>
       <tbody id="runsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
-    <div class="pag-footer" style="margin-top:.875rem">
-      <div class="pagination-bar hidden" id="runsPagBar">
-        <div class="pagination-info" id="runsPagInfo"></div>
-        <div class="pagination-controls">
-          <button class="page-btn" id="runsPrev">← Prev</button>
-          <div id="runsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
-          <button class="page-btn" id="runsNext">Next →</button>
-        </div>
+    <div class="pagination-bar hidden" id="runsPagBar" style="margin-top:.875rem">
+      <div class="pagination-info" id="runsPagInfo"></div>
+      <div class="pagination-controls">
+        <button class="page-btn" id="runsPrev">← Prev</button>
+        <div id="runsPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+        <button class="page-btn" id="runsNext">Next →</button>
       </div>
-      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);margin-left:auto">
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted)">
         Per page
         <select id="runsPerPage" class="per-page-sel">
           <option value="10">10</option>
@@ -857,8 +849,17 @@ function updateStats() {
   document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
 }
 
-// ── Shared pagination helper ─────────────────────────────────────────
-const _pagCallbacks = {};   // prefix → goToPage(n) function
+// ── Shared pagination helpers ─────────────────────────────────────────
+const _pagCallbacks = {};
+
+function pageRange(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const r = [];
+  if (current > 3)         { r.push(1); if (current > 4) r.push('…'); }
+  for (let p = Math.max(1, current - 2); p <= Math.min(total, current + 2); p++) r.push(p);
+  if (current < total - 2) { if (current < total - 3) r.push('…'); r.push(total); }
+  return r;
+}
 
 function renderPagBar(prefix, page, pages, total, perPage) {
   const bar  = document.getElementById(`${prefix}PagBar`);
@@ -867,7 +868,7 @@ function renderPagBar(prefix, page, pages, total, perPage) {
   const next = document.getElementById(`${prefix}Next`);
   const nums = document.getElementById(`${prefix}PageNums`);
 
-  bar.classList.toggle('hidden', total <= perPage);
+  bar.classList.toggle('hidden', total === 0);
   info.textContent = total
     ? `Showing ${(page-1)*perPage+1}–${Math.min(page*perPage,total)} of ${total.toLocaleString()}`
     : '';
@@ -949,7 +950,6 @@ function renderUsers() {
   list         = list.slice(start, start + _usersPerPage);
 
   const tbody = document.getElementById('usersBody');
-  document.getElementById('usersCount').textContent = `${total} user${total !== 1 ? 's' : ''}`;
   renderPagBar('users', _usersPage, pages, total, _usersPerPage);
 
   if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
@@ -1023,7 +1023,6 @@ function renderApps() {
   const pageItems = list.slice(start, start + _appsPerPage);
 
   const tbody = document.getElementById('appsBody');
-  document.getElementById('appsCount').textContent = `${total} application${total !== 1 ? 's' : ''}`;
   renderPagBar('apps', _appsPage, pages, total, _appsPerPage);
 
   if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No applications match.</td></tr>'; return; }
