@@ -282,16 +282,42 @@
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
   <div class="tab-pane active" id="tab-users">
-    <div class="filter-row" style="margin-bottom:.875rem">
-      <input type="text" id="userSearch" placeholder="Search by name or email…" style="max-width:280px">
+    <div class="filter-row">
+      <input type="text" id="userSearch" placeholder="Search by name or email…">
+      <select id="userRoleFilter">
+        <option value="">All roles</option>
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
+      <select id="userVerifiedFilter">
+        <option value="">All — email verified</option>
+        <option value="yes">Verified</option>
+        <option value="no">Not verified</option>
+      </select>
+    </div>
+    <div class="filter-row" style="margin-top:-.5rem">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0">Last Login:</label>
+      <input type="date" id="userLoginFrom" style="max-width:148px" title="Last login from">
+      <input type="date" id="userLoginTo"   style="max-width:148px" title="Last login to">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">Joined:</label>
+      <input type="date" id="userJoinedFrom" style="max-width:148px" title="Joined from">
+      <input type="date" id="userJoinedTo"   style="max-width:148px" title="Joined to">
     </div>
     <div id="usersAlert"></div>
     <table>
-      <thead><tr>
-        <th>User</th><th>Role</th><th>Apps</th><th>Runs</th><th>Email Verified</th><th>Last Login</th><th>Joined</th><th>Actions</th>
+      <thead id="usersHead"><tr>
+        <th class="usr-sort-th" data-col="display_name" style="cursor:pointer;white-space:nowrap">User <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="role"         style="cursor:pointer;white-space:nowrap">Role <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="app_count"    style="cursor:pointer;white-space:nowrap">Apps <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="runs_count"   style="cursor:pointer;white-space:nowrap">Runs <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="email_verified" style="cursor:pointer;white-space:nowrap">Email Verified <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="last_login"   style="cursor:pointer;white-space:nowrap">Last Login <span class="sort-arrow">↕</span></th>
+        <th class="usr-sort-th" data-col="created_at"   style="cursor:pointer;white-space:nowrap">Joined <span class="sort-arrow">↕</span></th>
+        <th>Actions</th>
       </tr></thead>
       <tbody id="usersBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
     </table>
+    <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="usersCount"></div>
   </div>
 
   <!-- ── Applications tab ──────────────────────────────────────── -->
@@ -605,6 +631,8 @@ let _allRuns  = [];
 let _runsSortDir = 'desc';
 let _appsSortCol = '';
 let _appsSortDir = 'asc';
+let _usersSortCol = 'created_at';
+let _usersSortDir = 'asc';
 
 const APP_STATUS_ORDER = {
   'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'On Hold': 3,
@@ -679,30 +707,69 @@ function updateStats() {
 
 // ── Render users ─────────────────────────────────────────────────────
 function renderUsers() {
-  const q     = document.getElementById('userSearch').value.trim().toLowerCase();
-  const tbody = document.getElementById('usersBody');
-  let list    = _users;
-  if (q) list = list.filter(u =>
-    (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q)
-  );
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
-  tbody.innerHTML = '';
+  const q            = document.getElementById('userSearch').value.trim().toLowerCase();
+  const roleFilter   = document.getElementById('userRoleFilter').value;
+  const verFilter    = document.getElementById('userVerifiedFilter').value;
+  const loginFrom    = document.getElementById('userLoginFrom').value;
+  const loginTo      = document.getElementById('userLoginTo').value;
+  const joinedFrom   = document.getElementById('userJoinedFrom').value;
+  const joinedTo     = document.getElementById('userJoinedTo').value;
 
-  // Compute runs count per user email from _allRuns
+  // Compute runs per user
   const runsByEmail = {};
   for (const r of _allRuns) {
     if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email] || 0) + 1;
   }
+
+  let list = _users.map(u => ({ ...u, runs_count: runsByEmail[u.email] || 0 }));
+
+  // Filters
+  if (q)          list = list.filter(u => (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
+  if (roleFilter) list = list.filter(u => u.role === roleFilter);
+  if (verFilter === 'yes') list = list.filter(u => u.email_verified !== false);
+  if (verFilter === 'no')  list = list.filter(u => u.email_verified === false);
+  if (loginFrom)  list = list.filter(u => (u.last_login||'') >= loginFrom);
+  if (loginTo)    list = list.filter(u => (u.last_login||'') <= loginTo + 'T23:59:59Z');
+  if (joinedFrom) list = list.filter(u => (u.created_at||'') >= joinedFrom);
+  if (joinedTo)   list = list.filter(u => (u.created_at||'') <= joinedTo + 'T23:59:59Z');
+
+  // Sort
+  if (_usersSortCol) {
+    list = [...list].sort((a, b) => {
+      let av = a[_usersSortCol], bv = b[_usersSortCol];
+      // Booleans: true > false
+      if (typeof av === 'boolean') av = av ? 1 : 0;
+      if (typeof bv === 'boolean') bv = bv ? 1 : 0;
+      // Nulls last
+      if (av == null) av = '';
+      if (bv == null) bv = '';
+      const cmp = typeof av === 'number' ? av - bv
+                : String(av).toLowerCase() < String(bv).toLowerCase() ? -1
+                : String(av).toLowerCase() > String(bv).toLowerCase() ? 1 : 0;
+      return _usersSortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  // Update sort arrows
+  document.querySelectorAll('.usr-sort-th').forEach(th => {
+    const active = th.dataset.col === _usersSortCol;
+    th.classList.toggle('sort-active', active);
+    th.querySelector('.sort-arrow').textContent = active ? (_usersSortDir === 'asc' ? '↑' : '↓') : '↕';
+  });
+
+  const tbody = document.getElementById('usersBody');
+  document.getElementById('usersCount').textContent = `${list.length} user${list.length !== 1 ? 's' : ''}`;
+
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
+  tbody.innerHTML = '';
 
   for (const u of list) {
     const isActive   = u.active !== false;
     const verifiedEl = u.email_verified === false
       ? '<span style="color:var(--error);font-size:.8rem">✗ No</span>'
       : '<span style="color:var(--success);font-size:.8rem">✓ Yes</span>';
-    const runsCount  = runsByEmail[u.email] || 0;
-    const rowStyle   = isActive ? '' : 'opacity:.55';
     const tr = document.createElement('tr');
-    tr.style.cssText = rowStyle;
+    tr.style.cssText = isActive ? '' : 'opacity:.55';
     tr.innerHTML = `
       <td>
         <div style="font-weight:600">${esc(u.display_name || u.email)}${!isActive ? ' <span style="font-size:.7rem;color:var(--error)">(deactivated)</span>' : ''}</div>
@@ -710,7 +777,7 @@ function renderUsers() {
       </td>
       <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
       <td style="color:var(--muted)">${u.app_count}</td>
-      <td style="color:var(--muted)">${runsCount || '—'}</td>
+      <td style="color:var(--muted)">${u.runs_count || '—'}</td>
       <td>${verifiedEl}</td>
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${u.last_login ? fmtDateTime(u.last_login) : '—'}</td>
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${fmtDateTime(u.created_at)}</td>
@@ -1184,8 +1251,22 @@ document.getElementById('addCommentBtn').addEventListener('click', async () => {
   if (text && _drawerUserId) await addComment(text);
 });
 
-// User search filter
-document.getElementById('userSearch').addEventListener('input', renderUsers);
+// User filters
+['userSearch','userRoleFilter','userVerifiedFilter',
+ 'userLoginFrom','userLoginTo','userJoinedFrom','userJoinedTo'].forEach(id => {
+  document.getElementById(id).addEventListener('input',  renderUsers);
+  document.getElementById(id).addEventListener('change', renderUsers);
+});
+
+// User column sort
+document.getElementById('usersHead').addEventListener('click', e => {
+  const th = e.target.closest('.usr-sort-th');
+  if (!th) return;
+  const col = th.dataset.col;
+  _usersSortDir = (_usersSortCol === col && _usersSortDir === 'asc') ? 'desc' : 'asc';
+  _usersSortCol = col;
+  renderUsers();
+});
 
 // ── Init ─────────────────────────────────────────────────────────────
 loadAll();
