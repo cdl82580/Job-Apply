@@ -2255,12 +2255,59 @@ document.getElementById('closeDeliveryLog').addEventListener('click', () => {
 
 // ── Webhook modal ────────────────────────────────────────────────────
 
+// Known query parameter keys with example placeholder values
+const QP_OPTIONS = [
+  { key: 'token',       placeholder: 'e.g. abc123xyz' },
+  { key: 'api_key',     placeholder: 'e.g. sk-abc123…' },
+  { key: 'key',         placeholder: 'e.g. your-api-key' },
+  { key: 'app',         placeholder: 'e.g. job-apply' },
+  { key: 'source',      placeholder: 'e.g. job-apply' },
+  { key: 'service',     placeholder: 'e.g. job-apply' },
+  { key: 'environment', placeholder: 'e.g. production' },
+  { key: 'env',         placeholder: 'e.g. prod' },
+  { key: 'project',     placeholder: 'e.g. my-project' },
+  { key: 'channel',     placeholder: 'e.g. #alerts' },
+  { key: 'severity',    placeholder: 'e.g. info, warning, error' },
+  { key: 'level',       placeholder: 'e.g. info, debug, error' },
+  { key: 'format',      placeholder: 'e.g. json' },
+  { key: 'tag',         placeholder: 'e.g. app:job-apply' },
+  { key: 'labels',      placeholder: 'e.g. app=job-apply,env=prod' },
+  { key: 'namespace',   placeholder: 'e.g. job-apply-prod' },
+  { key: 'region',      placeholder: 'e.g. us-east-1' },
+  { key: 'orgId',       placeholder: 'e.g. 1  (Grafana org ID)' },
+  { key: 'ds_type',     placeholder: 'e.g. loki  (Grafana data source type)' },
+  { key: 'stream',      placeholder: 'e.g. {app="job-apply"}  (Loki stream selector)' },
+];
+
+function _qpRow(containerId, key = '', val = '') {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-bottom:.3rem';
+  const selSt  = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit;appearance:none';
+  const inpSt  = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit';
+  const delSt  = 'padding:.25rem .5rem;border:1px solid var(--error);border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem';
+  const opts   = QP_OPTIONS.map(o =>
+    `<option value="${o.key}" ${o.key === key ? 'selected' : ''}>${o.key}</option>`
+  ).join('');
+  const initPh = QP_OPTIONS.find(o => o.key === key)?.placeholder || 'Value';
+  row.innerHTML = `
+    <select class="kv-key" style="${selSt}">${opts}</select>
+    <input type="text" class="kv-val" placeholder="${esc(initPh)}" value="${esc(val)}" style="${inpSt}">
+    <button type="button" style="${delSt}" onclick="this.parentElement.remove()">✕</button>`;
+  // Update placeholder when key changes
+  row.querySelector('.kv-key').addEventListener('change', function() {
+    const ph = QP_OPTIONS.find(o => o.key === this.value)?.placeholder || 'Value';
+    row.querySelector('.kv-val').placeholder = ph;
+  });
+  document.getElementById(containerId).appendChild(row);
+}
+
+// Generic key-value row — used for custom headers (open text)
 function _kvRow(containerId, key = '', val = '') {
   const row = document.createElement('div');
   row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-bottom:.3rem';
   const st = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit';
   row.innerHTML = `
-    <input type="text" class="kv-key" placeholder="Key" value="${esc(key)}" style="${st}">
+    <input type="text" class="kv-key" placeholder="Header name" value="${esc(key)}" style="${st}">
     <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}" style="${st}">
     <button type="button" style="padding:.25rem .5rem;border:1px solid var(--error);border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem" onclick="this.parentElement.remove()">✕</button>`;
   document.getElementById(containerId).appendChild(row);
@@ -2306,7 +2353,7 @@ function openWebhookModal(wh = null) {
 
   // Query params
   document.getElementById('whQpRows').innerHTML = '';
-  Object.entries(wh?.query_params || {}).forEach(([k, v]) => _kvRow('whQpRows', k, v));
+  Object.entries(wh?.query_params || {}).forEach(([k, v]) => _qpRow('whQpRows', k, v));
 
   // Headers
   document.getElementById('whHdrRows').innerHTML = '';
@@ -2328,7 +2375,7 @@ document.getElementById('whSelectNone').addEventListener('click', () => {
   document.getElementById('whEvAll').checked = false;
   document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = false);
 });
-document.getElementById('addQpBtn').addEventListener('click', () => _kvRow('whQpRows'));
+document.getElementById('addQpBtn').addEventListener('click', () => _qpRow('whQpRows'));
 document.getElementById('addHdrBtn').addEventListener('click', () => _kvRow('whHdrRows'));
 
 document.getElementById('webhookModalCancel').addEventListener('click', () => {
