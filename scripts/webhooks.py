@@ -28,6 +28,38 @@ import requests as _requests
 from . import storage
 
 _INDEX_KEY    = "webhooks/_index.json"
+
+# ---------------------------------------------------------------------------
+# Action categories — used for the category filter
+# ---------------------------------------------------------------------------
+
+CATEGORY_ACTIONS: dict[str, set[str]] = {
+    "auth": {
+        "user_registered", "user_registered_google", "google_account_linked",
+        "login_success", "login_google", "login_failed", "logout",
+        "email_verified", "verification_email_resent", "password_changed",
+    },
+    "profile": {
+        "profile_updated", "resume_uploaded",
+    },
+    "applications": {
+        "created", "updated", "deleted",
+        "comment_added", "comment_edited", "comment_deleted",
+        "run_linked", "run_unlinked", "imported",
+        "admin_updated", "admin_deleted",
+        "admin_comment_added", "admin_comment_edited", "admin_comment_deleted",
+    },
+    "runs": {
+        "run_started", "run_completed", "run_failed",
+        "prep_started", "prep_completed", "prep_failed",
+        "file_downloaded",
+    },
+    "admin": {
+        "role_changed", "admin_user_updated", "admin_verification_resent",
+        "admin_csv_export",
+        "webhook_created", "webhook_updated", "webhook_deleted", "webhook_tested",
+    },
+}
 _MAX_DELIVERIES = 25
 _INDEX_FIELDS = {"id", "name", "url", "events", "active", "created_at",
                  "last_triggered_at", "delivery_stats"}
@@ -115,17 +147,52 @@ def delete_webhook(webhook_id: str) -> bool:
 # Delivery
 # ---------------------------------------------------------------------------
 
+def _passes_filters(webhook: dict[str, Any], event: dict[str, Any]) -> bool:
+    """Return True if the event passes all configured webhook filters."""
+    action = event.get("action", "")
+
+    # ── Event type filter ────────────────────────────────────────────
+    events = webhook.get("events") or ["*"]
+    if "*" not in events and action not in events:
+        return False
+
+    # ── Actor filter (email or user_id, comma-separated) ────────────
+    filter_actors = [a.strip() for a in (webhook.get("filter_actors") or "").split(",") if a.strip()]
+    if filter_actors:
+        actor   = event.get("actor", "")
+        user_id = event.get("user_id", "")
+        if not any(f in (actor, user_id) for f in filter_actors):
+            return False
+
+    # ── Source filter (user | application) ──────────────────────────
+    filter_source = (webhook.get("filter_source") or "").strip()
+    if filter_source:
+        if event.get("source", "") != filter_source:
+            return False
+
+    # ── Category filter ──────────────────────────────────────────────
+    filter_cats = [c.strip() for c in (webhook.get("filter_categories") or []) if c.strip()]
+    if filter_cats:
+        in_cat = any(action in CATEGORY_ACTIONS.get(cat, set()) for cat in filter_cats)
+        if not in_cat:
+            return False
+
+    # ── Application ID filter ────────────────────────────────────────
+    filter_app_id = (webhook.get("filter_app_id") or "").strip()
+    if filter_app_id:
+        if event.get("entity_id", "") != filter_app_id:
+            return False
+
+    return True
+
+
 def dispatch_async(event: dict[str, Any]) -> None:
     """Fire matching webhooks for this event in a daemon thread. Never raises."""
     if not storage.is_configured():
         return
     try:
-        action = event.get("action", "")
-        active = [w for w in _read_index() if w.get("active")]
-        targets = [
-            w for w in active
-            if "*" in w.get("events", []) or action in w.get("events", [])
-        ]
+        active  = [w for w in _read_index() if w.get("active")]
+        targets = [w for w in active if _passes_filters(w, event)]
         if targets:
             threading.Thread(
                 target=_deliver_batch,

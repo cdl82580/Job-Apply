@@ -745,26 +745,37 @@ from scripts import webhooks as wh_store  # noqa: E402
 VALID_PAYLOAD_FORMATS = {"generic", "slack", "ms_teams", "grafana_loki"}
 
 
+VALID_FILTER_CATEGORIES = {"auth", "profile", "applications", "runs", "admin"}
+
+
 class WebhookCreate(BaseModel):
-    name:           str
-    url:            str
-    events:         list[str] = ["*"]
-    headers:        dict[str, str] = {}
-    query_params:   dict[str, str] = {}
-    secret:         str = ""
-    active:         bool = True
-    payload_format: str = "generic"
+    name:               str
+    url:                str
+    events:             list[str] = ["*"]
+    headers:            dict[str, str] = {}
+    query_params:       dict[str, str] = {}
+    secret:             str = ""
+    active:             bool = True
+    payload_format:     str = "generic"
+    filter_actors:      str = ""            # comma-separated emails/user_ids
+    filter_source:      str = ""            # "" | "user" | "application"
+    filter_categories:  list[str] = []      # subset of VALID_FILTER_CATEGORIES
+    filter_app_id:      str = ""
 
 
 class WebhookUpdate(BaseModel):
-    name:           str | None = None
-    url:            str | None = None
-    events:         list[str] | None = None
-    headers:        dict[str, str] | None = None
-    query_params:   dict[str, str] | None = None
-    secret:         str | None = None
-    active:         bool | None = None
-    payload_format: str | None = None
+    name:               str | None = None
+    url:                str | None = None
+    events:             list[str] | None = None
+    headers:            dict[str, str] | None = None
+    query_params:       dict[str, str] | None = None
+    secret:             str | None = None
+    active:             bool | None = None
+    payload_format:     str | None = None
+    filter_actors:      str | None = None
+    filter_source:      str | None = None
+    filter_categories:  list[str] | None = None
+    filter_app_id:      str | None = None
 
 
 @router.get("/webhooks")
@@ -787,9 +798,13 @@ async def create_webhook(body: WebhookCreate, request: Request):
         "events":           body.events,
         "headers":          body.headers,
         "query_params":     body.query_params,
-        "secret":           body.secret,
-        "active":           body.active,
-        "payload_format":   body.payload_format,
+        "secret":             body.secret,
+        "active":             body.active,
+        "payload_format":     body.payload_format,
+        "filter_actors":      body.filter_actors,
+        "filter_source":      body.filter_source,
+        "filter_categories":  body.filter_categories,
+        "filter_app_id":      body.filter_app_id,
         "created_at":       _now(),
         "created_by":       admin["email"],
         "last_triggered_at": None,

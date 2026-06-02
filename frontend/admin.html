@@ -773,6 +773,44 @@
       <div id="whEventsGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:.25rem .75rem;max-height:200px;overflow-y:auto;padding:.5rem;border:1px solid var(--card-border);border-radius:6px;background:var(--bg-page)"></div>
     </div>
 
+    <!-- Filters -->
+    <div style="margin-bottom:1rem">
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-bottom:.4rem;border-bottom:1px solid var(--card-border);margin-bottom:.75rem">
+        Delivery Filters <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(all conditions must match — leave blank to skip)</span>
+      </div>
+      <div style="display:grid;gap:.75rem">
+        <div>
+          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Actor <span style="font-weight:400;color:var(--muted)">(email or user ID, comma-separated)</span></label>
+          <input type="text" id="whFilterActors" placeholder="e.g. cdl825@gmail.com, abc-uuid-123" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+          <div>
+            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Source</label>
+            <select id="whFilterSource" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
+              <option value="">All sources</option>
+              <option value="user">User events only</option>
+              <option value="application">Application events only</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Application ID <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+            <input type="text" id="whFilterAppId" placeholder="e.g. abc-uuid-123" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
+          </div>
+        </div>
+        <div>
+          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.4rem">Action Categories</label>
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+            ${['auth','profile','applications','runs','admin'].map(c =>
+              `<label style="display:flex;align-items:center;gap:.3rem;font-size:.825rem;cursor:pointer">
+                <input type="checkbox" class="wh-cat-cb" value="${c}" style="accent-color:var(--primary)">
+                ${c.charAt(0).toUpperCase()+c.slice(1)}</label>`
+            ).join('')}
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Leave all unchecked to allow all categories.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Query params -->
     <div style="margin-bottom:1rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
@@ -2157,6 +2195,14 @@ function renderWebhooks() {
       <td style="font-size:.8rem">
         ${esc(evLabel)}
         <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${({'generic':'Generic JSON','slack':'Slack','ms_teams':'MS Teams','grafana_loki':'Grafana Loki'})[w.payload_format||'generic']||'Generic JSON'}</div>
+        ${(() => {
+          const parts = [];
+          if (w.filter_actors)     parts.push(`Actor: ${w.filter_actors.split(',').map(s=>s.trim()).filter(Boolean).join(', ')}`);
+          if (w.filter_source)     parts.push(`Source: ${w.filter_source}`);
+          if ((w.filter_categories||[]).length) parts.push(`Cat: ${w.filter_categories.join(', ')}`);
+          if (w.filter_app_id)     parts.push(`App: ${w.filter_app_id.slice(0,8)}…`);
+          return parts.length ? `<div style="font-size:.7rem;color:var(--border);margin-top:.2rem">🔽 ${parts.join(' · ')}</div>` : '';
+        })()}
       </td>
       <td>${active
         ? '<span class="badge s-offer" style="font-size:.7rem">Active</span>'
@@ -2336,9 +2382,16 @@ function openWebhookModal(wh = null) {
   document.getElementById('webhookModalTitle').textContent = wh ? 'Edit Webhook' : 'New Webhook';
   document.getElementById('whName').value   = wh?.name   || '';
   document.getElementById('whUrl').value    = wh?.url    || '';
-  document.getElementById('whSecret').value  = wh?.secret || '';
-  document.getElementById('whFormat').value  = wh?.payload_format || 'generic';
-  document.getElementById('whActive').checked = wh ? (wh.active !== false) : true;
+  document.getElementById('whSecret').value        = wh?.secret || '';
+  document.getElementById('whFormat').value        = wh?.payload_format || 'generic';
+  document.getElementById('whActive').checked      = wh ? (wh.active !== false) : true;
+  document.getElementById('whFilterActors').value  = wh?.filter_actors || '';
+  document.getElementById('whFilterSource').value  = wh?.filter_source || '';
+  document.getElementById('whFilterAppId').value   = wh?.filter_app_id || '';
+  const activeCats = wh?.filter_categories || [];
+  document.querySelectorAll('.wh-cat-cb').forEach(cb => {
+    cb.checked = activeCats.includes(cb.value);
+  });
   document.getElementById('webhookModalAlert').classList.add('hidden');
   document.getElementById('webhookModalSave').disabled = false;
   document.getElementById('webhookModalSave').textContent = 'Save Webhook';
@@ -2405,9 +2458,13 @@ document.getElementById('webhookModalSave').addEventListener('click', async () =
   const payload  = {
     name:         document.getElementById('whName').value.trim(),
     url:          document.getElementById('whUrl').value.trim(),
-    secret:         document.getElementById('whSecret').value.trim(),
-    active:         document.getElementById('whActive').checked,
-    payload_format: document.getElementById('whFormat').value,
+    secret:             document.getElementById('whSecret').value.trim(),
+    active:             document.getElementById('whActive').checked,
+    payload_format:     document.getElementById('whFormat').value,
+    filter_actors:      document.getElementById('whFilterActors').value.trim(),
+    filter_source:      document.getElementById('whFilterSource').value,
+    filter_app_id:      document.getElementById('whFilterAppId').value.trim(),
+    filter_categories:  [...document.querySelectorAll('.wh-cat-cb:checked')].map(c => c.value),
     events,
     query_params: _collectKv('whQpRows'),
     headers:      _collectKv('whHdrRows'),
