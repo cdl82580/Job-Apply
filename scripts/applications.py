@@ -86,13 +86,35 @@ def list_applications(
     user_id: str,
     status: str | None = None,
     priority: str | None = None,
-) -> list[dict[str, Any]]:
+    page: int = 1,
+    per_page: int = 0,   # 0 = all (no pagination)
+) -> dict[str, Any]:
     entries = _read_index(user_id)
     if status:
         entries = [e for e in entries if e.get("status") == status]
     if priority:
         entries = [e for e in entries if e.get("priority") == priority]
-    return sorted(entries, key=lambda e: e.get("last_updated", ""), reverse=True)
+
+    entries = sorted(entries, key=lambda e: e.get("last_updated", ""), reverse=True)
+    total   = len(entries)
+
+    if per_page and per_page > 0:
+        pages  = max(1, (total + per_page - 1) // per_page)
+        page   = max(1, min(page, pages))
+        start  = (page - 1) * per_page
+        items  = entries[start : start + per_page]
+    else:
+        pages = 1
+        page  = 1
+        items = entries
+
+    return {
+        "items":    items,
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    pages,
+    }
 
 
 def get_application(user_id: str, app_id: str) -> dict[str, Any] | None:

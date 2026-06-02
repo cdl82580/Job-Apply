@@ -19,7 +19,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from scripts import applications as app_store
@@ -146,11 +146,15 @@ def _actor(request: Request) -> str:
 @router.get("")
 async def list_applications(
     request: Request,
-    status: str | None = None,
+    status:   str | None = None,
     priority: str | None = None,
+    page:     int = Query(1, ge=1),
+    per_page: int = Query(0, ge=0),
 ):
     user_id = request.state.user["user_id"]
-    return app_store.list_applications(user_id, status=status, priority=priority)
+    return app_store.list_applications(
+        user_id, status=status, priority=priority, page=page, per_page=per_page
+    )
 
 
 @router.post("", status_code=201)

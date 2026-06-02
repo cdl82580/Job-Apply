@@ -291,6 +291,38 @@
       .app-cards { display: block; }
     }
 
+    /* ── Pagination ──────────────────────────────────────────────── */
+    .pagination-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .75rem; margin-top: .875rem; flex-wrap: wrap;
+    }
+    .pagination-bar.hidden { display: none; }
+    .pagination-info { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .pagination-controls { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+    .page-btn {
+      min-width: 32px; padding: .3rem .55rem;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      background: var(--input-bg); color: var(--text);
+      font-size: .8rem; font-family: inherit; cursor: pointer;
+      transition: border-color .12s, color .12s, background .12s;
+      line-height: 1.4;
+    }
+    .page-btn:hover:not(:disabled):not(.active) { border-color: var(--border); color: var(--primary); }
+    .page-btn:disabled { opacity: .38; cursor: not-allowed; }
+    .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .page-ellipsis { padding: 0 .25rem; color: var(--muted); font-size: .8rem; user-select: none; }
+    .per-page-wrap {
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .8rem; color: var(--muted);
+    }
+    .per-page-wrap select {
+      width: auto; padding: .3rem .5rem; font-size: .8rem;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      background: var(--input-bg); color: var(--text);
+      cursor: pointer;
+    }
+    .per-page-wrap select:focus { outline: none; border-color: var(--border); }
+
     /* ── Empty state ─────────────────────────────────────────────── */
     .empty-state {
       text-align: center; padding: 3rem 1rem;
@@ -605,6 +637,25 @@
   <!-- ── Applications cards (mobile) ───────────────────────────── -->
   <div class="app-cards" id="appCards"></div>
 
+  <!-- ── Pagination ──────────────────────────────────────────────── -->
+  <div class="pagination-bar hidden" id="paginationBar">
+    <div class="pagination-info" id="paginationInfo"></div>
+    <div class="pagination-controls" id="paginationControls">
+      <button class="page-btn" id="prevPage">← Prev</button>
+      <div id="pageNumbers" style="display:flex;align-items:center;gap:.25rem"></div>
+      <button class="page-btn" id="nextPage">Next →</button>
+    </div>
+    <div class="per-page-wrap">
+      <label for="perPageSel">Per page</label>
+      <select id="perPageSel">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+  </div>
+
   <!-- ── Empty state ─────────────────────────────────────────────── -->
   <div class="empty-state hidden" id="emptyState">
     <div class="empty-icon">📋</div>
@@ -795,6 +846,9 @@ let _editId     = null;    // null = add mode, string = edit mode
 let _deleteId   = null;
 let _sortCol    = 'last_updated';
 let _sortDir    = 'desc';  // 'asc' | 'desc'
+let _page       = 1;
+let _perPage    = 25;
+let _skipHistory = false;  // prevents pushState during popstate handling
 
 // Priority sort order
 const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
@@ -854,7 +908,8 @@ document.addEventListener('click', (e) => {
     _sortDir = 'asc';
   }
   _updateSortHeaders();
-  _filtered = _sortList(_filtered);  // re-sort current view
+  _filtered = _sortList(_filtered);
+  _page = 1;
   renderTable();
 });
 
@@ -909,13 +964,15 @@ function fmtDate(d) {
 async function loadApps() {
   try {
     const res  = await apiFetch('/api/applications');
-    _apps = await res.json();
+    const data = await res.json();
+    _apps = data.items ?? data;
   } catch (e) {
     if (e.message === '401') return;
     _apps = [];
   }
   applyFilters();
   updateStats();
+  return true;
 }
 
 function updateStats() {
@@ -942,6 +999,7 @@ function applyFilters() {
     );
   }
   _filtered = _sortList(list);
+  _page = 1;
   renderTable();
 }
 
@@ -956,12 +1014,21 @@ function renderTable() {
   if (_filtered.length === 0) {
     empty.classList.remove('hidden');
     document.getElementById('appTable').classList.add('hidden');
+    document.getElementById('paginationBar').classList.add('hidden');
     return;
   }
   empty.classList.add('hidden');
   document.getElementById('appTable').classList.remove('hidden');
 
-  for (const a of _filtered) {
+  // Paginate
+  const totalPages = Math.max(1, Math.ceil(_filtered.length / _perPage));
+  _page = Math.max(1, Math.min(_page, totalPages));
+  const start    = (_page - 1) * _perPage;
+  const pageRows = _filtered.slice(start, start + _perPage);
+
+  renderPagination(_filtered.length);
+
+  for (const a of pageRows) {
     // Table row
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1022,6 +1089,64 @@ function handleRowAction(e) {
   if (action === 'edit')   openDrawer(id);
   if (action === 'delete') confirmDelete(id);
 }
+
+// ── Pagination ───────────────────────────────────────────────────────
+
+function renderPagination(total) {
+  const bar     = document.getElementById('paginationBar');
+  const infoEl  = document.getElementById('paginationInfo');
+  const numsEl  = document.getElementById('pageNumbers');
+  const prevBtn = document.getElementById('prevPage');
+  const nextBtn = document.getElementById('nextPage');
+
+  const pages = Math.max(1, Math.ceil(total / _perPage));
+  const start = Math.min((_page - 1) * _perPage + 1, total);
+  const end   = Math.min(_page * _perPage, total);
+
+  infoEl.textContent = `Showing ${start}–${end} of ${total}`;
+  prevBtn.disabled = _page <= 1;
+  nextBtn.disabled = _page >= pages;
+  bar.classList.toggle('hidden', total <= _perPage && pages === 1);
+
+  // Page number buttons
+  numsEl.innerHTML = '';
+  for (const p of pageRange(_page, pages)) {
+    if (p === '…') {
+      const s = document.createElement('span');
+      s.className = 'page-ellipsis';
+      s.textContent = '…';
+      numsEl.appendChild(s);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'page-btn' + (p === _page ? ' active' : '');
+      btn.textContent = p;
+      btn.addEventListener('click', () => { _page = p; renderTable(); });
+      numsEl.appendChild(btn);
+    }
+  }
+}
+
+function pageRange(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const r = [];
+  if (current > 3)          { r.push(1); if (current > 4) r.push('…'); }
+  for (let p = Math.max(1, current - 2); p <= Math.min(total, current + 2); p++) r.push(p);
+  if (current < total - 2)  { if (current < total - 3) r.push('…'); r.push(total); }
+  return r;
+}
+
+document.getElementById('prevPage').addEventListener('click', () => {
+  if (_page > 1) { _page--; renderTable(); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  const pages = Math.ceil(_filtered.length / _perPage);
+  if (_page < pages) { _page++; renderTable(); }
+});
+document.getElementById('perPageSel').addEventListener('change', e => {
+  _perPage = parseInt(e.target.value);
+  _page = 1;
+  renderTable();
+});
 
 // ── Filter pills ──────────────────────────────────────────────────────
 document.getElementById('statusPills').addEventListener('click', (e) => {
@@ -1141,6 +1266,9 @@ const drawer   = document.getElementById('drawer');
 function openDrawer(editId = null) {
   _editId = editId;
   resetDrawerForm();
+  if (editId && !_skipHistory) {
+    history.pushState({ appId: editId }, '', `?app=${editId}`);
+  }
 
   if (editId) {
     document.getElementById('drawerTitle').textContent = 'Edit Application';
@@ -1162,6 +1290,9 @@ function closeDrawer() {
   overlay.classList.remove('open');
   drawer.classList.remove('open');
   _editId = null;
+  if (!_skipHistory) {
+    history.replaceState(null, '', location.pathname);
+  }
 }
 
 document.getElementById('addBtn').addEventListener('click', () => openDrawer());
@@ -1489,9 +1620,23 @@ function fmtDateFull(iso) {
   } catch (_) { return iso.split('T')[0]; }
 }
 
+// ── URL slug / popstate ────────────────────────────────────────────────
+window.addEventListener('popstate', e => {
+  _skipHistory = true;
+  if (e.state?.appId) {
+    openDrawer(e.state.appId);
+  } else {
+    closeDrawer();
+  }
+  _skipHistory = false;
+});
+
 // ── Init ──────────────────────────────────────────────────────────────
 _updateSortHeaders();
-loadApps();
+loadApps().then(() => {
+  const initialId = new URLSearchParams(location.search).get('app');
+  if (initialId) openDrawer(initialId);
+});
 </script>
 </body>
 </html>
