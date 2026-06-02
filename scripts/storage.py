@@ -31,10 +31,16 @@ def is_configured() -> bool:
     return _HAS_BOTO3 and bool(os.environ.get("AWS_ACCESS_KEY_ID"))
 
 
+_s3_client = None
+
+
 def _client():
+    global _s3_client
     if not _HAS_BOTO3:
         raise RuntimeError("boto3 not installed — run: pip install boto3")
-    return boto3.client("s3", endpoint_url=_ENDPOINT, region_name=_REGION)
+    if _s3_client is None:
+        _s3_client = boto3.client("s3", endpoint_url=_ENDPOINT, region_name=_REGION)
+    return _s3_client
 
 
 def _email_key(email: str) -> str:

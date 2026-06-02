@@ -166,6 +166,8 @@ async def create_application(body: ApplicationCreate, request: Request):
         raise HTTPException(400, f"status must be one of: {', '.join(sorted(VALID_STATUSES))}")
     if body.priority not in VALID_PRIORITIES:
         raise HTTPException(400, f"priority must be one of: {', '.join(sorted(VALID_PRIORITIES))}")
+    if body.url and not body.url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must start with http:// or https://")
 
     now = _now()
     record = {
@@ -201,6 +203,8 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
         raise HTTPException(400, f"status must be one of: {', '.join(sorted(VALID_STATUSES))}")
     if "priority" in updates and updates["priority"] not in VALID_PRIORITIES:
         raise HTTPException(400, f"priority must be one of: {', '.join(sorted(VALID_PRIORITIES))}")
+    if updates.get("url") and not updates["url"].startswith(("http://", "https://")):
+        raise HTTPException(400, "url must start with http:// or https://")
 
     # Compute diff before applying
     changes = _diff(record, {**record, **updates})

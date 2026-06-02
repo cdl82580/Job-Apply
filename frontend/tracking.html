@@ -967,7 +967,7 @@ function priorityBadge(p) {
 function logoEl(domain, company) {
   if (domain) {
     const key = '1idZFX8Ll28d4x2IVye';
-    return `<img class="co-logo" src="https://cdn.brandfetch.io/domain/${domain}?c=${key}" alt="${company}" onerror="this.replaceWith(makePlaceholder('${company}'))">`;
+    return `<img class="co-logo" src="https://cdn.brandfetch.io/domain/${esc(domain)}?c=${key}" alt="${esc(company)}" data-company="${esc(company)}" onerror="this.replaceWith(makePlaceholder(this.dataset.company))">`;
   }
   return makePlaceholderHtml(company);
 }

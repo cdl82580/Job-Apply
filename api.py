@@ -264,6 +264,21 @@ _runs:  dict[str, dict[str, Any]] = {}
 _preps: dict[str, dict[str, Any]] = {}
 _workflow_lock = threading.Lock()
 
+_RUN_TTL = 3600 * 4  # evict terminal runs/preps after 4 hours
+
+
+def _evict_stale() -> None:
+    """Remove completed/errored runs and preps older than _RUN_TTL."""
+    cutoff = time.time() - _RUN_TTL
+    for store in (_runs, _preps):
+        stale = [
+            k for k, v in store.items()
+            if v.get("status") in ("done", "error")
+            and v.get("_finished_at", 0) < cutoff
+        ]
+        for k in stale:
+            del store[k]
+
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
@@ -517,6 +532,8 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     if not profile_text:
         raise HTTPException(400, "No profile guide saved. Add one in your profile.")
 
+    _evict_stale()
+
     run_id = str(uuid.uuid4())
     q: Queue[dict | None] = Queue()
     _runs[run_id] = {"queue": q, "status": "queued", "result": None, "error": None,
@@ -556,8 +573,9 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                         contact=req.contact,
                         config=config,
                     )
-                    _runs[run_id]["result"] = result
-                    _runs[run_id]["status"] = "done"
+                    _runs[run_id]["result"]       = result
+                    _runs[run_id]["status"]       = "done"
+                    _runs[run_id]["_finished_at"] = time.time()
 
                     # Auto-link to application tracker record if requested
                     if req.app_id:
@@ -582,13 +600,15 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                         },
                     })
                 except WorkflowError as exc:
-                    _runs[run_id]["status"] = "error"
-                    _runs[run_id]["error"]  = str(exc)
+                    _runs[run_id]["status"]      = "error"
+                    _runs[run_id]["error"]        = str(exc)
+                    _runs[run_id]["_finished_at"] = time.time()
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
-                    _runs[run_id]["status"] = "error"
-                    _runs[run_id]["error"]  = msg
+                    _runs[run_id]["status"]      = "error"
+                    _runs[run_id]["error"]        = msg
+                    _runs[run_id]["_finished_at"] = time.time()
                     q.put({"type": "error", "message": msg})
                 finally:
                     q.put(None)
@@ -736,6 +756,8 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     user_data = _require_user(request)
     user_id   = user_data["user_id"]
 
+    _evict_stale()
+
     if req.round_type not in ROUND_TYPES:
         raise HTTPException(400, f"round_type must be one of: {', '.join(ROUND_TYPES)}")
 
@@ -785,8 +807,9 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     role=req.role,
                     config=config,
                 )
-                _preps[prep_id]["result"] = result
-                _preps[prep_id]["status"] = "done"
+                _preps[prep_id]["result"]       = result
+                _preps[prep_id]["status"]       = "done"
+                _preps[prep_id]["_finished_at"] = time.time()
 
                 if req.app_id:
                     _link_run_to_app(
@@ -807,13 +830,15 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     },
                 })
             except WorkflowError as exc:
-                _preps[prep_id]["status"] = "error"
-                _preps[prep_id]["error"]  = str(exc)
+                _preps[prep_id]["status"]      = "error"
+                _preps[prep_id]["error"]        = str(exc)
+                _preps[prep_id]["_finished_at"] = time.time()
                 q.put({"type": "error", "message": str(exc)})
             except Exception as exc:
                 msg = f"Unexpected error: {type(exc).__name__}: {exc}"
-                _preps[prep_id]["status"] = "error"
-                _preps[prep_id]["error"]  = msg
+                _preps[prep_id]["status"]      = "error"
+                _preps[prep_id]["error"]        = msg
+                _preps[prep_id]["_finished_at"] = time.time()
                 q.put({"type": "error", "message": msg})
             finally:
                 q.put(None)
