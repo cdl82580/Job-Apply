@@ -2298,7 +2298,6 @@ function openWebhookModal(wh = null) {
   document.getElementById('webhookModal').classList.add('open');
 }
 
-document.getElementById('whEvAll').addEventListener ? null : null;  // populated dynamically
 document.getElementById('whEventsGrid').addEventListener('change', e => {
   if (e.target.id === 'whEvAll') {
     document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = e.target.checked);
