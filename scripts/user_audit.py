@@ -84,7 +84,7 @@ def _build(action: str, actor: str, ip: str | None, details: dict[str, Any] | No
 # ---------------------------------------------------------------------------
 
 def log(user_id: str, action: str, actor: str, ip: str | None = None, **details: Any) -> None:
-    """Append an event to a user's audit log."""
+    """Append an event to a user's audit log and dispatch to any matching webhooks."""
     if not storage.is_configured():
         return
     event = _build(action, actor, ip, details or None)
@@ -92,6 +92,12 @@ def log(user_id: str, action: str, actor: str, ip: str | None = None, **details:
         _append(_events_key(user_id), event)
     except Exception:
         pass  # never let audit failure break the request
+    # Dispatch to webhooks asynchronously (best-effort, never raises)
+    try:
+        from . import webhooks  # noqa: PLC0415 — lazy to avoid circular import
+        webhooks.dispatch_async({"user_id": user_id, "user_email": actor, **event})
+    except Exception:
+        pass
 
 
 def log_login_failure(email: str, ip: str | None = None) -> None:

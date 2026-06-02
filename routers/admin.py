@@ -509,6 +509,8 @@ AUDIT_ACTION_TYPES = sorted([
     "file_downloaded",
     # Admin exports
     "admin_csv_export",
+    # Webhooks
+    "webhook_created", "webhook_updated", "webhook_deleted", "webhook_tested",
     # Admin user management
     "role_changed", "admin_user_updated", "admin_verification_resent",
     # Applications
@@ -731,3 +733,136 @@ async def log_activity(body: ActivityEntry, request: Request):
                    _client_ip(request),
                    screen=body.screen, row_count=body.row_count, filters=body.filters)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+
+from scripts import webhooks as wh_store  # noqa: E402
+
+
+class WebhookCreate(BaseModel):
+    name:         str
+    url:          str
+    events:       list[str] = ["*"]
+    headers:      dict[str, str] = {}
+    query_params: dict[str, str] = {}
+    secret:       str = ""
+    active:       bool = True
+
+
+class WebhookUpdate(BaseModel):
+    name:         str | None = None
+    url:          str | None = None
+    events:       list[str] | None = None
+    headers:      dict[str, str] | None = None
+    query_params: dict[str, str] | None = None
+    secret:       str | None = None
+    active:       bool | None = None
+
+
+@router.get("/webhooks")
+async def list_webhooks(request: Request):
+    _admin(request)
+    return wh_store.list_webhooks()
+
+
+@router.post("/webhooks", status_code=201)
+async def create_webhook(body: WebhookCreate, request: Request):
+    admin = _admin(request)
+    if not body.url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must start with http:// or https://")
+    webhook = {
+        "id":               str(uuid.uuid4()),
+        "name":             body.name.strip(),
+        "url":              body.url.strip(),
+        "events":           body.events,
+        "headers":          body.headers,
+        "query_params":     body.query_params,
+        "secret":           body.secret,
+        "active":           body.active,
+        "created_at":       _now(),
+        "created_by":       admin["email"],
+        "last_triggered_at": None,
+        "delivery_stats":   {"total": 0, "success": 0, "failure": 0},
+        "recent_deliveries": [],
+    }
+    wh_store.save_webhook(webhook)
+    user_audit.log(admin["user_id"], "webhook_created", admin["email"],
+                   webhook_id=webhook["id"], name=webhook["name"])
+    return webhook
+
+
+@router.get("/webhooks/{webhook_id}")
+async def get_webhook(webhook_id: str, request: Request):
+    _admin(request)
+    w = wh_store.get_webhook(webhook_id)
+    if not w:
+        raise HTTPException(404, "Webhook not found")
+    return w
+
+
+@router.put("/webhooks/{webhook_id}")
+async def update_webhook(webhook_id: str, body: WebhookUpdate, request: Request):
+    admin = _admin(request)
+    w = wh_store.get_webhook(webhook_id)
+    if not w:
+        raise HTTPException(404, "Webhook not found")
+    if body.url is not None and not body.url.startswith(("http://", "https://")):
+        raise HTTPException(400, "url must start with http:// or https://")
+    for field, val in body.model_dump(exclude_unset=True).items():
+        w[field] = val
+    wh_store.save_webhook(w)
+    user_audit.log(admin["user_id"], "webhook_updated", admin["email"],
+                   webhook_id=webhook_id, changes=body.model_dump(exclude_unset=True))
+    return w
+
+
+@router.delete("/webhooks/{webhook_id}", status_code=204)
+async def delete_webhook(webhook_id: str, request: Request):
+    admin = _admin(request)
+    if not wh_store.delete_webhook(webhook_id):
+        raise HTTPException(404, "Webhook not found")
+    user_audit.log(admin["user_id"], "webhook_deleted", admin["email"],
+                   webhook_id=webhook_id)
+
+
+@router.post("/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: str, request: Request):
+    admin = _admin(request)
+    w = wh_store.get_webhook(webhook_id)
+    if not w:
+        raise HTTPException(404, "Webhook not found")
+    test_event = {
+        "id":         str(uuid.uuid4()),
+        "action":     "webhook_test",
+        "actor":      admin["email"],
+        "timestamp":  _now(),
+        "ip":         None,
+        "details":    {"message": "This is a test delivery from Job Apply admin."},
+        "user_id":    admin["user_id"],
+        "user_email": admin["email"],
+    }
+    # Deliver synchronously so we can return the result
+    import threading as _th  # noqa: PLC0415
+    result: dict = {}
+    def _run():
+        from scripts.webhooks import _deliver  # noqa: PLC0415
+        _deliver(w, test_event)
+        fresh = wh_store.get_webhook(webhook_id)
+        if fresh and fresh.get("recent_deliveries"):
+            result["delivery"] = fresh["recent_deliveries"][0]
+    t = _th.Thread(target=_run); t.start(); t.join(timeout=15)
+    user_audit.log(admin["user_id"], "webhook_tested", admin["email"],
+                   webhook_id=webhook_id)
+    return result.get("delivery", {"success": None, "error": "timeout"})
+
+
+@router.get("/webhooks/{webhook_id}/deliveries")
+async def get_deliveries(webhook_id: str, request: Request):
+    _admin(request)
+    w = wh_store.get_webhook(webhook_id)
+    if not w:
+        raise HTTPException(404, "Webhook not found")
+    return w.get("recent_deliveries", [])

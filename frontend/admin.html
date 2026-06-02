@@ -331,6 +331,7 @@
     <button class="tab" data-tab="applications">All Applications</button>
     <button class="tab" data-tab="runs">All Agent Runs</button>
     <button class="tab" data-tab="auditlog">Audit Log</button>
+    <button class="tab" data-tab="webhooks">Webhooks</button>
   </div>
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
@@ -607,6 +608,36 @@
     </div>
   </div>
 
+  <!-- ── Webhooks tab ─────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-webhooks">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:.8rem;color:var(--muted)" id="webhookCount"></div>
+      <button class="btn btn-sm" id="createWebhookBtn">+ New Webhook</button>
+    </div>
+    <div id="webhooksAlert"></div>
+    <table id="webhooksTable">
+      <thead><tr>
+        <th>Name</th><th>URL</th><th>Events</th><th>Status</th>
+        <th>Deliveries</th><th>Last Triggered</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="webhooksBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+
+    <!-- Delivery log (expandable) -->
+    <div id="deliveryLogWrap" class="hidden" style="margin-top:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <div style="font-weight:700;font-size:.9rem;color:var(--primary)" id="deliveryLogTitle">Delivery Log</div>
+        <button class="btn btn-ghost btn-sm" id="closeDeliveryLog">✕ Close</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Event</th><th>Status</th><th>HTTP</th><th>Duration</th><th>Error</th>
+        </tr></thead>
+        <tbody id="deliveryLogBody"></tbody>
+      </table>
+    </div>
+  </div>
+
 </div><!-- /container -->
 
 <!-- ── Edit drawer ───────────────────────────────────────────── -->
@@ -694,6 +725,68 @@
   <div class="drawer-footer hidden" id="footerEdit">
     <button class="btn" id="drawerSaveBtn">Save</button>
     <button class="btn btn-ghost" id="drawerDiscardBtn">Discard Changes</button>
+  </div>
+</div>
+
+<!-- ── Webhook create/edit modal ─────────────────────────────── -->
+<div class="modal-wrap" id="webhookModal">
+  <div class="modal" style="max-width:640px;max-height:90vh;overflow-y:auto">
+    <h3 id="webhookModalTitle">New Webhook</h3>
+
+    <div style="display:grid;gap:.75rem;margin-bottom:1rem">
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Name</label>
+        <input type="text" id="whName" placeholder="e.g. Grafana Loki" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Endpoint URL</label>
+        <input type="url" id="whUrl" placeholder="https://hooks.example.com/…" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Secret <span style="font-weight:400;color:var(--muted)">(optional — used for HMAC-SHA256 signature)</span></label>
+        <input type="text" id="whSecret" placeholder="Leave blank to skip signing" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
+      </div>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="whActive" checked style="width:16px;height:16px;accent-color:var(--primary)">
+        <label for="whActive" style="font-size:.875rem;cursor:pointer">Active</label>
+      </div>
+    </div>
+
+    <!-- Events -->
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="font-size:.8rem;font-weight:600">Subscribed Events</label>
+        <div style="display:flex;gap:.5rem">
+          <button type="button" class="btn btn-ghost btn-sm" id="whSelectAll">All</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="whSelectNone">None</button>
+        </div>
+      </div>
+      <div id="whEventsGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:.25rem .75rem;max-height:200px;overflow-y:auto;padding:.5rem;border:1px solid var(--card-border);border-radius:6px;background:var(--bg-page)"></div>
+    </div>
+
+    <!-- Query params -->
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="font-size:.8rem;font-weight:600">Query Parameters <span style="font-weight:400;color:var(--muted)">(appended to URL)</span></label>
+        <button type="button" class="btn btn-ghost btn-sm" id="addQpBtn">+ Add</button>
+      </div>
+      <div id="whQpRows"></div>
+    </div>
+
+    <!-- Headers -->
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="font-size:.8rem;font-weight:600">Custom Headers <span style="font-weight:400;color:var(--muted)">(e.g. Authorization)</span></label>
+        <button type="button" class="btn btn-ghost btn-sm" id="addHdrBtn">+ Add</button>
+      </div>
+      <div id="whHdrRows"></div>
+    </div>
+
+    <div class="alert hidden" id="webhookModalAlert"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="webhookModalCancel">Cancel</button>
+      <button class="btn btn-sm" id="webhookModalSave">Save Webhook</button>
+    </div>
   </div>
 </div>
 
@@ -2001,6 +2094,280 @@ document.addEventListener('click', async e => {
     }
   } catch (err) { console.error('export error', err); }
   finally { btn.disabled = false; btn.textContent = origText; }
+});
+
+// ── Webhooks ─────────────────────────────────────────────────────────
+let _webhooks   = [];
+let _editingWh  = null;  // null = create, string = edit ID
+
+// All known event types (reuse AUDIT_ACTION_TYPES populated at runtime, or hardcode)
+const ALL_EVENT_TYPES = [
+  'login_success','login_google','login_failed','logout',
+  'user_registered','user_registered_google','google_account_linked',
+  'email_verified','verification_email_resent','profile_updated',
+  'resume_uploaded','password_changed',
+  'run_started','run_completed','run_failed',
+  'prep_started','prep_completed','prep_failed','file_downloaded',
+  'created','updated','deleted',
+  'comment_added','comment_edited','comment_deleted',
+  'run_linked','run_unlinked','imported',
+  'admin_updated','admin_deleted',
+  'admin_comment_added','admin_comment_edited','admin_comment_deleted',
+  'admin_user_updated','admin_verification_resent','role_changed',
+  'admin_csv_export',
+  'webhook_created','webhook_updated','webhook_deleted','webhook_tested',
+];
+
+async function loadWebhooks() {
+  try {
+    const res = await apiFetch('/api/admin/webhooks');
+    _webhooks = await res.json();
+    renderWebhooks();
+  } catch (e) { if (e.message !== '401') console.error(e); }
+}
+
+function renderWebhooks() {
+  const tbody = document.getElementById('webhooksBody');
+  document.getElementById('webhookCount').textContent =
+    `${_webhooks.length} webhook${_webhooks.length !== 1 ? 's' : ''}`;
+  if (!_webhooks.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No webhooks yet. Create one to start streaming events.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  for (const w of _webhooks) {
+    const stats   = w.delivery_stats || {};
+    const active  = w.active !== false;
+    const evLabel = (w.events||[]).includes('*') ? 'All events'
+                  : `${(w.events||[]).length} event type${(w.events||[]).length !== 1 ? 's' : ''}`;
+    const tr = document.createElement('tr');
+    tr.style.cssText = active ? '' : 'opacity:.55';
+    tr.innerHTML = `
+      <td style="font-weight:600">${esc(w.name)}</td>
+      <td style="font-size:.775rem;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(w.url)}">${esc(w.url)}</td>
+      <td style="font-size:.8rem">${esc(evLabel)}</td>
+      <td>${active
+        ? '<span class="badge s-offer" style="font-size:.7rem">Active</span>'
+        : '<span class="badge s-not-applying" style="font-size:.7rem">Paused</span>'}</td>
+      <td style="font-size:.8rem;color:var(--muted)">
+        <span style="color:var(--success)">${stats.success||0} ok</span> /
+        <span style="color:var(--error)">${stats.failure||0} fail</span>
+      </td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${w.last_triggered_at ? fmtDateTime(w.last_triggered_at) : '—'}</td>
+      <td>
+        <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" data-wh-action="edit"     data-wh-id="${w.id}">Edit</button>
+          <button class="btn btn-ghost btn-sm" data-wh-action="test"     data-wh-id="${w.id}">Test</button>
+          <button class="btn btn-ghost btn-sm" data-wh-action="log"      data-wh-id="${w.id}" data-wh-name="${esc(w.name)}">Log</button>
+          <button class="btn btn-danger btn-sm" data-wh-action="delete"  data-wh-id="${w.id}" data-wh-name="${esc(w.name)}">Delete</button>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// Delegated click — webhook table actions
+document.getElementById('webhooksTable').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-wh-action]');
+  if (!btn) return;
+  const id   = btn.dataset.whId;
+  const name = btn.dataset.whName || '';
+  const act  = btn.dataset.whAction;
+
+  if (act === 'edit') {
+    const wh = await (await apiFetch(`/api/admin/webhooks/${id}`)).json();
+    openWebhookModal(wh);
+  }
+  if (act === 'test') {
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const res = await apiFetch(`/api/admin/webhooks/${id}/test`, { method: 'POST' });
+      const d   = await res.json();
+      showAlert('webhooksAlert',
+        d.success ? `✓ Test delivered successfully (${d.duration_ms}ms)` : `✗ Test failed: ${d.error || `HTTP ${d.status_code}`}`,
+        d.success ? 'ok' : 'err');
+      await loadWebhooks();
+    } catch (_) {}
+    btn.disabled = false; btn.textContent = 'Test';
+  }
+  if (act === 'log') {
+    await showDeliveryLog(id, name);
+  }
+  if (act === 'delete') {
+    if (!confirm(`Delete webhook "${name}"? This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/admin/webhooks/${id}`, { method: 'DELETE' });
+      showAlert('webhooksAlert', 'Webhook deleted.', 'ok');
+      await loadWebhooks();
+    } catch (_) {}
+  }
+});
+
+// Delivery log
+async function showDeliveryLog(id, name) {
+  const wrap = document.getElementById('deliveryLogWrap');
+  document.getElementById('deliveryLogTitle').textContent = `Delivery Log — ${name}`;
+  document.getElementById('deliveryLogBody').innerHTML = '<tr><td colspan="6" class="empty">Loading…</td></tr>';
+  wrap.classList.remove('hidden');
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const res       = await apiFetch(`/api/admin/webhooks/${id}/deliveries`);
+    const deliveries = await res.json();
+    const tbody = document.getElementById('deliveryLogBody');
+    if (!deliveries.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No deliveries yet.</td></tr>'; return;
+    }
+    tbody.innerHTML = '';
+    for (const d of deliveries) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-size:.78rem;white-space:nowrap;color:var(--muted)">${fmtDateTime(d.timestamp)}</td>
+        <td style="font-size:.78rem">${esc(d.event_action||'—')}</td>
+        <td>${d.success
+          ? '<span class="badge s-offer" style="font-size:.65rem">✓ Success</span>'
+          : '<span class="badge s-rejected" style="font-size:.65rem">✗ Failed</span>'}</td>
+        <td style="font-size:.78rem;color:var(--muted)">${d.status_code ?? '—'}</td>
+        <td style="font-size:.78rem;color:var(--muted)">${d.duration_ms != null ? d.duration_ms+'ms' : '—'}</td>
+        <td style="font-size:.72rem;color:var(--error);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.error||'')}">${esc(d.error||'—')}</td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (_) {}
+}
+document.getElementById('closeDeliveryLog').addEventListener('click', () => {
+  document.getElementById('deliveryLogWrap').classList.add('hidden');
+});
+
+// ── Webhook modal ────────────────────────────────────────────────────
+
+function _kvRow(containerId, key = '', val = '') {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-bottom:.3rem';
+  const st = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit';
+  row.innerHTML = `
+    <input type="text" class="kv-key" placeholder="Key" value="${esc(key)}" style="${st}">
+    <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}" style="${st}">
+    <button type="button" style="padding:.25rem .5rem;border:1px solid var(--error);border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById(containerId).appendChild(row);
+}
+
+function _collectKv(containerId) {
+  const obj = {};
+  document.querySelectorAll(`#${containerId} .kv-key`).forEach((k, i) => {
+    const kEl = k; const vEl = k.parentElement.querySelector('.kv-val');
+    if (kEl.value.trim()) obj[kEl.value.trim()] = vEl.value;
+  });
+  return obj;
+}
+
+function openWebhookModal(wh = null) {
+  _editingWh = wh ? wh.id : null;
+  document.getElementById('webhookModalTitle').textContent = wh ? 'Edit Webhook' : 'New Webhook';
+  document.getElementById('whName').value   = wh?.name   || '';
+  document.getElementById('whUrl').value    = wh?.url    || '';
+  document.getElementById('whSecret').value = wh?.secret || '';
+  document.getElementById('whActive').checked = wh ? (wh.active !== false) : true;
+  document.getElementById('webhookModalAlert').classList.add('hidden');
+  document.getElementById('webhookModalSave').disabled = false;
+  document.getElementById('webhookModalSave').textContent = 'Save Webhook';
+
+  // Build events checkboxes
+  const grid = document.getElementById('whEventsGrid');
+  grid.innerHTML = '';
+  const allChecked = !wh || (wh.events||[]).includes('*');
+  // "All events" special option
+  const allRow = document.createElement('label');
+  allRow.style.cssText = 'display:flex;align-items:center;gap:.35rem;font-size:.8rem;cursor:pointer;grid-column:1/-1;font-weight:600';
+  allRow.innerHTML = `<input type="checkbox" id="whEvAll" style="accent-color:var(--primary)" ${allChecked ? 'checked' : ''}> All events (*)`;
+  grid.appendChild(allRow);
+  for (const ev of ALL_EVENT_TYPES) {
+    const checked = allChecked || (wh?.events||[]).includes(ev);
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:.35rem;font-size:.775rem;cursor:pointer';
+    lbl.innerHTML = `<input type="checkbox" class="wh-ev-cb" value="${ev}" style="accent-color:var(--primary)" ${checked ? 'checked' : ''}> ${ev}`;
+    grid.appendChild(lbl);
+  }
+
+  // Query params
+  document.getElementById('whQpRows').innerHTML = '';
+  Object.entries(wh?.query_params || {}).forEach(([k, v]) => _kvRow('whQpRows', k, v));
+
+  // Headers
+  document.getElementById('whHdrRows').innerHTML = '';
+  Object.entries(wh?.headers || {}).forEach(([k, v]) => _kvRow('whHdrRows', k, v));
+
+  document.getElementById('webhookModal').classList.add('open');
+}
+
+document.getElementById('whEvAll').addEventListener ? null : null;  // populated dynamically
+document.getElementById('whEventsGrid').addEventListener('change', e => {
+  if (e.target.id === 'whEvAll') {
+    document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = e.target.checked);
+  }
+});
+document.getElementById('whSelectAll').addEventListener('click', () => {
+  document.getElementById('whEvAll').checked = true;
+  document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = true);
+});
+document.getElementById('whSelectNone').addEventListener('click', () => {
+  document.getElementById('whEvAll').checked = false;
+  document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = false);
+});
+document.getElementById('addQpBtn').addEventListener('click', () => _kvRow('whQpRows'));
+document.getElementById('addHdrBtn').addEventListener('click', () => _kvRow('whHdrRows'));
+
+document.getElementById('webhookModalCancel').addEventListener('click', () => {
+  document.getElementById('webhookModal').classList.remove('open');
+});
+document.getElementById('createWebhookBtn').addEventListener('click', () => openWebhookModal());
+
+document.getElementById('webhookModalSave').addEventListener('click', async () => {
+  const alertEl = document.getElementById('webhookModalAlert');
+  alertEl.classList.add('hidden');
+  const btn = document.getElementById('webhookModalSave');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const allCb    = document.getElementById('whEvAll');
+  const events   = allCb.checked
+    ? ['*']
+    : [...document.querySelectorAll('.wh-ev-cb:checked')].map(c => c.value);
+  const payload  = {
+    name:         document.getElementById('whName').value.trim(),
+    url:          document.getElementById('whUrl').value.trim(),
+    secret:       document.getElementById('whSecret').value.trim(),
+    active:       document.getElementById('whActive').checked,
+    events,
+    query_params: _collectKv('whQpRows'),
+    headers:      _collectKv('whHdrRows'),
+  };
+  if (!payload.name || !payload.url) {
+    alertEl.textContent = 'Name and URL are required.';
+    alertEl.className = 'alert alert-err'; alertEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Save Webhook'; return;
+  }
+  try {
+    const url    = _editingWh ? `/api/admin/webhooks/${_editingWh}` : '/api/admin/webhooks';
+    const method = _editingWh ? 'PUT' : 'POST';
+    const res    = await apiFetch(url, {
+      method, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Save failed');
+    document.getElementById('webhookModal').classList.remove('open');
+    showAlert('webhooksAlert', `Webhook "${payload.name}" ${_editingWh ? 'updated' : 'created'}.`, 'ok');
+    await loadWebhooks();
+  } catch (err) {
+    alertEl.textContent = err.message;
+    alertEl.className = 'alert alert-err'; alertEl.classList.remove('hidden');
+  } finally { btn.disabled = false; btn.textContent = 'Save Webhook'; }
+});
+
+// Lazy-load webhooks when tab is first opened
+document.querySelector('[data-tab="webhooks"]').addEventListener('click', () => {
+  if (!document.getElementById('webhooksBody').dataset.loaded) {
+    document.getElementById('webhooksBody').dataset.loaded = '1';
+    loadWebhooks();
+  }
 });
 
 // Register page-number button callbacks for each paginated tab
