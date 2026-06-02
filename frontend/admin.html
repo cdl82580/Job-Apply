@@ -167,6 +167,75 @@
             border-top-color: white; border-radius: 50%; animation: rot .7s linear infinite; }
     @keyframes rot { to { transform: rotate(360deg); } }
     .empty { color: var(--muted); font-size: .875rem; padding: 1rem 0; text-align: center; }
+
+    /* ── Drawer ──────────────────────────────────────────────────── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+               opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .overlay.open { opacity: 1; pointer-events: all; }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 500px; max-width: 100%;
+              background: var(--bg-card); border-left: 1px solid var(--card-border);
+              z-index: 101; display: flex; flex-direction: column;
+              transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--card-border);
+                     display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .drawer-title-row { display: flex; align-items: center; gap: .625rem; }
+    .drawer-title { font-size: 1rem; font-weight: 700; color: var(--primary); }
+    .drawer-mode-badge { font-size: .65rem; font-weight: 700; text-transform: uppercase;
+                         letter-spacing: .05em; padding: .15rem .5rem; border-radius: 999px;
+                         border: 1px solid var(--card-border); color: var(--muted); background: var(--bg-page); }
+    .drawer-close { background: none; border: none; cursor: pointer; color: var(--muted);
+                    font-size: 1.3rem; line-height: 1; padding: .2rem; border-radius: 4px; }
+    .drawer-close:hover { color: var(--text); background: var(--fill); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+    .drawer-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--card-border);
+                     display: flex; gap: .625rem; flex-shrink: 0; }
+
+    /* Form fields */
+    .field { margin-bottom: 1.125rem; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.125rem; }
+    label { display: block; font-weight: 600; font-size: .8rem; margin-bottom: .35rem; }
+    label .opt { font-weight: 400; color: var(--muted); }
+    input[type="text"], input[type="email"], input[type="url"], input[type="date"],
+    textarea, select {
+      width: 100%; padding: .5rem .75rem; border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .875rem; font-family: inherit; color: var(--text); background: var(--input-bg); }
+    input:focus, textarea:focus, select:focus {
+      outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    select { appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right .75rem center; padding-right: 2rem; }
+    textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+    .check-row { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.125rem; }
+    .check-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); }
+    .section-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+                     color: var(--muted); padding-bottom: .5rem; border-bottom: 1px solid var(--card-border);
+                     margin-bottom: 1rem; margin-top: 1.5rem; }
+    .section-label:first-child { margin-top: 0; }
+
+    /* View mode */
+    .drawer-body.view-mode [data-field] {
+      pointer-events: none; background: var(--bg-page) !important;
+      border-color: var(--card-border) !important; box-shadow: none !important; }
+
+    /* Comments */
+    .comment { background: var(--bg-page); border: 1px solid var(--card-border);
+               border-radius: 6px; padding: .75rem; margin-bottom: .5rem; }
+    .comment-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .375rem; }
+    .comment-ts { font-size: .725rem; color: var(--muted); }
+    .comment-text { font-size: .85rem; line-height: 1.5; white-space: pre-wrap; }
+    .icon-btn { background: none; border: 1px solid transparent; border-radius: 5px;
+                padding: .25rem .4rem; cursor: pointer; color: var(--muted); font-size: .8rem; line-height: 1; }
+    .icon-btn:hover { border-color: var(--border); color: var(--primary); background: var(--fill); }
+    .icon-btn.del:hover { border-color: #FECACA; color: var(--error); background: #FEF2F2; }
+    .inline-err { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;
+                  padding: .625rem .875rem; color: var(--error); font-size: .825rem;
+                  margin-bottom: 1rem; display: none; }
+    [data-theme="dark"] .inline-err { background: #2B1010; border-color: #7F1D1D; }
+    .add-comment-wrap { display: flex; flex-direction: column; gap: .5rem; }
+    .owner-chip { display: inline-flex; align-items: center; gap: .375rem; font-size: .775rem;
+                  color: var(--muted); background: var(--bg-page); border: 1px solid var(--card-border);
+                  border-radius: 5px; padding: .2rem .55rem; margin-bottom: 1rem; }
   </style>
 </head>
 <body>
@@ -251,6 +320,90 @@
   </div>
 
 </div><!-- /container -->
+
+<!-- ── Edit drawer ───────────────────────────────────────────── -->
+<div class="overlay" id="drawerOverlay"></div>
+<div class="drawer" id="editDrawer">
+  <div class="drawer-header">
+    <div class="drawer-title-row">
+      <div class="drawer-title">Application</div>
+      <span class="drawer-mode-badge" id="drawerModeBadge">View</span>
+    </div>
+    <button class="drawer-close" id="drawerClose">&#x2715;</button>
+  </div>
+  <div class="drawer-body view-mode" id="drawerBody">
+    <div class="inline-err" id="drawerErr"></div>
+    <div class="owner-chip" id="ownerChip">👤 <span id="ownerLabel"></span></div>
+
+    <div class="section-label">Company</div>
+    <div class="field">
+      <label>Company Name</label>
+      <input type="text" id="dCompany" data-field>
+    </div>
+
+    <div class="section-label">Role</div>
+    <div class="field"><label>Role Title</label><input type="text" id="dRole" data-field></div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0">
+        <label>Status</label>
+        <select id="dStatus" data-field>
+          <option>Researching</option><option>Applied</option><option>Phone Screen</option>
+          <option>Interviewing</option><option>On Hold</option><option>Offer</option>
+          <option>Rejected</option><option>Not Applying</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Priority</label>
+        <select id="dPriority" data-field>
+          <option>High</option><option selected>Medium</option><option>Low</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section-label">Details</div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0"><label>Date Applied <span class="opt">(optional)</span></label>
+        <input type="date" id="dDateApplied" data-field></div>
+      <div class="field" style="margin-bottom:0"><label>Job Source <span class="opt">(optional)</span></label>
+        <input type="text" id="dJobSource" data-field placeholder="e.g. LinkedIn"></div>
+    </div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0"><label>Location <span class="opt">(optional)</span></label>
+        <input type="text" id="dLocation" data-field></div>
+      <div class="field" style="margin-bottom:0"><label>Salary Range <span class="opt">(optional)</span></label>
+        <input type="text" id="dSalary" data-field></div>
+    </div>
+    <div class="field"><label>Job Posting URL <span class="opt">(optional)</span></label>
+      <input type="url" id="dUrl" data-field placeholder="https://…"></div>
+    <div class="check-row"><input type="checkbox" id="dDua" data-field>
+      <label for="dDua">Reported to unemployment (DUA)?</label></div>
+
+    <div class="section-label">Recruiter <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0"><label>Name</label>
+        <input type="text" id="dRecruiterName" data-field></div>
+      <div class="field" style="margin-bottom:0"><label>Email</label>
+        <input type="email" id="dRecruiterEmail" data-field></div>
+    </div>
+
+    <div class="section-label">Notes &amp; Comments</div>
+    <div id="commentList" style="margin-bottom:.75rem"></div>
+    <div class="add-comment-wrap">
+      <textarea id="newCommentText" placeholder="Add a note or comment…"></textarea>
+      <div><button class="btn btn-sm btn-ghost" id="addCommentBtn">Add Comment</button></div>
+    </div>
+  </div>
+  <!-- View footer -->
+  <div class="drawer-footer" id="footerView">
+    <button class="btn" id="drawerEditBtn">&#x270E; Edit</button>
+    <button class="btn btn-ghost" id="drawerCloseBtn">Close</button>
+  </div>
+  <!-- Edit footer -->
+  <div class="drawer-footer hidden" id="footerEdit">
+    <button class="btn" id="drawerSaveBtn">Save</button>
+    <button class="btn btn-ghost" id="drawerDiscardBtn">Discard Changes</button>
+  </div>
+</div>
 
 <!-- ── Role change modal ─────────────────────────────────────── -->
 <div class="modal-wrap" id="roleModal">
@@ -473,6 +626,9 @@ function renderApps() {
       <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.last_updated)}</td>
       <td><div style="display:flex;gap:.3rem">
         ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+        <button class="btn btn-ghost btn-sm" data-action="edit-app"
+                data-uid="${a._user_id}" data-aid="${a.id}"
+                data-uemail="${esc(a._user_email || '')}">Edit</button>
         <button class="btn btn-danger btn-sm" data-action="del-app"
                 data-uid="${a._user_id}" data-aid="${a.id}"
                 data-label="${esc(a.company)} — ${esc(a.role_title)}">Delete</button>
@@ -514,6 +670,10 @@ document.addEventListener('click', e => {
       `${btn.dataset.email} (current: ${btn.dataset.role})`;
     document.getElementById('roleSelect').value = btn.dataset.role;
     document.getElementById('roleModal').classList.add('open');
+  }
+
+  if (btn.dataset.action === 'edit-app') {
+    openDrawer(btn.dataset.uid, btn.dataset.aid, btn.dataset.uemail);
   }
 
   if (btn.dataset.action === 'del-app') {
@@ -583,6 +743,196 @@ document.getElementById('deleteConfirmBtn').addEventListener('click', async () =
     btn.disabled = false;
     btn.textContent = 'Delete';
   }
+});
+
+// ── Edit Drawer ──────────────────────────────────────────────────────
+let _drawerUserId = null;
+let _drawerAppId  = null;
+let _drawerMode   = 'view';
+
+const overlay  = document.getElementById('drawerOverlay');
+const drawer   = document.getElementById('editDrawer');
+
+function setDrawerMode(mode) {
+  _drawerMode = mode;
+  const body   = document.getElementById('drawerBody');
+  const badge  = document.getElementById('drawerModeBadge');
+  body.classList.toggle('view-mode', mode === 'view');
+  badge.textContent             = mode === 'view' ? 'View' : 'Editing';
+  badge.style.color             = mode === 'edit' ? 'var(--primary)' : '';
+  badge.style.borderColor       = mode === 'edit' ? 'var(--border)'  : '';
+  badge.style.background        = mode === 'edit' ? 'var(--fill)'    : '';
+  document.getElementById('footerView').classList.toggle('hidden', mode === 'edit');
+  document.getElementById('footerEdit').classList.toggle('hidden', mode === 'view');
+}
+
+async function openDrawer(uid, aid, userEmail) {
+  _drawerUserId = uid;
+  _drawerAppId  = aid;
+  document.getElementById('drawerErr').style.display = 'none';
+  document.getElementById('commentList').innerHTML = '';
+  document.getElementById('newCommentText').value = '';
+  document.getElementById('ownerLabel').textContent = userEmail || uid;
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  setDrawerMode('view');
+  await loadAndFillDrawer(uid, aid);
+}
+
+function closeDrawer() {
+  overlay.classList.remove('open');
+  drawer.classList.remove('open');
+  _drawerUserId = _drawerAppId = null;
+}
+
+async function loadAndFillDrawer(uid, aid) {
+  try {
+    const res = await apiFetch(`/api/admin/applications/${uid}/${aid}`);
+    const a   = await res.json();
+    fillFields(a);
+    renderComments(a.comments || []);
+  } catch (_) {
+    document.getElementById('drawerErr').textContent = 'Failed to load application.';
+    document.getElementById('drawerErr').style.display = 'block';
+  }
+}
+
+function fillFields(a) {
+  document.getElementById('dCompany').value        = a.company        || '';
+  document.getElementById('dRole').value           = a.role_title     || '';
+  document.getElementById('dStatus').value         = a.status         || 'Researching';
+  document.getElementById('dPriority').value       = a.priority       || 'Medium';
+  document.getElementById('dDateApplied').value    = a.date_applied ? a.date_applied.split('T')[0] : '';
+  document.getElementById('dJobSource').value      = a.job_source     || '';
+  document.getElementById('dLocation').value       = a.location       || '';
+  document.getElementById('dSalary').value         = a.salary_range   || '';
+  document.getElementById('dUrl').value            = a.url            || '';
+  document.getElementById('dDua').checked          = !!a.dua;
+  document.getElementById('dRecruiterName').value  = a.recruiter_name  || '';
+  document.getElementById('dRecruiterEmail').value = a.recruiter_email || '';
+}
+
+async function saveDrawer() {
+  const errEl = document.getElementById('drawerErr');
+  errEl.style.display = 'none';
+  const url = document.getElementById('dUrl').value.trim();
+  if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+    errEl.textContent = 'URL must start with http:// or https://'; errEl.style.display = 'block'; return;
+  }
+  const payload = {
+    company:         document.getElementById('dCompany').value.trim(),
+    role_title:      document.getElementById('dRole').value.trim(),
+    status:          document.getElementById('dStatus').value,
+    priority:        document.getElementById('dPriority').value,
+    date_applied:    document.getElementById('dDateApplied').value || null,
+    dua:             document.getElementById('dDua').checked,
+    job_source:      document.getElementById('dJobSource').value.trim(),
+    location:        document.getElementById('dLocation').value.trim(),
+    salary_range:    document.getElementById('dSalary').value.trim(),
+    url:             url,
+    recruiter_name:  document.getElementById('dRecruiterName').value.trim(),
+    recruiter_email: document.getElementById('dRecruiterEmail').value.trim(),
+  };
+  const btn = document.getElementById('drawerSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await apiFetch(`/api/admin/applications/${_drawerUserId}/${_drawerAppId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!res.ok) { errEl.textContent = (await res.json()).detail || 'Save failed'; errEl.style.display = 'block'; return; }
+
+    const note = document.getElementById('newCommentText').value.trim();
+    if (note) await addComment(note);
+
+    await loadApps();           // refresh the table
+    await loadAndFillDrawer(_drawerUserId, _drawerAppId);
+    setDrawerMode('view');
+  } catch (e) {
+    if (e.message !== '401') { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+  } finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+// ── Comments ─────────────────────────────────────────────────────────
+
+function renderComments(comments) {
+  const list = document.getElementById('commentList');
+  list.innerHTML = '';
+  for (const c of comments) list.appendChild(buildComment(c));
+}
+
+function buildComment(c) {
+  const div = document.createElement('div');
+  div.className = 'comment';
+  div.dataset.id = c.id;
+  div.innerHTML = `
+    <div class="comment-header">
+      <span class="comment-ts">${fmtDate(c.created_at)}${c.updated_at !== c.created_at ? ' (edited)' : ''} · ${esc(c.author || '')}</span>
+      <div style="display:flex;gap:.25rem">
+        <button class="icon-btn" data-ca="edit">&#x270E;</button>
+        <button class="icon-btn del" data-ca="del">&#x1F5D1;</button>
+      </div>
+    </div>
+    <div class="comment-text" data-cp="text">${esc(c.text)}</div>`;
+  div.querySelector('[data-ca="edit"]').addEventListener('click', () => startEditComment(div, c));
+  div.querySelector('[data-ca="del"]').addEventListener('click',  () => deleteComment(c.id, div));
+  return div;
+}
+
+function startEditComment(div, c) {
+  if (div.querySelector('textarea')) return;
+  const textEl = div.querySelector('[data-cp="text"]');
+  const ta = document.createElement('textarea');
+  ta.className = 'comment-edit-area'; ta.value = c.text; ta.style.marginTop = '.5rem';
+  textEl.replaceWith(ta); ta.focus();
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-sm'; saveBtn.style.marginTop = '.375rem'; saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', async () => {
+    if (!ta.value.trim()) return;
+    saveBtn.disabled = true;
+    try {
+      const res = await apiFetch(
+        `/api/admin/applications/${_drawerUserId}/${_drawerAppId}/comments/${c.id}`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: ta.value.trim() }) }
+      );
+      const updated = await res.json();
+      c.text = updated.text; c.updated_at = updated.updated_at;
+      div.replaceWith(buildComment(c));
+    } catch (_) {}
+  });
+  ta.after(saveBtn);
+}
+
+async function deleteComment(commentId, div) {
+  try {
+    await apiFetch(`/api/admin/applications/${_drawerUserId}/${_drawerAppId}/comments/${commentId}`, { method: 'DELETE' });
+    div.remove();
+  } catch (_) {}
+}
+
+async function addComment(text) {
+  try {
+    const res = await apiFetch(`/api/admin/applications/${_drawerUserId}/${_drawerAppId}/comments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+    });
+    const comment = await res.json();
+    document.getElementById('commentList').appendChild(buildComment(comment));
+    document.getElementById('newCommentText').value = '';
+  } catch (_) {}
+}
+
+// ── Drawer event wiring ───────────────────────────────────────────────
+overlay.addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+document.getElementById('drawerCloseBtn').addEventListener('click', closeDrawer);
+document.getElementById('drawerEditBtn').addEventListener('click', () => setDrawerMode('edit'));
+document.getElementById('drawerSaveBtn').addEventListener('click', saveDrawer);
+document.getElementById('drawerDiscardBtn').addEventListener('click', async () => {
+  await loadAndFillDrawer(_drawerUserId, _drawerAppId);
+  setDrawerMode('view');
+});
+document.getElementById('addCommentBtn').addEventListener('click', async () => {
+  const text = document.getElementById('newCommentText').value.trim();
+  if (text && _drawerUserId) await addComment(text);
 });
 
 // ── Init ─────────────────────────────────────────────────────────────

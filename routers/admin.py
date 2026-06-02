@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import time
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -51,6 +52,12 @@ def _now() -> str:
 class RoleUpdate(BaseModel):
     role: str
 
+
+class CommentCreate(BaseModel):
+    text: str
+
+class CommentUpdate(BaseModel):
+    text: str
 
 class AppUpdate(BaseModel):
     company: str | None = None
@@ -212,6 +219,92 @@ async def delete_application(user_id: str, app_id: str, request: Request):
     })
     app_store.save_deleted_tombstone(user_id, record)
     app_store.delete_application(user_id, app_id)
+
+
+# ---------------------------------------------------------------------------
+# Admin comment management (any user's application)
+# ---------------------------------------------------------------------------
+
+def _get_app_or_404(user_id: str, app_id: str) -> dict:
+    record = app_store.get_application(user_id, app_id)
+    if not record:
+        raise HTTPException(404, "Application not found")
+    return record
+
+
+@router.post("/applications/{user_id}/{app_id}/comments", status_code=201)
+async def add_comment(user_id: str, app_id: str, body: CommentCreate, request: Request):
+    admin  = _admin(request)
+    record = _get_app_or_404(user_id, app_id)
+
+    if not body.text.strip():
+        raise HTTPException(400, "Comment text cannot be empty")
+
+    now = _now()
+    comment = {
+        "id":         str(uuid.uuid4()),
+        "text":       body.text.strip(),
+        "created_at": now,
+        "updated_at": now,
+        "author":     admin["email"],
+    }
+    record.setdefault("comments", []).append(comment)
+    record.setdefault("audit_log", []).append({
+        "id": str(uuid.uuid4()), "action": "admin_comment_added",
+        "actor": admin["email"], "timestamp": now, "ip": None,
+        "details": {"preview": comment["text"][:60]},
+    })
+    record["updated_at"] = now
+    record["updated_by"] = admin["email"]
+    app_store.save_application(user_id, record)
+    return comment
+
+
+@router.put("/applications/{user_id}/{app_id}/comments/{comment_id}")
+async def update_comment(user_id: str, app_id: str, comment_id: str,
+                         body: CommentUpdate, request: Request):
+    admin  = _admin(request)
+    record = _get_app_or_404(user_id, app_id)
+
+    if not body.text.strip():
+        raise HTTPException(400, "Comment text cannot be empty")
+
+    for c in record.get("comments", []):
+        if c["id"] == comment_id:
+            old_text   = c["text"]
+            c["text"]       = body.text.strip()
+            c["updated_at"] = _now()
+            record.setdefault("audit_log", []).append({
+                "id": str(uuid.uuid4()), "action": "admin_comment_edited",
+                "actor": admin["email"], "timestamp": _now(), "ip": None,
+                "details": {"from": old_text[:60], "to": c["text"][:60]},
+            })
+            record["updated_at"] = _now()
+            record["updated_by"] = admin["email"]
+            app_store.save_application(user_id, record)
+            return c
+
+    raise HTTPException(404, "Comment not found")
+
+
+@router.delete("/applications/{user_id}/{app_id}/comments/{comment_id}", status_code=204)
+async def delete_comment(user_id: str, app_id: str, comment_id: str, request: Request):
+    admin  = _admin(request)
+    record = _get_app_or_404(user_id, app_id)
+
+    before = len(record.get("comments", []))
+    record["comments"] = [c for c in record.get("comments", []) if c["id"] != comment_id]
+    if len(record["comments"]) == before:
+        raise HTTPException(404, "Comment not found")
+
+    record.setdefault("audit_log", []).append({
+        "id": str(uuid.uuid4()), "action": "admin_comment_deleted",
+        "actor": admin["email"], "timestamp": _now(), "ip": None,
+        "details": {"comment_id": comment_id},
+    })
+    record["updated_at"] = _now()
+    record["updated_by"] = admin["email"]
+    app_store.save_application(user_id, record)
 
 
 # ---------------------------------------------------------------------------
