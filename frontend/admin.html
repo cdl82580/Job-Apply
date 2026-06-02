@@ -1768,9 +1768,9 @@ async function downloadXLSX(filename, sheetTitle, description, headers, rows) {
   wb.created = new Date();
   const ws = wb.addWorksheet(sheetTitle, { views: [{ state: 'frozen', ySplit: 4, xSplit: 1 }] });
 
-  // Compute column widths from content
+  // Compute column widths from content (no `header` property — avoids implicit blank row 1)
   ws.columns = headers.map((h, i) => ({
-    header: '', width: Math.min(55, Math.max(12, h.length + 2,
+    width: Math.min(55, Math.max(12, h.length + 2,
       ...rows.slice(0, 200).map(r => String(r[i] ?? '').length + 1)))
   }));
 
