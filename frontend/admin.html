@@ -130,6 +130,27 @@
     /* Match button height to filter inputs across all 4 tabs */
     .filter-row .btn { padding: .4rem .85rem; font-size: .875rem; }
 
+    /* ── Webhook modal rows (filters, query params, headers) ─────── */
+    .wh-row {
+      display: grid; gap: .4rem; margin-bottom: .35rem; align-items: center;
+    }
+    .wh-row input, .wh-row select {
+      height: 32px; padding: 0 .5rem;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      font-size: .8rem; font-family: inherit;
+      background: var(--input-bg); color: var(--text);
+      box-sizing: border-box;
+    }
+    .wh-row select { appearance: none; }
+    .wh-row .wh-del {
+      height: 32px; width: 32px; flex-shrink: 0;
+      border: 1px solid var(--input-border); border-radius: 5px;
+      background: none; color: var(--muted); cursor: pointer;
+      font-size: .85rem; display: flex; align-items: center; justify-content: center;
+      transition: border-color .1s, color .1s;
+    }
+    .wh-row .wh-del:hover { border-color: var(--error); color: var(--error); }
+
     /* ── Export dropdown ─────────────────────────────────────────── */
     .export-wrap { position: relative; display: inline-flex; }
     .export-menu {
@@ -2124,38 +2145,33 @@ const FILTER_OPTIONS = {
 };
 
 function _filterRow(filterType = 'actor', value = '') {
-  const row    = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:160px 1fr auto;gap:.4rem;margin-bottom:.3rem;align-items:center';
-  const bSt    = '1px solid var(--input-border)';
-  const inpSt  = `padding:.35rem .5rem;border:${bSt};border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit`;
-  const selSt  = inpSt + ';appearance:none';
-  const delSt  = `padding:.25rem .5rem;border:${bSt.replace('--input', '--error')};border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem`;
+  const row = document.createElement('div');
+  row.className = 'wh-row';
+  row.style.gridTemplateColumns = '150px 1fr 32px';
 
-  // Filter type select
   const typeOpts = Object.entries(FILTER_OPTIONS)
     .map(([k, v]) => `<option value="${k}" ${k === filterType ? 'selected' : ''}>${v.label}</option>`)
     .join('');
-  const typeEl = `<select class="wh-flt-type" style="${selSt}">${typeOpts}</select>`;
 
-  // Value input — built based on current type
   function buildValEl(ft, val) {
     const cfg = FILTER_OPTIONS[ft] || FILTER_OPTIONS.actor;
     if (cfg.type === 'select') {
       const opts = cfg.options.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('');
-      return `<select class="wh-flt-val" style="${selSt}">${opts}</select>`;
+      return `<select class="wh-flt-val">${opts}</select>`;
     }
-    const mono = ft === 'app_id' ? ';font-family:\'SF Mono\',\'Fira Code\',monospace' : '';
-    return `<input type="text" class="wh-flt-val" value="${esc(val)}" placeholder="${FILTER_OPTIONS[ft]?.placeholder||''}" style="${inpSt}${mono}">`;
+    const mono = ft === 'app_id' ? 'font-family:\'SF Mono\',\'Fira Code\',monospace;' : '';
+    return `<input type="text" class="wh-flt-val" value="${esc(val)}" placeholder="${esc(FILTER_OPTIONS[ft]?.placeholder||'')}" style="${mono}">`;
   }
 
-  row.innerHTML = `${typeEl}${buildValEl(filterType, value)}<button type="button" style="${delSt}" onclick="this.parentElement.remove()">✕</button>`;
+  row.innerHTML = `
+    <select class="wh-flt-type">${typeOpts}</select>
+    ${buildValEl(filterType, value)}
+    <button type="button" class="wh-del" onclick="this.parentElement.remove()">✕</button>`;
 
-  // Swap value control when type changes
   row.querySelector('.wh-flt-type').addEventListener('change', function() {
-    const oldVal = row.querySelector('.wh-flt-val');
-    const newVal = document.createElement('div');
-    newVal.innerHTML = buildValEl(this.value, '');
-    oldVal.replaceWith(newVal.firstElementChild);
+    const newEl = document.createElement('div');
+    newEl.innerHTML = buildValEl(this.value, '');
+    row.querySelector('.wh-flt-val').replaceWith(newEl.firstElementChild);
   });
 
   document.getElementById('whFilterRows').appendChild(row);
@@ -2373,23 +2389,19 @@ const QP_OPTIONS = [
 ];
 
 function _qpRow(containerId, key = '', val = '') {
-  const row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-bottom:.3rem';
-  const selSt  = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit;appearance:none';
-  const inpSt  = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit';
-  const delSt  = 'padding:.25rem .5rem;border:1px solid var(--error);border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem';
+  const row  = document.createElement('div');
+  row.className = 'wh-row';
+  row.style.gridTemplateColumns = '1fr 1fr 32px';
   const opts   = QP_OPTIONS.map(o =>
     `<option value="${o.key}" ${o.key === key ? 'selected' : ''}>${o.key}</option>`
   ).join('');
   const initPh = QP_OPTIONS.find(o => o.key === key)?.placeholder || 'Value';
   row.innerHTML = `
-    <select class="kv-key" style="${selSt}">${opts}</select>
-    <input type="text" class="kv-val" placeholder="${esc(initPh)}" value="${esc(val)}" style="${inpSt}">
-    <button type="button" style="${delSt}" onclick="this.parentElement.remove()">✕</button>`;
-  // Update placeholder when key changes
+    <select class="kv-key">${opts}</select>
+    <input type="text" class="kv-val" placeholder="${esc(initPh)}" value="${esc(val)}">
+    <button type="button" class="wh-del" onclick="this.parentElement.remove()">✕</button>`;
   row.querySelector('.kv-key').addEventListener('change', function() {
-    const ph = QP_OPTIONS.find(o => o.key === this.value)?.placeholder || 'Value';
-    row.querySelector('.kv-val').placeholder = ph;
+    row.querySelector('.kv-val').placeholder = QP_OPTIONS.find(o => o.key === this.value)?.placeholder || 'Value';
   });
   document.getElementById(containerId).appendChild(row);
 }
@@ -2397,12 +2409,12 @@ function _qpRow(containerId, key = '', val = '') {
 // Generic key-value row — used for custom headers (open text)
 function _kvRow(containerId, key = '', val = '') {
   const row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-bottom:.3rem';
-  const st = 'padding:.35rem .5rem;border:1px solid var(--input-border);border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit';
+  row.className = 'wh-row';
+  row.style.gridTemplateColumns = '1fr 1fr 32px';
   row.innerHTML = `
-    <input type="text" class="kv-key" placeholder="Header name" value="${esc(key)}" style="${st}">
-    <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}" style="${st}">
-    <button type="button" style="padding:.25rem .5rem;border:1px solid var(--error);border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem" onclick="this.parentElement.remove()">✕</button>`;
+    <input type="text" class="kv-key" placeholder="Header name" value="${esc(key)}">
+    <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}">
+    <button type="button" class="wh-del" onclick="this.parentElement.remove()">✕</button>`;
   document.getElementById(containerId).appendChild(row);
 }
 
