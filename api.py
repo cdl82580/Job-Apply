@@ -531,6 +531,8 @@ async def get_profile(request: Request):
     return {
         "display_name":    record.get("display_name", ""),
         "email":           user_data["email"],
+        "role":            record.get("role", "user"),
+        "email_verified":  record.get("email_verified", True),
         "profile_text":    profile_text,
         "has_resume":      storage.has_resume(user_data["user_id"]),
         "resume_filename": record.get("resume_filename"),

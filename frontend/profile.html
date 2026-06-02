@@ -172,8 +172,31 @@
     }
     @keyframes rot { to { transform: rotate(360deg); } }
 
-    .account-info { font-size: .875rem; color: var(--muted); margin-bottom: 1.25rem; }
+    .account-info { font-size: .875rem; color: var(--muted); margin-bottom: 1rem; }
     .account-info strong { color: var(--text); }
+
+    /* Email verification row */
+    .email-verify-row {
+      display: flex; align-items: center; gap: .625rem;
+      margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .verify-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      font-size: .775rem; font-weight: 700; padding: .25rem .65rem;
+      border-radius: 999px; white-space: nowrap;
+    }
+    .verify-badge.verified   { background: #D1FAE5; color: #065F46; }
+    .verify-badge.unverified { background: #FEF3C7; color: #92400E; }
+    [data-theme="dark"] .verify-badge.verified   { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .verify-badge.unverified { background: #2D2010; color: #FCD34D; }
+    .resend-btn {
+      font-size: .775rem; font-weight: 600; padding: .25rem .7rem;
+      border: 1px solid #D97706; border-radius: 5px; background: none;
+      color: #92400E; cursor: pointer; transition: background .12s; white-space: nowrap;
+    }
+    [data-theme="dark"] .resend-btn { color: #FCD34D; border-color: #92400E; }
+    .resend-btn:hover:not(:disabled) { background: rgba(217,119,6,.12); }
+    .resend-btn:disabled { opacity: .5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -199,6 +222,11 @@
   <div class="card">
     <p class="card-title">Account</p>
     <p class="account-info" id="accountInfo">Loading…</p>
+    <div class="email-verify-row" id="emailVerifyRow" style="display:none">
+      <span class="verify-badge" id="verifyBadge"></span>
+      <button class="resend-btn hidden" id="resendBtn">Resend verification email</button>
+      <span class="toast" id="resendToast" style="margin:0"></span>
+    </div>
     <form id="nameForm">
       <div class="field">
         <label for="display_name">Display Name</label>
@@ -294,15 +322,58 @@
   async function loadProfile() {
     const res = await apiFetch('/api/profile');
     const d   = await res.json();
+
     document.getElementById('accountInfo').innerHTML = `Signed in as <strong>${d.email}</strong>`;
     document.getElementById('display_name').value  = d.display_name ?? '';
     document.getElementById('profile_text').value  = d.profile_text ?? '';
+
+    // Email verification indicator
+    const row   = document.getElementById('emailVerifyRow');
+    const badge = document.getElementById('verifyBadge');
+    const resendBtn = document.getElementById('resendBtn');
+    row.style.display = 'flex';
+    if (d.email_verified === false) {
+      badge.textContent = '✗ Email not verified';
+      badge.className   = 'verify-badge unverified';
+      resendBtn.classList.remove('hidden');
+    } else {
+      badge.textContent = '✓ Email verified';
+      badge.className   = 'verify-badge verified';
+    }
+
     const fname = d.resume_filename ? ` — ${d.resume_filename}` : '';
     document.getElementById('resumeStatus').innerHTML = d.has_resume
       ? `<span class="dot"></span>Resume on file<span style="color:var(--muted);font-weight:400">${fname}</span>`
       : '<span style="color:var(--error)">⚠ No resume uploaded yet</span>';
   }
   loadProfile();
+
+  document.getElementById('resendBtn').addEventListener('click', async function() {
+    this.disabled = true; this.textContent = 'Sending…';
+    const toastEl = document.getElementById('resendToast');
+    try {
+      const res = await apiFetch('/api/auth/resend-verification', { method: 'POST' });
+      const data = await res.json();
+      if (data.already_verified) {
+        toastEl.textContent = '✓ Your email is already verified.';
+        toastEl.className   = 'toast ok'; toastEl.style.display = 'inline-block';
+        this.classList.add('hidden');
+        document.getElementById('verifyBadge').textContent = '✓ Email verified';
+        document.getElementById('verifyBadge').className   = 'verify-badge verified';
+      } else {
+        toastEl.textContent = '✓ Verification email sent — check your inbox.';
+        toastEl.className   = 'toast ok'; toastEl.style.display = 'inline-block';
+        this.textContent = 'Resend again';
+        this.disabled = false;
+      }
+    } catch (_) {
+      toastEl.textContent = 'Failed to send — please try again.';
+      toastEl.className   = 'toast err'; toastEl.style.display = 'inline-block';
+      this.textContent = 'Resend verification email';
+      this.disabled = false;
+    }
+    setTimeout(() => { toastEl.style.display = 'none'; }, 5000);
+  });
 
   document.getElementById('nameForm').addEventListener('submit', async (e) => {
     e.preventDefault();
