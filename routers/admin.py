@@ -742,7 +742,7 @@ async def log_activity(body: ActivityEntry, request: Request):
 from scripts import webhooks as wh_store  # noqa: E402
 
 
-VALID_PAYLOAD_FORMATS = {"generic", "slack", "grafana_loki"}
+VALID_PAYLOAD_FORMATS = {"generic", "slack", "ms_teams", "grafana_loki"}
 
 
 class WebhookCreate(BaseModel):

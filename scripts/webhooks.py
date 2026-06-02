@@ -166,6 +166,29 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
             text += f"\n*Details:* {det_str}"
         payload_dict = {"text": text, "mrkdwn": True}
 
+    elif fmt == "ms_teams":
+        # MS Teams Incoming Webhook — MessageCard format
+        action  = event.get("action", "unknown")
+        actor   = event.get("actor") or event.get("user_email") or "—"
+        details = event.get("details") or {}
+        facts   = [{"name": "Action", "value": action},
+                   {"name": "Actor",  "value": actor},
+                   {"name": "Time",   "value": now_ts}]
+        for k, v in list(details.items())[:5]:
+            facts.append({"name": k.replace("_", " ").title(), "value": str(v)})
+        payload_dict = {
+            "@type":    "MessageCard",
+            "@context": "http://schema.org/extensions",
+            "themeColor": "1A3C5E",
+            "summary":  f"Job Apply — {action}",
+            "sections": [{
+                "activityTitle":    f"**Job Apply** · `{action}`",
+                "activitySubtitle": f"Actor: {actor}",
+                "facts": facts,
+                "markdown": True,
+            }],
+        }
+
     elif fmt == "grafana_loki":
         # Grafana Loki push API format
         ts_ns = str(int(time.time() * 1_000_000_000))

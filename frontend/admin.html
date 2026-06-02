@@ -751,6 +751,7 @@
         <select id="whFormat" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
           <option value="generic">Generic JSON — full structured payload (Grafana, Sentry, custom)</option>
           <option value="slack">Slack Incoming Webhook — {"text": "…"} format</option>
+          <option value="ms_teams">MS Teams Incoming Webhook — MessageCard format</option>
           <option value="grafana_loki">Grafana Loki — push API streams format</option>
         </select>
       </div>
@@ -2155,7 +2156,7 @@ function renderWebhooks() {
       <td style="font-size:.775rem;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(w.url)}">${esc(w.url)}</td>
       <td style="font-size:.8rem">
         ${esc(evLabel)}
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${({'generic':'Generic JSON','slack':'Slack','grafana_loki':'Grafana Loki'})[w.payload_format||'generic']||'Generic JSON'}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${({'generic':'Generic JSON','slack':'Slack','ms_teams':'MS Teams','grafana_loki':'Grafana Loki'})[w.payload_format||'generic']||'Generic JSON'}</div>
       </td>
       <td>${active
         ? '<span class="badge s-offer" style="font-size:.7rem">Active</span>'
