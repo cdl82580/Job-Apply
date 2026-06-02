@@ -319,6 +319,25 @@
 
     .hidden { display: none !important; }
 
+    /* ── Email verification banner ───────────────────────────────── */
+    .verify-banner {
+      background: #FEF3C7; border: 1px solid #FCD34D; border-radius: var(--radius);
+      padding: .75rem 1rem; margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    }
+    [data-theme="dark"] .verify-banner { background: #2D2010; border-color: #92400E; }
+    .verify-banner-text { flex: 1; font-size: .875rem; color: #92400E; min-width: 0; }
+    [data-theme="dark"] .verify-banner-text { color: #FCD34D; }
+    .verify-banner-text strong { font-weight: 700; }
+    .verify-resend-btn {
+      font-size: .8rem; font-weight: 600; padding: .3rem .85rem;
+      border: 1px solid #D97706; border-radius: 5px; background: none;
+      color: #92400E; cursor: pointer; white-space: nowrap; transition: background .12s;
+    }
+    [data-theme="dark"] .verify-resend-btn { color: #FCD34D; border-color: #92400E; }
+    .verify-resend-btn:hover { background: rgba(217,119,6,.1); }
+    .verify-resend-btn:disabled { opacity: .5; cursor: not-allowed; }
+
     /* ── Select ──────────────────────────────────────────────────── */
     select {
       width: 100%; padding: .5rem .75rem;
@@ -556,6 +575,15 @@
     </div>
   </header>
 
+  <!-- ── Email verification banner ──────────────────────────────── -->
+  <div class="verify-banner hidden" id="verifyBanner">
+    <div class="verify-banner-text">
+      ✉️ <strong>Please verify your email address.</strong>
+      Check your inbox for a verification link — or
+    </div>
+    <button class="verify-resend-btn" id="resendVerifyBtn">Resend verification email</button>
+  </div>
+
   <!-- ── Input form ──────────────────────────────────────────────── -->
   <div class="card" id="formCard">
     <form id="runForm">
@@ -785,6 +813,7 @@
       const u   = await res.json();
       document.getElementById('headerUser').textContent = u.display_name || u.email;
       if (u.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
+      if (u.email_verified === false) document.getElementById('verifyBanner').classList.remove('hidden');
     } catch (_) {}
     await loadAllApps();
     initRunPicker();
@@ -1005,6 +1034,14 @@
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login.html';
+  });
+
+  document.getElementById('resendVerifyBtn').addEventListener('click', async function() {
+    this.disabled = true; this.textContent = 'Sending…';
+    try {
+      await fetch('/api/auth/resend-verification', { method: 'POST' });
+      this.textContent = '✓ Sent! Check your inbox.';
+    } catch (_) { this.textContent = 'Failed — try again'; this.disabled = false; }
   });
 
   const form       = document.getElementById('runForm');

@@ -162,20 +162,22 @@ async def google_callback(
         # Check for existing account with same email — link it
         user = storage.get_user_by_email(email)
         if user:
-            user["google_id"] = google_id
+            user["google_id"]      = google_id
+            user["email_verified"] = True   # Google confirmed this email
             storage.save_user(user)
             user_audit.log(user["user_id"], "google_account_linked", email, ip,
                            google_id=google_id)
         else:
-            # Brand-new user via Google
+            # Brand-new user via Google — Google has already verified the email
             user_id = str(uuid.uuid4())
             user = {
-                "user_id":       user_id,
-                "email":         email,
-                "display_name":  name,
-                "password_hash": f"google:{secrets.token_hex(32)}",  # unusable placeholder
-                "google_id":     google_id,
-                "created_at":    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "user_id":        user_id,
+                "email":          email,
+                "display_name":   name,
+                "password_hash":  f"google:{secrets.token_hex(32)}",  # unusable placeholder
+                "google_id":      google_id,
+                "created_at":     time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "email_verified": True,
             }
             storage.save_user(user)
             user_audit.log(user_id, "user_registered_google", email, ip,

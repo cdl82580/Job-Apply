@@ -96,6 +96,12 @@
       margin-bottom: 1rem; display: none;
     }
     [data-theme="dark"] .err { background: #2B1010; border-color: #7F1D1D; }
+    .ok {
+      background: #D1FAE5; border: 1px solid #6EE7B7; border-radius: 6px;
+      padding: .625rem .875rem; color: #065F46; font-size: .825rem;
+      margin-bottom: 1rem; display: none;
+    }
+    [data-theme="dark"] .ok { background: #0D2B1E; border-color: #065F46; }
 
     .footer { text-align: center; margin-top: 1.25rem; font-size: .825rem; color: var(--muted); }
     .footer a { color: var(--border); text-decoration: none; font-weight: 600; }
@@ -145,6 +151,7 @@
     <div class="logo">Job Application Agent</div>
   </div>
   <div class="sub">Sign in to your account</div>
+  <div class="ok"  id="ok"></div>
   <div class="err" id="err"></div>
   <form id="loginForm">
     <div class="field">
@@ -179,7 +186,7 @@
   document.getElementById('themeIcon').textContent =
     ICONS[document.documentElement.getAttribute('data-theme')] || ICONS.light;
 
-  // Show auth_error from Google OAuth callback if present
+  // Show success / error messages from query params
   (function() {
     const params = new URLSearchParams(window.location.search);
     const authErr = params.get('auth_error');
@@ -187,6 +194,11 @@
       const err = document.getElementById('err');
       err.textContent = decodeURIComponent(authErr);
       err.style.display = 'block';
+    }
+    if (params.get('verified') === '1') {
+      const ok = document.getElementById('ok');
+      ok.textContent = '✓ Email verified! You can now sign in.';
+      ok.style.display = 'block';
     }
   })();
 

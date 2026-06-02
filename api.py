@@ -50,6 +50,7 @@ from pydantic import BaseModel
 
 from scripts import storage
 from scripts import user_audit
+from scripts import email_verification as ev
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
 from scripts.session import create_session_token, verify_session_token
 from routers.applications import router as applications_router
@@ -208,19 +209,24 @@ def _verify_password(password: str, stored: str) -> bool:
 # Email helper (Resend)
 # ---------------------------------------------------------------------------
 
-def _send_email(to: str, subject: str, body: str) -> bool:
+_FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
+
+
+def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bool:
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
         return False
-    payload = json.dumps({
-        "from":    "Job Apply <onboarding@resend.dev>",
+    payload_dict: dict = {
+        "from":    _FROM_ADDRESS,
         "to":      [to],
         "subject": subject,
         "text":    body,
-    }).encode()
+    }
+    if html:
+        payload_dict["html"] = html
     req = urllib.request.Request(
         "https://api.resend.com/emails",
-        data=payload,
+        data=json.dumps(payload_dict).encode(),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
     try:
@@ -228,6 +234,31 @@ def _send_email(to: str, subject: str, body: str) -> bool:
             return 200 <= resp.status < 300
     except Exception:
         return False
+
+
+def _send_verification_email(to: str, display_name: str, token: str) -> bool:
+    """Send the email-verification email via Resend."""
+    verify_url = f"{os.environ.get('APP_URL', 'https://job-apply-corey.fly.dev')}/api/auth/verify-email?token={token}"
+    text = (
+        f"Hi {display_name},\n\n"
+        f"Please verify your email address by visiting:\n{verify_url}\n\n"
+        f"This link expires in 72 hours.\n\n"
+        f"If you didn't create this account, you can ignore this email."
+    )
+    html = f"""
+<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:2rem 1rem;color:#111827">
+  <h2 style="color:#1A3C5E;margin:0 0 1rem">Verify your email</h2>
+  <p style="margin:0 0 1.5rem;color:#374151">Hi {display_name}, click the button below to verify your email address.</p>
+  <a href="{verify_url}"
+     style="display:inline-block;background:#1A3C5E;color:white;text-decoration:none;
+            padding:.75rem 1.5rem;border-radius:6px;font-weight:600;font-size:.95rem">
+    Verify Email →
+  </a>
+  <p style="margin:1.5rem 0 0;font-size:.8rem;color:#6B7280">
+    This link expires in 72 hours. If you didn't create an account, you can ignore this email.
+  </p>
+</div>"""
+    return _send_email(to, "Verify your email — Job Apply", text, html=html)
 
 # ---------------------------------------------------------------------------
 # App + auth middleware
@@ -243,6 +274,7 @@ _PUBLIC_PATHS = frozenset({
     "/login.html", "/register.html",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",
+    "/api/auth/verify-email",
     "/api/companies/search",
     "/api/health",
     "/favicon.ico",
@@ -362,6 +394,7 @@ async def register(
         "password_hash":   _hash_password(password),
         "created_at":      time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "resume_filename": resume.filename,
+        "email_verified":  False,
     }
 
     storage.save_user(user)
@@ -370,7 +403,12 @@ async def register(
     user_audit.log(user_id, "user_registered", email, _client_ip(request),
                    display_name=display_name.strip(), resume_filename=resume.filename)
 
-    response = JSONResponse({"ok": True, "display_name": user["display_name"]})
+    # Send verification email (best-effort — don't block registration if it fails)
+    token = ev.create_token(user_id, email)
+    _send_verification_email(email, display_name.strip(), token)
+
+    response = JSONResponse({"ok": True, "display_name": user["display_name"],
+                             "email_verified": False})
     token = _create_session(user_id, email, role=user.get("role", "user"))
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
@@ -415,6 +453,51 @@ async def logout(request: Request):
     return response
 
 
+@app.get("/api/auth/verify-email")
+async def verify_email(token: str = ""):
+    """Public — clicked from email link. Marks user verified and redirects."""
+    app_url = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+    fail_url = f"{app_url}/login.html?auth_error="
+
+    if not token:
+        return RedirectResponse(f"{fail_url}Invalid+verification+link", status_code=302)
+
+    data = ev.consume_token(token)
+    if not data:
+        return RedirectResponse(
+            f"{fail_url}Verification+link+is+invalid+or+has+expired.+Please+request+a+new+one.",
+            status_code=302,
+        )
+
+    user = storage.get_user_by_id(data["user_id"])
+    if not user:
+        return RedirectResponse(f"{fail_url}Account+not+found", status_code=302)
+
+    user["email_verified"] = True
+    storage.save_user(user)
+    user_audit.log(data["user_id"], "email_verified", data["email"])
+
+    return RedirectResponse(f"{app_url}/login.html?verified=1", status_code=302)
+
+
+@app.post("/api/auth/resend-verification")
+async def resend_verification(request: Request):
+    """Protected — resend verification email to the current user."""
+    user_data = _require_user(request)
+    user = storage.get_user_by_id(user_data["user_id"])
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    if user.get("email_verified", True):
+        return JSONResponse({"ok": True, "already_verified": True})
+
+    token = ev.create_token(user_data["user_id"], user_data["email"])
+    sent  = _send_verification_email(user_data["email"], user.get("display_name", "there"), token)
+    user_audit.log(user_data["user_id"], "verification_email_resent", user_data["email"],
+                   _client_ip(request))
+    return JSONResponse({"ok": True, "sent": sent})
+
+
 @app.get("/api/audit/me")
 async def my_audit_log(request: Request):
     """Return the current user's full action audit log, newest first."""
@@ -427,12 +510,13 @@ async def me(request: Request):
     user_data = _require_user(request)
     record = storage.get_user_by_id(user_data["user_id"]) or {}
     return {
-        "user_id":      user_data["user_id"],
-        "email":        user_data["email"],
-        "display_name": record.get("display_name", user_data["email"]),
-        "role":         record.get("role", "user"),
-        "has_resume":   storage.has_resume(user_data["user_id"]),
-        "has_profile":  bool(storage.get_profile(user_data["user_id"])),
+        "user_id":        user_data["user_id"],
+        "email":          user_data["email"],
+        "display_name":   record.get("display_name", user_data["email"]),
+        "role":           record.get("role", "user"),
+        "email_verified": record.get("email_verified", True),  # legacy accounts default to True
+        "has_resume":     storage.has_resume(user_data["user_id"]),
+        "has_profile":    bool(storage.get_profile(user_data["user_id"])),
     }
 
 # ---------------------------------------------------------------------------
