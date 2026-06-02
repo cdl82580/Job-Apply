@@ -116,15 +116,10 @@ oauth_config:
       - im:history    # read DMs (for future conversational features)
 
 settings:
-  socket_mode_enabled: false
-  # Interactivity required for modal commands (/apply, /prep, /track-add, etc.)
-  # Set Request URL to: https://<your-bot-host>/slack/events
+  # Socket Mode — requires SLACK_APP_TOKEN (xapp-...) set as a Fly secret.
+  # No public request_url needed; all events are delivered over the WebSocket.
+  socket_mode_enabled: true
   interactivity:
     is_enabled: true
-    request_url: https://YOUR_BOT_HOST/slack/events
-  event_subscriptions:
-    request_url: https://YOUR_BOT_HOST/slack/events
-    bot_events:
-      - message.im
   org_deploy_enabled: false
   token_rotation_enabled: false

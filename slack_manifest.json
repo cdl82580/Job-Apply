@@ -36,15 +36,8 @@
     }
   },
   "settings": {
-    "socket_mode_enabled": false,
-    "interactivity": {
-      "is_enabled": true,
-      "request_url": "https://YOUR_BOT_HOST/slack/events"
-    },
-    "event_subscriptions": {
-      "request_url": "https://YOUR_BOT_HOST/slack/events",
-      "bot_events": ["message.im"]
-    },
+    "socket_mode_enabled": true,
+    "interactivity": { "is_enabled": true },
     "org_deploy_enabled": false,
     "token_rotation_enabled": false
   }
