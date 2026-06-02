@@ -507,6 +507,8 @@ AUDIT_ACTION_TYPES = sorted([
     "run_started", "run_completed", "run_failed",
     "prep_started", "prep_completed", "prep_failed",
     "file_downloaded",
+    # Admin exports
+    "admin_csv_export",
     # Admin user management
     "role_changed", "admin_user_updated", "admin_verification_resent",
     # Applications
@@ -632,3 +634,94 @@ async def get_unified_audit_log(
         "per_page": per_page,
         "pages":    pages,
     }
+
+
+# ---------------------------------------------------------------------------
+# Audit log export (no pagination — returns full filtered result)
+# ---------------------------------------------------------------------------
+
+@router.get("/audit/export")
+async def export_audit_log(
+    request: Request,
+    action:     str | None = None,
+    actor:      str | None = None,
+    user_id:    str | None = None,
+    source:     str | None = None,
+    from_ts:    str | None = None,
+    to_ts:      str | None = None,
+    sort_order: str        = Query("desc", pattern="^(asc|desc)$"),
+):
+    """Return all matching audit events without pagination (for CSV export)."""
+    admin = _admin(request)
+
+    users    = storage.list_all_users()
+    user_map = {u["user_id"]: u.get("email", "") for u in users}
+    all_events: list[dict[str, Any]] = []
+
+    for u in users:
+        uid   = u["user_id"]
+        email = u.get("email", "")
+        try:
+            for e in user_audit.get_events(uid):
+                all_events.append({**e, "source": "user", "user_id": uid,
+                                   "user_email": email, "entity_id": None, "entity_label": None})
+        except Exception:
+            pass
+
+    for u in users:
+        uid = u["user_id"]
+        try:
+            result = app_store.list_applications(uid)
+            items  = result.get("items", result) if isinstance(result, dict) else result
+            for item in items:
+                try:
+                    full = app_store.get_application(uid, item["id"])
+                    if not full:
+                        continue
+                    label = f"{full.get('company','')} · {full.get('role_title','')}"
+                    for e in full.get("audit_log", []):
+                        all_events.append({**e, "source": "application",
+                                           "user_id": uid, "user_email": user_map.get(uid, ""),
+                                           "entity_id": item["id"], "entity_label": label,
+                                           "actor": e.get("actor", ""), "ip": e.get("ip"),
+                                           "details": e.get("changes") or e.get("details") or {}})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    if action:   all_events = [e for e in all_events if e.get("action") == action]
+    if actor:    all_events = [e for e in all_events if actor.lower() in (e.get("actor") or "").lower()]
+    if user_id:  all_events = [e for e in all_events if e.get("user_id") == user_id]
+    if source:   all_events = [e for e in all_events if e.get("source") == source]
+    if from_ts:  all_events = [e for e in all_events if (e.get("timestamp") or "") >= from_ts]
+    if to_ts:    all_events = [e for e in all_events if (e.get("timestamp") or "") <= to_ts]
+
+    all_events.sort(key=lambda e: e.get("timestamp") or "", reverse=(sort_order == "desc"))
+
+    user_audit.log(admin["user_id"], "admin_csv_export", admin["email"],
+                   screen="audit_log", row_count=len(all_events),
+                   filters={"action": action, "actor": actor, "source": source,
+                            "from_ts": from_ts, "to_ts": to_ts})
+
+    return all_events
+
+
+# ---------------------------------------------------------------------------
+# Generic activity log (for client-side export events)
+# ---------------------------------------------------------------------------
+
+class ActivityEntry(BaseModel):
+    screen:    str
+    row_count: int
+    filters:   dict[str, Any] = {}
+
+
+@router.post("/log-activity")
+async def log_activity(body: ActivityEntry, request: Request):
+    """Log an admin action (e.g. CSV export) originating from the browser."""
+    admin = _admin(request)
+    user_audit.log(admin["user_id"], "admin_csv_export", admin["email"],
+                   _client_ip(request),
+                   screen=body.screen, row_count=body.row_count, filters=body.filters)
+    return {"ok": True}

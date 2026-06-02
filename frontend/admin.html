@@ -331,6 +331,9 @@
       <input type="date" id="userJoinedFrom" style="max-width:148px" title="Joined from">
       <input type="date" id="userJoinedTo"   style="max-width:148px" title="Joined to">
     </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">
+      <button class="btn btn-ghost btn-sm" id="exportUsersBtn">⬇ Export CSV</button>
+    </div>
     <div id="usersAlert"></div>
     <table>
       <thead id="usersHead"><tr>
@@ -384,6 +387,9 @@
       <input type="date" id="appUpdatedFrom" style="max-width:148px" title="Updated from">
       <input type="date" id="appUpdatedTo"   style="max-width:148px" title="Updated to">
     </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">
+      <button class="btn btn-ghost btn-sm" id="exportAppsBtn">⬇ Export CSV</button>
+    </div>
     <div id="appsAlert"></div>
     <table>
       <thead id="appsHead"><tr>
@@ -435,7 +441,10 @@
       <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
       <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
     </div>
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount" style="display:inline"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+      <div style="font-size:.8rem;color:var(--muted)" id="runsCount"></div>
+      <button class="btn btn-ghost btn-sm" id="exportRunsBtn">⬇ Export CSV</button>
+    </div>
     <table>
       <thead><tr>
         <th>Type</th>
@@ -488,6 +497,7 @@
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">To:</label>
       <input type="datetime-local" id="auditTo"   style="max-width:190px">
       <button class="btn btn-ghost btn-sm" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-ghost btn-sm" id="exportAuditBtn">⬇ Export CSV</button>
     </div>
 
     <table>
@@ -762,6 +772,10 @@ let _users    = [];
 let _allApps  = [];
 let _allRuns  = [];
 let _runsSortDir = 'desc';
+// Cached filtered+sorted full lists (before pagination — used by CSV export)
+let _lastFilteredUsers = [];
+let _lastFilteredApps  = [];
+let _lastFilteredRuns  = [];
 let _appsSortCol = '';
 let _appsSortDir = 'asc';
 let _usersSortCol = 'created_at';
@@ -937,6 +951,7 @@ function renderUsers() {
     th.querySelector('.sort-arrow').textContent = active ? (_usersSortDir === 'asc' ? '↑' : '↓') : '↕';
   });
 
+  _lastFilteredUsers = list;  // cache for CSV export
   const total  = list.length;
   const pages  = Math.max(1, Math.ceil(total / _usersPerPage));
   _usersPage   = Math.min(_usersPage, pages);
@@ -1010,6 +1025,7 @@ function renderApps() {
     arrow.textContent = active ? (_appsSortDir === 'asc' ? '↑' : '↓') : '↕';
   });
 
+  _lastFilteredApps = list;  // cache for CSV export
   const total  = list.length;
   const pages  = Math.max(1, Math.ceil(total / _appsPerPage));
   _appsPage    = Math.min(_appsPage, pages);
@@ -1070,6 +1086,7 @@ function filterAndRenderRuns() {
     return _runsSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
+  _lastFilteredRuns = list;  // cache for CSV export
   const total = list.length;
   const pages = Math.max(1, Math.ceil(total / _runsPerPage));
   _runsPage   = Math.min(_runsPage, pages);
@@ -1591,6 +1608,135 @@ document.getElementById('usersHead').addEventListener('click', e => {
   _usersSortCol = col;
   _usersPage = 1; renderUsers();
 });
+
+// ── CSV Export ───────────────────────────────────────────────────────
+
+function downloadCSV(filename, headers, rows) {
+  const cell = v => {
+    if (v == null || v === undefined) return '';
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n'))
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.map(cell).join(',')];
+  for (const row of rows) lines.push(row.map(cell).join(','));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function logExport(screen, rowCount, filters = {}) {
+  try {
+    await apiFetch('/api/admin/log-activity', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ screen, row_count: rowCount, filters }),
+    });
+  } catch (_) {}
+}
+
+// Users export
+document.getElementById('exportUsersBtn').addEventListener('click', async () => {
+  const list = _lastFilteredUsers;
+  const runsByEmail = {};
+  for (const r of _allRuns) if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email]||0)+1;
+  const headers = ['User ID','Display Name','Email','Role','Active','Email Verified','Apps','Runs','Last Login','Joined'];
+  const rows = list.map(u => [
+    u.user_id, u.display_name||'', u.email||'', u.role||'',
+    u.active !== false ? 'Yes' : 'No',
+    u.email_verified !== false ? 'Yes' : 'No',
+    u.app_count||0, runsByEmail[u.email]||0,
+    u.last_login||'', u.created_at||'',
+  ]);
+  downloadCSV(`admin-users-${_today()}.csv`, headers, rows);
+  await logExport('users', rows.length, _userFilters());
+});
+
+// Applications export
+document.getElementById('exportAppsBtn').addEventListener('click', async () => {
+  const list = _lastFilteredApps;
+  const headers = ['Company','Domain','Role Title','Status','Priority','Owner Email',
+                   'Date Applied','Last Updated','URL','Recruiter Name','Recruiter Email',
+                   'Location','Salary Range','Job Source','DUA'];
+  const rows = list.map(a => [
+    a.company, a.domain, a.role_title, a.status, a.priority, a._user_email||'',
+    a.date_applied||'', a.last_updated||'', a.url||'',
+    a.recruiter_name||'', a.recruiter_email||'',
+    a.location||'', a.salary_range||'', a.job_source||'',
+    a.dua ? 'Yes' : 'No',
+  ]);
+  downloadCSV(`admin-applications-${_today()}.csv`, headers, rows);
+  await logExport('applications', rows.length, _appFilters());
+});
+
+// Agent Runs export
+document.getElementById('exportRunsBtn').addEventListener('click', async () => {
+  const list = _lastFilteredRuns;
+  const headers = ['Type','Folder Name','User Email','Status','Created At','Drive URL'];
+  const rows = list.map(r => [
+    r.type === 'interview_prep' ? 'Interview Prep' : 'Resume',
+    r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
+  ]);
+  downloadCSV(`admin-runs-${_today()}.csv`, headers, rows);
+  await logExport('agent_runs', rows.length, _runsFilters());
+});
+
+// Audit Log export (fetches all matching from API)
+document.getElementById('exportAuditBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('exportAuditBtn');
+  btn.disabled = true; btn.textContent = '⬇ Exporting…';
+  try {
+    const params = new URLSearchParams({ sort_order: _auditSortOrder });
+    const actor  = document.getElementById('auditActorFilter').value.trim();
+    const action = document.getElementById('auditActionFilter').value;
+    const userId = document.getElementById('auditUserFilter').value;
+    const source = document.getElementById('auditSourceFilter').value;
+    const from   = document.getElementById('auditFrom').value;
+    const to     = document.getElementById('auditTo').value;
+    if (actor)  params.set('actor',   actor);
+    if (action) params.set('action',  action);
+    if (userId) params.set('user_id', userId);
+    if (source) params.set('source',  source);
+    if (from)   params.set('from_ts', from + ':00Z');
+    if (to)     params.set('to_ts',   to   + ':59Z');
+
+    const res    = await apiFetch(`/api/admin/audit/export?${params}`);
+    const events = await res.json();
+
+    const headers = ['Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
+    const rows = events.map(e => [
+      e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
+      e.source||'', e.entity_label||'', e.ip||'',
+      e.details ? JSON.stringify(e.details) : '',
+    ]);
+    downloadCSV(`admin-audit-${_today()}.csv`, headers, rows);
+    // audit log event already written server-side by /audit/export
+  } catch (err) { console.error('audit export', err); }
+  finally { btn.disabled = false; btn.textContent = '⬇ Export CSV'; }
+});
+
+// Helpers
+function _today() { return new Date().toISOString().slice(0,10); }
+function _userFilters() {
+  return {
+    search:  document.getElementById('userSearch').value,
+    role:    document.getElementById('userRoleFilter').value,
+    verified: document.getElementById('userVerifiedFilter').value,
+  };
+}
+function _appFilters() {
+  return {
+    search: document.getElementById('appSearch').value,
+    status: document.getElementById('appStatusFilter').value,
+  };
+}
+function _runsFilters() {
+  return {
+    type:   document.getElementById('runsTypeFilter').value,
+    status: document.getElementById('runsStatusFilter').value,
+  };
+}
 
 // Register page-number button callbacks for each paginated tab
 _pagCallbacks['users'] = p => { _usersPage = p; renderUsers(); };
