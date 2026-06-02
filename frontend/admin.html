@@ -490,19 +490,6 @@
       <button class="btn btn-ghost btn-sm" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
     </div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem">
-      <div style="font-size:.8rem;color:var(--muted)" id="auditCount">—</div>
-      <div style="display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--muted)">
-        Per page
-        <select id="auditPerPage" style="padding:.25rem .5rem;font-size:.8rem;border:1px solid var(--input-border);border-radius:5px;background:var(--input-bg);color:var(--text)">
-          <option value="25">25</option>
-          <option value="50" selected>50</option>
-          <option value="100">100</option>
-          <option value="250">250</option>
-        </select>
-      </div>
-    </div>
-
     <table>
       <thead><tr>
         <th class="aud-sort-th" data-col="timestamp" style="cursor:pointer;white-space:nowrap">Timestamp <span class="sort-arrow">↓</span></th>
@@ -520,10 +507,19 @@
     <!-- Pagination -->
     <div class="pagination-bar hidden" id="auditPagBar" style="margin-top:.875rem">
       <div class="pagination-info" id="auditPagInfo"></div>
-      <div class="pagination-controls" id="auditPagCtrl">
+      <div class="pagination-controls">
         <button class="page-btn" id="auditPrev">← Prev</button>
         <div id="auditPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
         <button class="page-btn" id="auditNext">Next →</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted)">
+        Per page
+        <select id="auditPerPage" class="per-page-sel">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+        </select>
       </div>
     </div>
   </div>
@@ -1493,9 +1489,6 @@ async function loadAudit(page = 1) {
 
 function renderAudit({ items, total, page, per_page, pages }) {
   const tbody = document.getElementById('auditBody');
-  document.getElementById('auditCount').textContent =
-    `${total.toLocaleString()} event${total !== 1 ? 's' : ''}`;
-
   document.querySelectorAll('.aud-sort-th').forEach(th => {
     const active = th.dataset.col === _auditSortCol;
     th.classList.toggle('sort-active', active);
@@ -1503,9 +1496,11 @@ function renderAudit({ items, total, page, per_page, pages }) {
       active ? (_auditSortOrder === 'asc' ? '↑' : '↓') : '↕';
   });
 
+  renderPagBar('audit', page, pages, total, per_page);
+
   if (!items.length) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty">No events match.</td></tr>';
-    document.getElementById('auditPagBar').classList.add('hidden'); return;
+    return;
   }
 
   tbody.innerHTML = '';
@@ -1527,27 +1522,6 @@ function renderAudit({ items, total, page, per_page, pages }) {
     tbody.appendChild(tr);
   }
 
-  // Pagination
-  const bar = document.getElementById('auditPagBar');
-  bar.classList.toggle('hidden', pages <= 1 && total <= per_page);
-  document.getElementById('auditPagInfo').textContent =
-    `Showing ${(page-1)*per_page+1}–${Math.min(page*per_page,total)} of ${total.toLocaleString()}`;
-  document.getElementById('auditPrev').disabled = page <= 1;
-  document.getElementById('auditNext').disabled = page >= pages;
-  const numsEl = document.getElementById('auditPageNums');
-  numsEl.innerHTML = '';
-  for (const p of pageRange(page, pages)) {
-    if (p === '…') {
-      const s = document.createElement('span'); s.className = 'page-ellipsis'; s.textContent = '…';
-      numsEl.appendChild(s);
-    } else {
-      const btn = document.createElement('button');
-      btn.className = 'page-btn' + (p === page ? ' active' : '');
-      btn.textContent = p;
-      btn.addEventListener('click', () => loadAudit(p));
-      numsEl.appendChild(btn);
-    }
-  }
 }
 
 async function initAuditFilters() {
@@ -1579,6 +1553,7 @@ document.getElementById('auditPerPage').addEventListener('change', e => {
 });
 document.getElementById('auditPrev').addEventListener('click', () => loadAudit(_auditPage - 1));
 document.getElementById('auditNext').addEventListener('click', () => loadAudit(_auditPage + 1));
+_pagCallbacks['audit'] = p => loadAudit(p);
 document.getElementById('auditClearFilters').addEventListener('click', () => {
   ['auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
   ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
