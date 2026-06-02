@@ -216,22 +216,23 @@ def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bo
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
         return False
-    payload_dict: dict = {
+    payload: dict = {
         "from":    _FROM_ADDRESS,
         "to":      [to],
         "subject": subject,
         "text":    body,
     }
     if html:
-        payload_dict["html"] = html
-    req = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=json.dumps(payload_dict).encode(),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-    )
+        payload["html"] = html
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= resp.status < 300
+        import requests as _requests
+        resp = _requests.post(
+            "https://api.resend.com/emails",
+            json=payload,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10,
+        )
+        return 200 <= resp.status_code < 300
     except Exception:
         return False
 
