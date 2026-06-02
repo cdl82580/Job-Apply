@@ -746,6 +746,14 @@
         <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Secret <span style="font-weight:400;color:var(--muted)">(optional — used for HMAC-SHA256 signature)</span></label>
         <input type="text" id="whSecret" placeholder="Leave blank to skip signing" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
       </div>
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Payload Format</label>
+        <select id="whFormat" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
+          <option value="generic">Generic JSON — full structured payload (Grafana, Sentry, custom)</option>
+          <option value="slack">Slack Incoming Webhook — {"text": "…"} format</option>
+          <option value="grafana_loki">Grafana Loki — push API streams format</option>
+        </select>
+      </div>
       <div style="display:flex;align-items:center;gap:.5rem">
         <input type="checkbox" id="whActive" checked style="width:16px;height:16px;accent-color:var(--primary)">
         <label for="whActive" style="font-size:.875rem;cursor:pointer">Active</label>
@@ -2145,7 +2153,10 @@ function renderWebhooks() {
     tr.innerHTML = `
       <td style="font-weight:600">${esc(w.name)}</td>
       <td style="font-size:.775rem;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(w.url)}">${esc(w.url)}</td>
-      <td style="font-size:.8rem">${esc(evLabel)}</td>
+      <td style="font-size:.8rem">
+        ${esc(evLabel)}
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${({'generic':'Generic JSON','slack':'Slack','grafana_loki':'Grafana Loki'})[w.payload_format||'generic']||'Generic JSON'}</div>
+      </td>
       <td>${active
         ? '<span class="badge s-offer" style="font-size:.7rem">Active</span>'
         : '<span class="badge s-not-applying" style="font-size:.7rem">Paused</span>'}</td>
@@ -2264,7 +2275,8 @@ function openWebhookModal(wh = null) {
   document.getElementById('webhookModalTitle').textContent = wh ? 'Edit Webhook' : 'New Webhook';
   document.getElementById('whName').value   = wh?.name   || '';
   document.getElementById('whUrl').value    = wh?.url    || '';
-  document.getElementById('whSecret').value = wh?.secret || '';
+  document.getElementById('whSecret').value  = wh?.secret || '';
+  document.getElementById('whFormat').value  = wh?.payload_format || 'generic';
   document.getElementById('whActive').checked = wh ? (wh.active !== false) : true;
   document.getElementById('webhookModalAlert').classList.add('hidden');
   document.getElementById('webhookModalSave').disabled = false;
@@ -2332,8 +2344,9 @@ document.getElementById('webhookModalSave').addEventListener('click', async () =
   const payload  = {
     name:         document.getElementById('whName').value.trim(),
     url:          document.getElementById('whUrl').value.trim(),
-    secret:       document.getElementById('whSecret').value.trim(),
-    active:       document.getElementById('whActive').checked,
+    secret:         document.getElementById('whSecret').value.trim(),
+    active:         document.getElementById('whActive').checked,
+    payload_format: document.getElementById('whFormat').value,
     events,
     query_params: _collectKv('whQpRows'),
     headers:      _collectKv('whHdrRows'),

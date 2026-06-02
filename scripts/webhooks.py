@@ -153,13 +153,41 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
     now_ts      = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     start       = time.time()
 
-    payload_dict = {
-        "webhook_id":  wid,
-        "delivery_id": delivery_id,
-        "timestamp":   now_ts,
-        "app":         "job-apply",
-        "event":       event,
-    }
+    fmt = webhook.get("payload_format", "generic")
+
+    if fmt == "slack":
+        # Slack Incoming Webhooks format
+        action  = event.get("action", "unknown")
+        actor   = event.get("actor") or event.get("user_email") or "—"
+        details = event.get("details") or {}
+        det_str = ", ".join(f"{k}: {v}" for k, v in details.items()) if details else ""
+        text    = f"*Job Apply* · `{action}`\n*Actor:* {actor} | *Time:* {now_ts}"
+        if det_str:
+            text += f"\n*Details:* {det_str}"
+        payload_dict = {"text": text, "mrkdwn": True}
+
+    elif fmt == "grafana_loki":
+        # Grafana Loki push API format
+        ts_ns = str(int(time.time() * 1_000_000_000))
+        log_line = json.dumps({"action": event.get("action"), "actor": event.get("actor"),
+                               "details": event.get("details"), "app": "job-apply"})
+        payload_dict = {
+            "streams": [{
+                "stream": {"app": "job-apply", "action": event.get("action", "")},
+                "values": [[ts_ns, log_line]],
+            }]
+        }
+
+    else:
+        # Generic — full structured payload
+        payload_dict = {
+            "webhook_id":  wid,
+            "delivery_id": delivery_id,
+            "timestamp":   now_ts,
+            "app":         "job-apply",
+            "event":       event,
+        }
+
     body = json.dumps(payload_dict)
 
     # Build headers

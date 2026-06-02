@@ -742,24 +742,29 @@ async def log_activity(body: ActivityEntry, request: Request):
 from scripts import webhooks as wh_store  # noqa: E402
 
 
+VALID_PAYLOAD_FORMATS = {"generic", "slack", "grafana_loki"}
+
+
 class WebhookCreate(BaseModel):
-    name:         str
-    url:          str
-    events:       list[str] = ["*"]
-    headers:      dict[str, str] = {}
-    query_params: dict[str, str] = {}
-    secret:       str = ""
-    active:       bool = True
+    name:           str
+    url:            str
+    events:         list[str] = ["*"]
+    headers:        dict[str, str] = {}
+    query_params:   dict[str, str] = {}
+    secret:         str = ""
+    active:         bool = True
+    payload_format: str = "generic"
 
 
 class WebhookUpdate(BaseModel):
-    name:         str | None = None
-    url:          str | None = None
-    events:       list[str] | None = None
-    headers:      dict[str, str] | None = None
-    query_params: dict[str, str] | None = None
-    secret:       str | None = None
-    active:       bool | None = None
+    name:           str | None = None
+    url:            str | None = None
+    events:         list[str] | None = None
+    headers:        dict[str, str] | None = None
+    query_params:   dict[str, str] | None = None
+    secret:         str | None = None
+    active:         bool | None = None
+    payload_format: str | None = None
 
 
 @router.get("/webhooks")
@@ -773,6 +778,8 @@ async def create_webhook(body: WebhookCreate, request: Request):
     admin = _admin(request)
     if not body.url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must start with http:// or https://")
+    if body.payload_format not in VALID_PAYLOAD_FORMATS:
+        raise HTTPException(400, f"payload_format must be one of: {', '.join(sorted(VALID_PAYLOAD_FORMATS))}")
     webhook = {
         "id":               str(uuid.uuid4()),
         "name":             body.name.strip(),
@@ -782,6 +789,7 @@ async def create_webhook(body: WebhookCreate, request: Request):
         "query_params":     body.query_params,
         "secret":           body.secret,
         "active":           body.active,
+        "payload_format":   body.payload_format,
         "created_at":       _now(),
         "created_by":       admin["email"],
         "last_triggered_at": None,
