@@ -302,9 +302,9 @@
     <div id="appsAlert"></div>
     <table>
       <thead><tr>
-        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th>Drive</th><th></th>
+        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th></th>
       </tr></thead>
-      <tbody id="appsBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
     </table>
     <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="appsCount"></div>
   </div>
@@ -660,7 +660,6 @@ function renderApps() {
       <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
       <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.date_applied)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.last_updated)}</td>
-      <td>${a._gdrive_url ? `<a class="btn btn-ghost btn-sm" href="${esc(a._gdrive_url)}" target="_blank" rel="noopener">Drive ↗</a>` : '<span style="color:var(--muted);font-size:.8rem">—</span>'}</td>
       <td><div style="display:flex;gap:.3rem">
         ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app"
@@ -674,7 +673,7 @@ function renderApps() {
   }
   if (list.length > 200) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="8" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
+    tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
     tbody.appendChild(tr);
   }
 }

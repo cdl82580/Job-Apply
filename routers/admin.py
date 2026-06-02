@@ -137,8 +137,7 @@ async def set_user_role(user_id: str, body: RoleUpdate, request: Request):
 
 @router.get("/applications")
 async def list_all_applications(request: Request):
-    """Return all applications across all users.
-    Fetches full records to include _gdrive_url (first linked run's folder URL)."""
+    """Return all applications across all users with a '_user_email' field added."""
     _admin(request)
     users = storage.list_all_users()
     all_apps = []
@@ -150,13 +149,6 @@ async def list_all_applications(request: Request):
             for item in items:
                 item["_user_id"]    = uid
                 item["_user_email"] = u.get("email", "")
-                # Fetch first linked run's Drive URL from the full record
-                try:
-                    full = app_store.get_application(uid, item["id"])
-                    runs = (full or {}).get("linked_runs", [])
-                    item["_gdrive_url"] = runs[0]["folder_url"] if runs else ""
-                except Exception:
-                    item["_gdrive_url"] = ""
             all_apps.extend(items)
         except Exception:
             pass
