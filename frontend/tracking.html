@@ -216,7 +216,18 @@
       text-transform: uppercase; letter-spacing: .05em;
       color: var(--muted); background: var(--bg-page);
       border-bottom: 1px solid var(--card-border);
+      white-space: nowrap;
     }
+    .app-table th.sortable {
+      cursor: pointer; user-select: none;
+    }
+    .app-table th.sortable:hover { color: var(--primary); }
+    .app-table th.sort-active { color: var(--primary); }
+    .sort-arrow {
+      display: inline-block; margin-left: .3rem;
+      font-size: .65rem; opacity: .45; vertical-align: middle;
+    }
+    th.sort-active .sort-arrow { opacity: 1; }
     .app-table td {
       padding: .75rem 1rem;
       border-bottom: 1px solid var(--card-border);
@@ -549,19 +560,20 @@
   <table class="app-table" id="appTable">
     <thead>
       <tr>
-        <th>Company</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Priority</th>
-        <th>Applied</th>
+        <th class="sortable" data-col="company">Company<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="role_title">Role<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="status">Status<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="priority">Priority<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="date_applied">Applied<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="last_updated">Updated<span class="sort-arrow">↕</span></th>
         <th></th>
       </tr>
     </thead>
     <tbody id="appTableBody">
       <!-- skeleton rows -->
-      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:70%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:55%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:65%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:70%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:55%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:65%;height:14px"></div></td></tr>
     </tbody>
   </table>
 
@@ -749,6 +761,68 @@ let _apps       = [];      // full list from server
 let _filtered   = [];      // current view (after filter + search)
 let _editId     = null;    // null = add mode, string = edit mode
 let _deleteId   = null;
+let _sortCol    = 'last_updated';
+let _sortDir    = 'desc';  // 'asc' | 'desc'
+
+// Priority sort order
+const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+// Status sort order
+const STATUS_ORDER = {
+  'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'Researching': 3,
+  'On Hold': 4, 'Offer': 5, 'Rejected': 6, 'Not Applying': 7,
+};
+
+function _sortVal(a, col) {
+  switch (col) {
+    case 'priority':     return PRIORITY_ORDER[a.priority] ?? 99;
+    case 'status':       return STATUS_ORDER[a.status] ?? 99;
+    case 'date_applied': return a.date_applied || '';
+    case 'last_updated': return a.last_updated || '';
+    default:             return (a[col] || '').toString().toLowerCase();
+  }
+}
+
+function _sortList(list) {
+  return [...list].sort((a, b) => {
+    const av = _sortVal(a, _sortCol);
+    const bv = _sortVal(b, _sortCol);
+    let cmp = 0;
+    if (typeof av === 'number' && typeof bv === 'number') {
+      cmp = av - bv;
+    } else {
+      cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    }
+    return _sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function _updateSortHeaders() {
+  document.querySelectorAll('.app-table th.sortable').forEach(th => {
+    const col = th.dataset.col;
+    const arrow = th.querySelector('.sort-arrow');
+    th.classList.toggle('sort-active', col === _sortCol);
+    if (col === _sortCol) {
+      arrow.textContent = _sortDir === 'asc' ? '↑' : '↓';
+    } else {
+      arrow.textContent = '↕';
+    }
+  });
+}
+
+// Column header click → sort
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const col = th.dataset.col;
+  if (_sortCol === col) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortCol = col;
+    _sortDir = 'asc';
+  }
+  _updateSortHeaders();
+  renderTable();
+});
 
 // ── Status helpers ──────────────────────────────────────────────────
 const STATUS_CLASS = {
@@ -829,7 +903,7 @@ function applyFilters() {
       (a.domain || '').toLowerCase().includes(q)
     );
   }
-  _filtered = list;
+  _filtered = _sortList(list);
   renderTable();
 }
 
@@ -864,6 +938,7 @@ function renderTable() {
       <td>${statusBadge(a.status)}</td>
       <td>${priorityBadge(a.priority)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
+      <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
         ${a.url ? `<a class="icon-btn" href="${esc(a.url)}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
@@ -1330,6 +1405,7 @@ function fmtDateFull(iso) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
+_updateSortHeaders();
 loadApps();
 </script>
 </body>
