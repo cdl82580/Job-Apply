@@ -368,13 +368,32 @@
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0;
     }
+    .drawer-title-row { display: flex; align-items: center; gap: .625rem; }
     .drawer-title { font-size: 1rem; font-weight: 700; color: var(--primary); }
+    .drawer-mode-badge {
+      font-size: .65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; padding: .15rem .5rem; border-radius: 999px;
+      border: 1px solid var(--card-border); color: var(--muted);
+      background: var(--bg-page);
+    }
+    .drawer-header-actions { display: flex; align-items: center; gap: .5rem; }
     .drawer-close {
       background: none; border: none; cursor: pointer;
       color: var(--muted); font-size: 1.3rem; line-height: 1; padding: .2rem;
       border-radius: 4px; transition: color .12s, background .12s;
     }
     .drawer-close:hover { color: var(--text); background: var(--fill); }
+
+    /* ── View-mode: form fields non-interactive ──────────────────── */
+    .drawer-body.view-mode [data-field] {
+      pointer-events: none;
+      background: var(--bg-page) !important;
+      border-color: var(--card-border) !important;
+      box-shadow: none !important;
+      cursor: default;
+    }
+    .drawer-body.view-mode .company-wrap { pointer-events: none; }
+    .drawer-body.view-mode .co-logo-sm   { pointer-events: none; }
 
     .drawer-body {
       flex: 1; overflow-y: auto; padding: 1.5rem;
@@ -672,10 +691,15 @@
 <!-- ── Add / Edit drawer ───────────────────────────────────────── -->
 <div class="drawer" id="drawer">
   <div class="drawer-header">
-    <div class="drawer-title" id="drawerTitle">Add Application</div>
-    <button class="drawer-close" id="drawerClose" aria-label="Close">&#x2715;</button>
+    <div class="drawer-title-row">
+      <div class="drawer-title" id="drawerTitle">Application</div>
+      <span class="drawer-mode-badge" id="drawerModeBadge">View</span>
+    </div>
+    <div class="drawer-header-actions">
+      <button class="drawer-close" id="drawerClose" aria-label="Close">&#x2715;</button>
+    </div>
   </div>
-  <div class="drawer-body">
+  <div class="drawer-body" id="drawerBodyEl">
     <div class="inline-err" id="drawerErr"></div>
 
     <!-- Company search -->
@@ -685,7 +709,7 @@
       <div class="company-wrap">
         <div class="company-input-row">
           <img class="co-logo-sm" id="dLogoPreview" alt="" onerror="this.style.display='none'">
-          <input type="text" id="dCompany" placeholder="Search or type company name…" autocomplete="off">
+          <input type="text" id="dCompany" data-field placeholder="Search or type company name…" autocomplete="off">
         </div>
         <div class="suggestions hidden" id="dSuggestions"></div>
       </div>
@@ -697,12 +721,12 @@
     <div class="section-label">Role</div>
     <div class="field">
       <label for="dRole">Role Title</label>
-      <input type="text" id="dRole" placeholder="e.g. Solutions Engineer">
+      <input type="text" id="dRole" data-field placeholder="e.g. Solutions Engineer">
     </div>
     <div class="field-row">
       <div class="field" style="margin-bottom:0">
         <label for="dStatus">Status</label>
-        <select id="dStatus">
+        <select id="dStatus" data-field>
           <option>Researching</option>
           <option>Applied</option>
           <option>Phone Screen</option>
@@ -715,7 +739,7 @@
       </div>
       <div class="field" style="margin-bottom:0">
         <label for="dPriority">Priority</label>
-        <select id="dPriority">
+        <select id="dPriority" data-field>
           <option>High</option>
           <option selected>Medium</option>
           <option>Low</option>
@@ -728,29 +752,29 @@
     <div class="field-row">
       <div class="field" style="margin-bottom:0">
         <label for="dDateApplied">Date Applied <span class="opt">(optional)</span></label>
-        <input type="date" id="dDateApplied">
+        <input type="date" id="dDateApplied" data-field>
       </div>
       <div class="field" style="margin-bottom:0">
         <label for="dJobSource">Job Source <span class="opt">(optional)</span></label>
-        <input type="text" id="dJobSource" placeholder="e.g. LinkedIn, Indeed">
+        <input type="text" id="dJobSource" data-field placeholder="e.g. LinkedIn, Indeed">
       </div>
     </div>
     <div class="field-row">
       <div class="field" style="margin-bottom:0">
         <label for="dLocation">Location / Remote <span class="opt">(optional)</span></label>
-        <input type="text" id="dLocation" placeholder="e.g. Remote, Boston">
+        <input type="text" id="dLocation" data-field placeholder="e.g. Remote, Boston">
       </div>
       <div class="field" style="margin-bottom:0">
         <label for="dSalary">Salary Range <span class="opt">(optional)</span></label>
-        <input type="text" id="dSalary" placeholder="e.g. $130k – $160k">
+        <input type="text" id="dSalary" data-field placeholder="e.g. $130k – $160k">
       </div>
     </div>
     <div class="field">
       <label for="dUrl">Job Posting URL <span class="opt">(optional)</span></label>
-      <input type="url" id="dUrl" placeholder="https://…">
+      <input type="url" id="dUrl" data-field placeholder="https://…">
     </div>
     <div class="check-row">
-      <input type="checkbox" id="dDua">
+      <input type="checkbox" id="dDua" data-field>
       <label for="dDua">Reported to unemployment (DUA)?</label>
     </div>
 
@@ -759,11 +783,11 @@
     <div class="field-row">
       <div class="field" style="margin-bottom:0">
         <label for="dRecruiterName">Name</label>
-        <input type="text" id="dRecruiterName" placeholder="Jane Smith">
+        <input type="text" id="dRecruiterName" data-field placeholder="Jane Smith">
       </div>
       <div class="field" style="margin-bottom:0">
         <label for="dRecruiterEmail">Email</label>
-        <input type="email" id="dRecruiterEmail" placeholder="jane@company.com">
+        <input type="email" id="dRecruiterEmail" data-field placeholder="jane@company.com">
       </div>
     </div>
 
@@ -787,9 +811,15 @@
     </div>
 
   </div>
-  <div class="drawer-footer">
+  <!-- View-mode footer -->
+  <div class="drawer-footer" id="drawerFooterView">
+    <button class="btn" id="drawerEditBtn">&#x270E; Edit</button>
+    <button class="btn btn-ghost" id="drawerCloseBtn">Close</button>
+  </div>
+  <!-- Edit-mode footer -->
+  <div class="drawer-footer hidden" id="drawerFooterEdit">
     <button class="btn" id="drawerSaveBtn">Save</button>
-    <button class="btn btn-ghost" id="drawerCancelBtn">Cancel</button>
+    <button class="btn btn-ghost" id="drawerDiscardBtn">Discard Changes</button>
   </div>
 </div>
 
@@ -840,10 +870,11 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 });
 
 // ── State ────────────────────────────────────────────────────────────
-let _apps       = [];      // full list from server
-let _filtered   = [];      // current view (after filter + search)
-let _editId     = null;    // null = add mode, string = edit mode
-let _deleteId   = null;
+let _apps        = [];      // full list from server
+let _filtered    = [];      // current view (after filter + search)
+let _editId      = null;    // null = add mode, string = edit mode
+let _deleteId    = null;
+let _drawerMode  = 'view';  // 'view' | 'edit'
 let _sortCol    = 'last_updated';
 let _sortDir    = 'desc';  // 'asc' | 'desc'
 let _page       = 1;
@@ -1259,6 +1290,26 @@ dCompanyInput.addEventListener('focus', () => {
   if (dCompanyInput.value.length >= 2 && !dSuggestionsEl.classList.contains('hidden')) return;
 });
 
+// ── Drawer mode ───────────────────────────────────────────────────────
+
+function setDrawerMode(mode) {
+  _drawerMode = mode;
+  const bodyEl   = document.getElementById('drawerBodyEl');
+  const badgeEl  = document.getElementById('drawerModeBadge');
+
+  bodyEl.classList.toggle('view-mode', mode === 'view');
+
+  // Badge
+  badgeEl.textContent = mode === 'view' ? 'View' : 'Editing';
+  badgeEl.style.color         = mode === 'edit' ? 'var(--primary)' : '';
+  badgeEl.style.borderColor   = mode === 'edit' ? 'var(--border)'  : '';
+  badgeEl.style.background    = mode === 'edit' ? 'var(--fill)'    : '';
+
+  // Footers
+  document.getElementById('drawerFooterView').classList.toggle('hidden', mode === 'edit');
+  document.getElementById('drawerFooterEdit').classList.toggle('hidden', mode === 'view');
+}
+
 // ── Drawer open/close ─────────────────────────────────────────────────
 const overlay  = document.getElementById('overlay');
 const drawer   = document.getElementById('drawer');
@@ -1271,19 +1322,21 @@ function openDrawer(editId = null) {
   }
 
   if (editId) {
-    document.getElementById('drawerTitle').textContent = 'Edit Application';
+    document.getElementById('drawerTitle').textContent = 'Application';
     loadAndFillDrawer(editId);
     document.getElementById('commentsSection').classList.remove('hidden');
     document.getElementById('linkedRunsSection').classList.remove('hidden');
+    setDrawerMode('view');   // existing records open read-only
   } else {
     document.getElementById('drawerTitle').textContent = 'Add Application';
     document.getElementById('commentsSection').classList.add('hidden');
     document.getElementById('linkedRunsSection').classList.add('hidden');
+    setDrawerMode('edit');   // new records open in edit mode immediately
   }
 
   overlay.classList.add('open');
   drawer.classList.add('open');
-  dCompanyInput.focus();
+  if (_drawerMode === 'edit') dCompanyInput.focus();
 }
 
 function closeDrawer() {
@@ -1298,7 +1351,21 @@ function closeDrawer() {
 document.getElementById('addBtn').addEventListener('click', () => openDrawer());
 overlay.addEventListener('click', closeDrawer);
 document.getElementById('drawerClose').addEventListener('click', closeDrawer);
-document.getElementById('drawerCancelBtn').addEventListener('click', closeDrawer);
+document.getElementById('drawerCloseBtn').addEventListener('click', closeDrawer);
+
+// Edit button — switch to edit mode
+document.getElementById('drawerEditBtn').addEventListener('click', () => {
+  setDrawerMode('edit');
+  dCompanyInput.focus();
+});
+
+// Discard button — reload original data and return to view mode
+document.getElementById('drawerDiscardBtn').addEventListener('click', async () => {
+  if (!_editId) { closeDrawer(); return; }
+  resetDrawerForm();
+  await loadAndFillDrawer(_editId);
+  setDrawerMode('view');
+});
 
 function resetDrawerForm() {
   _selectedCompany = null;
@@ -1432,7 +1499,13 @@ async function saveDrawer() {
     }
 
     await loadApps();
-    closeDrawer();
+    if (_editId) {
+      // Reload updated data and return to view mode
+      await loadAndFillDrawer(_editId);
+      setDrawerMode('view');
+    } else {
+      closeDrawer();
+    }
   } catch (e) {
     if (e.message !== '401') {
       errEl.textContent = 'Network error — please try again.';
