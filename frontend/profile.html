@@ -376,8 +376,10 @@
         <button type="button" class="md-btn" data-md="ul"     title="Bullet list">• List</button>
         <button type="button" class="md-btn" data-md="ol"     title="Numbered list">1. List</button>
         <div class="md-sep"></div>
-        <button type="button" class="md-btn" data-md="code"   title="Inline code">&lt;/&gt;</button>
-        <button type="button" class="md-btn" data-md="hr"     title="Divider">—</button>
+        <button type="button" class="md-btn" data-md="code"      title="Inline code">&lt;/&gt;</button>
+        <button type="button" class="md-btn" data-md="underline" title="Underline">U̲</button>
+        <button type="button" class="md-btn" data-md="link"      title="Hyperlink">🔗</button>
+        <button type="button" class="md-btn" data-md="hr"        title="Divider">—</button>
       </div>
 
       <!-- Textarea (edit mode only) -->
@@ -534,8 +536,19 @@
       case 'h3':     insert = `\n### ${sel || 'Heading'}\n`; break;
       case 'ul':     insert = `\n- ${sel || 'item'}\n`; break;
       case 'ol':     insert = `\n1. ${sel || 'item'}\n`; break;
-      case 'code':   insert = sel.includes('\n') ? `\`\`\`\n${sel || 'code'}\n\`\`\`` : `\`${sel || 'code'}\``; break;
-      case 'hr':     insert = `\n\n---\n\n`; break;
+      case 'code':      insert = sel.includes('\n') ? `\`\`\`\n${sel || 'code'}\n\`\`\`` : `\`${sel || 'code'}\``; break;
+      case 'underline': insert = `<u>${sel || 'underlined text'}</u>`; break;
+      case 'link': {
+        const linkText = sel || 'link text';
+        insert = `[${linkText}](url)`;
+        // After inserting, select just the "url" placeholder so user can type over it
+        ta.value = before + insert + after;
+        const urlStart = before.length + linkText.length + 3; // after `[text](`
+        ta.setSelectionRange(urlStart, urlStart + 3);         // select "url"
+        ta.focus();
+        return;
+      }
+      case 'hr':        insert = `\n\n---\n\n`; break;
     }
     ta.value = before + insert + after;
     const cursor = before.length + insert.length;
