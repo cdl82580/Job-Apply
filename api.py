@@ -601,9 +601,11 @@ async def create_run(req: RunRequest, request: Request, response: Response):
 
 @app.get("/api/run/{run_id}/stream")
 async def stream_run(run_id: str, request: Request):
-    _require_user(request)
+    user_data = _require_user(request)
     if run_id not in _runs:
         raise HTTPException(404, "Run not found")
+    if _runs[run_id].get("user_id") != user_data["user_id"]:
+        raise HTTPException(403, "Access denied")
 
     q    = _runs[run_id]["queue"]
     loop = asyncio.get_event_loop()
@@ -628,10 +630,12 @@ async def stream_run(run_id: str, request: Request):
 
 @app.get("/api/run/{run_id}/status")
 async def run_status(run_id: str, request: Request):
-    _require_user(request)
+    user_data = _require_user(request)
     run = _runs.get(run_id)
     if not run:
         raise HTTPException(404, "Run not found")
+    if run.get("user_id") != user_data["user_id"]:
+        raise HTTPException(403, "Access denied")
     return {"run_id": run_id, "status": run["status"], "error": run.get("error")}
 
 
@@ -822,9 +826,11 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
 
 @app.get("/api/prep/{prep_id}/stream")
 async def stream_prep(prep_id: str, request: Request):
-    _require_user(request)
+    user_data = _require_user(request)
     if prep_id not in _preps:
         raise HTTPException(404, "Prep run not found")
+    if _preps[prep_id].get("user_id") != user_data["user_id"]:
+        raise HTTPException(403, "Access denied")
 
     q    = _preps[prep_id]["queue"]
     loop = asyncio.get_event_loop()
@@ -849,10 +855,12 @@ async def stream_prep(prep_id: str, request: Request):
 
 @app.get("/api/prep/{prep_id}/status")
 async def prep_status(prep_id: str, request: Request):
-    _require_user(request)
+    user_data = _require_user(request)
     prep = _preps.get(prep_id)
     if not prep:
         raise HTTPException(404, "Prep run not found")
+    if prep.get("user_id") != user_data["user_id"]:
+        raise HTTPException(403, "Access denied")
     return {"prep_id": prep_id, "status": prep["status"], "error": prep.get("error")}
 
 
