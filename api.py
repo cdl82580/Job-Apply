@@ -639,6 +639,8 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     q: Queue[dict | None] = Queue()
     _runs[run_id] = {"queue": q, "status": "queued", "result": None, "error": None,
                      "user_id": user_id}
+    user_audit.log(user_id, "run_started", user_data["email"], _client_ip(request),
+                   run_id=run_id, company=req.company, role=req.role)
 
     # Pin this browser session to the machine that owns this run's state
     if FLY_MACHINE_ID:
@@ -677,6 +679,9 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     _runs[run_id]["result"]       = result
                     _runs[run_id]["status"]       = "done"
                     _runs[run_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "run_completed", user_data["email"],
+                                   run_id=run_id, company=req.company, role=req.role,
+                                   folder_url=result.folder_url or "")
 
                     # Auto-link to application tracker record if requested
                     if req.app_id:
@@ -704,12 +709,18 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     _runs[run_id]["status"]      = "error"
                     _runs[run_id]["error"]        = str(exc)
                     _runs[run_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "run_failed", user_data["email"],
+                                   run_id=run_id, company=req.company, role=req.role,
+                                   error=str(exc))
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
                     _runs[run_id]["status"]      = "error"
                     _runs[run_id]["error"]        = msg
                     _runs[run_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "run_failed", user_data["email"],
+                                   run_id=run_id, company=req.company, role=req.role,
+                                   error=msg)
                     q.put({"type": "error", "message": msg})
                 finally:
                     q.put(None)
@@ -778,6 +789,9 @@ async def get_file(run_id: str, filename: str, request: Request):
 
     if not file_path.exists():
         raise HTTPException(404, "File not found")
+
+    user_audit.log(user_data["user_id"], "file_downloaded", user_data["email"],
+                   _client_ip(request), run_id=run_id, filename=filename, run_type="resume")
 
     return FileResponse(
         file_path,
@@ -876,6 +890,9 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     q: Queue[dict | None] = Queue()
     _preps[prep_id] = {"queue": q, "status": "queued", "result": None, "error": None,
                        "user_id": user_id}
+    user_audit.log(user_id, "prep_started", user_data["email"], _client_ip(request),
+                   prep_id=prep_id, company=req.company, role=req.role,
+                   round_type=req.round_type)
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
@@ -914,6 +931,10 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     _preps[prep_id]["result"]       = result
                     _preps[prep_id]["status"]       = "done"
                     _preps[prep_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "prep_completed", user_data["email"],
+                                   prep_id=prep_id, company=req.company, role=req.role,
+                                   round_type=req.round_type,
+                                   folder_url=result.folder_url or "")
 
                     if req.app_id:
                         _link_run_to_app(
@@ -937,12 +958,18 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     _preps[prep_id]["status"]      = "error"
                     _preps[prep_id]["error"]        = str(exc)
                     _preps[prep_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "prep_failed", user_data["email"],
+                                   prep_id=prep_id, company=req.company, role=req.role,
+                                   round_type=req.round_type, error=str(exc))
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
                     _preps[prep_id]["status"]      = "error"
                     _preps[prep_id]["error"]        = msg
                     _preps[prep_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "prep_failed", user_data["email"],
+                                   prep_id=prep_id, company=req.company, role=req.role,
+                                   round_type=req.round_type, error=msg)
                     q.put({"type": "error", "message": msg})
                 finally:
                     q.put(None)
@@ -1011,6 +1038,10 @@ async def get_prep_file(prep_id: str, filename: str, request: Request):
 
     if not file_path.exists():
         raise HTTPException(404, "File not found")
+
+    user_audit.log(user_data["user_id"], "file_downloaded", user_data["email"],
+                   _client_ip(request), prep_id=prep_id, filename=filename,
+                   run_type="interview_prep")
 
     return FileResponse(
         file_path,

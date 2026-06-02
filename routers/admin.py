@@ -503,6 +503,10 @@ AUDIT_ACTION_TYPES = sorted([
     "login_success", "login_google", "login_failed", "logout",
     "email_verified", "verification_email_resent",
     "profile_updated", "resume_uploaded", "password_changed",
+    # Agent runs
+    "run_started", "run_completed", "run_failed",
+    "prep_started", "prep_completed", "prep_failed",
+    "file_downloaded",
     # Admin user management
     "role_changed", "admin_user_updated", "admin_verification_resent",
     # Applications
