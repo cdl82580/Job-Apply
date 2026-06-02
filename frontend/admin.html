@@ -783,7 +783,6 @@ function renderUsers() {
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${fmtDateTime(u.created_at)}</td>
       <td><div style="display:flex;gap:.375rem;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" data-action="edit-user" data-uid="${u.user_id}">Edit</button>
-        <a class="btn btn-ghost btn-sm" href="/tracking.html" target="_blank">Tracker ↗</a>
       </div></td>`;
     tbody.appendChild(tr);
   }
