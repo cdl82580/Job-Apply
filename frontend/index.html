@@ -343,8 +343,98 @@
     .chevron.open { transform: rotate(180deg); }
     .card-body { margin-top: 1.25rem; }
 
+    /* ── App picker combobox ─────────────────────────────────────── */
+    .app-picker-wrap { position: relative; margin-bottom: 1.25rem; }
+    .app-picker-label {
+      display: flex; align-items: center; gap: .5rem;
+      font-weight: 600; font-size: .875rem; margin-bottom: .375rem; color: var(--text);
+    }
+    .app-picker-label .opt { font-weight: 400; color: var(--muted); }
+    .app-picker-selected {
+      display: flex; align-items: center; gap: .625rem;
+      padding: .5rem .75rem;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--fill); font-size: .875rem;
+      cursor: pointer;
+    }
+    .app-picker-selected .sel-logo {
+      width: 22px; height: 22px; border-radius: 3px; object-fit: contain; flex-shrink: 0;
+    }
+    .app-picker-selected .sel-name { font-weight: 600; flex: 1; }
+    .app-picker-selected .sel-clear {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: .9rem; padding: 0 .1rem; line-height: 1;
+    }
+    .app-picker-selected .sel-clear:hover { color: var(--error); }
+    .app-picker-input-row { position: relative; }
+    .app-picker-input-row input[type="text"] {
+      width: 100%; padding: .5rem .75rem;
+      border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .875rem; font-family: inherit;
+      background: var(--input-bg); color: var(--text);
+    }
+    .app-picker-input-row input:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .app-picker-hint { font-size: .775rem; color: var(--muted); margin-top: .35rem; }
+    .app-suggestions {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      z-index: 50; overflow: hidden; max-height: 280px; overflow-y: auto;
+    }
+    .app-suggestions.hidden { display: none; }
+    .app-sugg-item {
+      display: flex; align-items: center; gap: .625rem;
+      padding: .6rem .875rem; cursor: pointer; transition: background .1s;
+    }
+    .app-sugg-item:hover, .app-sugg-item.focused { background: var(--fill); }
+    .app-sugg-logo {
+      width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0;
+      object-fit: contain; background: var(--bg-page); border: 1px solid var(--card-border);
+    }
+    .app-sugg-logo-ph {
+      width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0;
+      background: var(--fill); border: 1px solid var(--card-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    }
+    .app-sugg-body { flex: 1; min-width: 0; }
+    .app-sugg-company { font-weight: 600; font-size: .875rem; color: var(--text); }
+    .app-sugg-role    { font-size: .775rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .app-sugg-status  {
+      font-size: .65rem; padding: .15rem .45rem; border-radius: 999px;
+      font-weight: 700; flex-shrink: 0; white-space: nowrap;
+    }
+    .app-sugg-empty, .app-sugg-loading { padding: .75rem .875rem; font-size: .825rem; color: var(--muted); text-align: center; }
+    /* status colours (mini) */
+    .sc-interviewing  { background: #FEF3C7; color: #92400E; }
+    .sc-phone-screen  { background: #CFFAFE; color: #0E7490; }
+    .sc-applied       { background: #DBEAFE; color: #1D4ED8; }
+    .sc-on-hold       { background: #FED7AA; color: #9A3412; }
+    .sc-researching   { background: #EDE9FE; color: #7C3AED; }
+    .sc-offer         { background: #D1FAE5; color: #065F46; }
+    .sc-rejected      { background: #FEE2E2; color: #991B1B; }
+    .sc-not-applying  { background: #F3F4F6; color: #6B7280; }
+    [data-theme="dark"] .sc-interviewing { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .sc-phone-screen { background: #083344; color: #67E8F9; }
+    [data-theme="dark"] .sc-applied      { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .sc-on-hold      { background: #3D1A0A; color: #FDBA74; }
+    [data-theme="dark"] .sc-researching  { background: #2E1065; color: #C4B5FD; }
+    [data-theme="dark"] .sc-offer        { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .sc-rejected     { background: #2B1010; color: #F87171; }
+    [data-theme="dark"] .sc-not-applying { background: #1F2937; color: #9CA3AF; }
+    .jd-status {
+      font-size: .775rem; color: var(--muted); margin-top: .3rem;
+      display: flex; align-items: center; gap: .3rem;
+    }
+    .jd-status.loaded { color: var(--success); }
+    .spin-xs {
+      display: inline-block; width: 10px; height: 10px;
+      border: 2px solid var(--card-border); border-top-color: var(--muted);
+      border-radius: 50%; animation: rot .7s linear infinite;
+    }
+
     /* ── Source mode toggle ──────────────────────────────────────── */
-    .src-toggle { display: flex; gap: .5rem; margin-bottom: .75rem; }
+    .src-toggle { display: flex; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
     .src-btn {
       padding: .3rem .85rem;
       border: 1px solid var(--input-border);
@@ -468,6 +558,26 @@
   <!-- ── Input form ──────────────────────────────────────────────── -->
   <div class="card" id="formCard">
     <form id="runForm">
+
+      <!-- App picker -->
+      <div class="app-picker-wrap" id="runAppPickerWrap">
+        <div class="app-picker-label">
+          Fill from Tracker <span class="opt">(optional — auto-fills fields &amp; loads saved JD)</span>
+        </div>
+        <!-- selected state -->
+        <div class="app-picker-selected hidden" id="runAppSelected">
+          <img class="sel-logo" id="runSelLogo" alt="">
+          <span class="sel-name" id="runSelName"></span>
+          <button type="button" class="sel-clear" id="runSelClear" title="Clear">&#x2715;</button>
+        </div>
+        <!-- search input -->
+        <div class="app-picker-input-row" id="runAppInputRow">
+          <input type="text" id="runAppSearch" autocomplete="off" placeholder="Search by company or role…">
+          <div class="app-suggestions hidden" id="runAppSuggestions"></div>
+        </div>
+        <div class="jd-status hidden" id="runJdStatus"></div>
+      </div>
+
       <div class="field">
         <label for="job_posting">Job Posting</label>
         <textarea id="job_posting" name="job_posting" rows="10"
@@ -489,12 +599,6 @@
         <label for="contact">Hiring Manager <span class="opt">(optional)</span></label>
         <input id="contact" name="contact" type="text"
           placeholder="Name if known — defaults to 'Hiring Team'">
-      </div>
-      <div class="field">
-        <label for="appLink">Link to Application <span class="opt">(optional)</span></label>
-        <select id="appLink">
-          <option value="">— select tracker record —</option>
-        </select>
       </div>
       <div style="display:flex;gap:.75rem;align-items:center;margin-top:.25rem">
         <button class="btn" type="submit" id="submitBtn">Generate</button>
@@ -562,8 +666,22 @@
       <div class="field">
         <label>Job</label>
         <div class="src-toggle">
+          <button type="button" class="src-btn" id="srcTrackerBtn">From Tracker</button>
           <button type="button" class="src-btn active" id="srcDropBtn">From existing run</button>
           <button type="button" class="src-btn" id="srcPasteBtn">Paste JD</button>
+        </div>
+        <!-- Tracker picker (hidden by default) -->
+        <div class="app-picker-wrap hidden" id="prepAppPickerWrap" style="margin-bottom:0">
+          <div class="app-picker-selected hidden" id="prepAppSelected">
+            <img class="sel-logo" id="prepSelLogo" alt="">
+            <span class="sel-name" id="prepSelName"></span>
+            <button type="button" class="sel-clear" id="prepSelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="prepAppInputRow">
+            <input type="text" id="prepAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="prepAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="prepJdStatus"></div>
         </div>
         <select id="prepRunSel">
           <option value="">— select a job —</option>
@@ -659,35 +777,223 @@
     return res;
   }
 
-  // Load user info + application dropdown on startup
+  // Load user info + all apps on startup, then wire pickers
   (async () => {
     try {
       const res = await apiFetch('/api/auth/me');
       const u   = await res.json();
       document.getElementById('headerUser').textContent = u.display_name || u.email;
     } catch (_) {}
-    loadAppDropdown();
+    await loadAllApps();
+    initRunPicker();
+    initPrepPicker();
   })();
 
-  async function loadAppDropdown() {
+  // ── App picker shared state ──────────────────────────────────────
+  let _allApps   = [];
+  let _runAppId  = null;   // selected app_id for the run form
+  let _prepAppId = null;   // selected app_id for the prep form
+  const BF_KEY   = '1idZFX8Ll28d4x2IVye';
+  const APP_STATUS_ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
+
+  const STATUS_SC = {
+    'Interviewing': 'sc-interviewing', 'Phone Screen': 'sc-phone-screen',
+    'Applied': 'sc-applied', 'On Hold': 'sc-on-hold', 'Researching': 'sc-researching',
+    'Offer': 'sc-offer', 'Rejected': 'sc-rejected', 'Not Applying': 'sc-not-applying',
+  };
+
+  async function loadAllApps() {
     try {
-      const res  = await apiFetch('/api/applications');
-      const apps = await res.json();
-      const sel  = document.getElementById('appLink');
-      // Show active statuses first, then rest
-      const ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
-      apps.sort((a, b) => {
-        const oa = ORDER.indexOf(a.status), ob = ORDER.indexOf(b.status);
-        if (oa !== ob) return oa - ob;
-        return a.company.localeCompare(b.company);
+      const res = await apiFetch('/api/applications');
+      _allApps = await res.json();
+      _allApps.sort((a, b) => {
+        const oa = APP_STATUS_ORDER.indexOf(a.status), ob = APP_STATUS_ORDER.indexOf(b.status);
+        return oa !== ob ? oa - ob : a.company.localeCompare(b.company);
       });
-      for (const a of apps) {
-        const opt = document.createElement('option');
-        opt.value = a.id;
-        opt.textContent = `${a.company} · ${a.role_title} (${a.status})`;
-        sel.appendChild(opt);
+    } catch (_) { _allApps = []; }
+  }
+
+  function filterApps(q) {
+    if (!q.trim()) return _allApps.slice(0, 8);
+    const lq = q.toLowerCase();
+    return _allApps.filter(a =>
+      a.company.toLowerCase().includes(lq) ||
+      a.role_title.toLowerCase().includes(lq)
+    ).slice(0, 8);
+  }
+
+  function appLogoHtml(a, cls = 'app-sugg-logo') {
+    const BF_KEY = '1idZFX8Ll28d4x2IVye';
+    if (a.domain) {
+      return `<img class="${cls}" src="https://cdn.brandfetch.io/domain/${esc(a.domain)}?c=${BF_KEY}" alt="${esc(a.company)}" onerror="this.outerHTML='<div class=\\'app-sugg-logo-ph\\'>${esc(a.company).slice(0,2).toUpperCase()}</div>'">`;
+    }
+    return `<div class="app-sugg-logo-ph">${esc(a.company).slice(0,2).toUpperCase()}</div>`;
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderAppSuggestions(list, dropEl) {
+    dropEl.innerHTML = '';
+    if (!list.length) {
+      dropEl.innerHTML = '<div class="app-sugg-empty">No matching applications</div>';
+      return;
+    }
+    for (const a of list) {
+      const item = document.createElement('div');
+      item.className = 'app-sugg-item';
+      item.innerHTML = `
+        ${appLogoHtml(a)}
+        <div class="app-sugg-body">
+          <div class="app-sugg-company">${esc(a.company)}</div>
+          <div class="app-sugg-role">${esc(a.role_title)}</div>
+        </div>
+        <span class="app-sugg-status ${STATUS_SC[a.status]||''}">${esc(a.status)}</span>`;
+      item.addEventListener('mousedown', e => { e.preventDefault(); item._app = a; });
+      item.dataset.appId = a.id;
+      dropEl.appendChild(item);
+    }
+  }
+
+  // ── Generic picker init ──────────────────────────────────────────
+  function initAppPicker({
+    searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, selClearEl,
+    inputRowEl, jdStatusEl, onSelect, onClear,
+  }) {
+    let _timer = null;
+
+    searchEl.addEventListener('input', () => {
+      clearTimeout(_timer);
+      const q = searchEl.value;
+      _timer = setTimeout(() => {
+        const list = filterApps(q);
+        renderAppSuggestions(list, suggestionsEl);
+        suggestionsEl.classList.toggle('hidden', !_allApps.length);
+      }, 150);
+    });
+
+    searchEl.addEventListener('focus', () => {
+      const list = filterApps(searchEl.value);
+      renderAppSuggestions(list, suggestionsEl);
+      suggestionsEl.classList.toggle('hidden', !_allApps.length);
+    });
+
+    searchEl.addEventListener('blur', () => {
+      setTimeout(() => suggestionsEl.classList.add('hidden'), 160);
+    });
+
+    suggestionsEl.addEventListener('click', e => {
+      const item = e.target.closest('.app-sugg-item');
+      if (!item) return;
+      const app = _allApps.find(a => a.id === item.dataset.appId);
+      if (app) selectApp(app, { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect });
+    });
+
+    if (selClearEl) {
+      selClearEl.addEventListener('click', () => {
+        selectedEl.classList.add('hidden');
+        inputRowEl.classList.remove('hidden');
+        searchEl.value = '';
+        if (jdStatusEl) jdStatusEl.classList.add('hidden');
+        if (onClear) onClear();
+      });
+    }
+  }
+
+  async function selectApp(app, { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect }) {
+    suggestionsEl.classList.add('hidden');
+
+    // Show selected chip
+    if (app.domain) {
+      selLogoEl.src = `https://cdn.brandfetch.io/domain/${app.domain}?c=${BF_KEY}`;
+      selLogoEl.style.display = 'block';
+    } else {
+      selLogoEl.style.display = 'none';
+    }
+    selNameEl.textContent = `${app.company} · ${app.role_title}`;
+    selectedEl.classList.remove('hidden');
+    inputRowEl.classList.add('hidden');
+
+    // Attempt to load job posting from Drive via linked_runs
+    if (jdStatusEl) {
+      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Loading saved job posting…';
+      jdStatusEl.className = 'jd-status';
+      jdStatusEl.classList.remove('hidden');
+    }
+
+    let jd = null;
+    const folderId = (app.linked_runs || [])[0]?.gdrive_folder_id;
+    if (folderId) {
+      try {
+        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
+        if (r.ok) jd = (await r.json()).job_posting;
+      } catch (_) {}
+    }
+
+    if (jdStatusEl) {
+      if (jd) {
+        jdStatusEl.innerHTML = '✓ Job posting loaded from Drive';
+        jdStatusEl.className = 'jd-status loaded';
+      } else {
+        jdStatusEl.innerHTML = 'No saved JD found — paste the job description below';
+        jdStatusEl.className = 'jd-status';
       }
-    } catch (_) {}
+    }
+
+    if (onSelect) onSelect(app, jd);
+  }
+
+  // ── Run form picker ──────────────────────────────────────────────
+  function initRunPicker() {
+    initAppPicker({
+      searchEl:     document.getElementById('runAppSearch'),
+      suggestionsEl: document.getElementById('runAppSuggestions'),
+      selectedEl:   document.getElementById('runAppSelected'),
+      selLogoEl:    document.getElementById('runSelLogo'),
+      selNameEl:    document.getElementById('runSelName'),
+      selClearEl:   document.getElementById('runSelClear'),
+      inputRowEl:   document.getElementById('runAppInputRow'),
+      jdStatusEl:   document.getElementById('runJdStatus'),
+      onSelect: (app, jd) => {
+        _runAppId = app.id;
+        document.getElementById('company').value = app.company;
+        document.getElementById('role').value    = app.role_title;
+        if (jd) document.getElementById('job_posting').value = jd;
+      },
+      onClear: () => {
+        _runAppId = null;
+        document.getElementById('company').value    = '';
+        document.getElementById('role').value       = '';
+        document.getElementById('job_posting').value = '';
+      },
+    });
+  }
+
+  // ── Prep form picker ─────────────────────────────────────────────
+  function initPrepPicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('prepAppSearch'),
+      suggestionsEl: document.getElementById('prepAppSuggestions'),
+      selectedEl:    document.getElementById('prepAppSelected'),
+      selLogoEl:     document.getElementById('prepSelLogo'),
+      selNameEl:     document.getElementById('prepSelName'),
+      selClearEl:    document.getElementById('prepSelClear'),
+      inputRowEl:    document.getElementById('prepAppInputRow'),
+      jdStatusEl:    document.getElementById('prepJdStatus'),
+      onSelect: (app, jd) => {
+        _prepAppId = app.id;
+        document.getElementById('prepCompany').value = app.company;
+        document.getElementById('prepRole').value    = app.role_title;
+        if (jd) _prepJobPosting = jd;
+      },
+      onClear: () => {
+        _prepAppId = null;
+        document.getElementById('prepCompany').value = '';
+        document.getElementById('prepRole').value    = '';
+        _prepJobPosting = '';
+      },
+    });
   }
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -724,8 +1030,7 @@
     const raw = Object.fromEntries(new FormData(e.target));
     const body = { job_posting: raw.job_posting, company: raw.company, role: raw.role };
     if (raw.contact.trim()) body.contact = raw.contact.trim();
-    const appId = document.getElementById('appLink').value;
-    if (appId) body.app_id = appId;
+    if (_runAppId) body.app_id = _runAppId;
     _company = raw.company;
     _role    = raw.role;
 
@@ -875,6 +1180,11 @@
     hide('driveAnchor');
     document.getElementById('fileGrid').innerHTML = '';
     document.getElementById('trackerNote').style.display = 'none';
+    document.getElementById('runJdStatus').classList.add('hidden');
+    document.getElementById('runAppSelected').classList.add('hidden');
+    document.getElementById('runAppInputRow').classList.remove('hidden');
+    document.getElementById('runAppSearch').value = '';
+    _runAppId = null;
     hide('progressCard');
     hide('queueNote');
     form.reset();
@@ -988,21 +1298,20 @@
   // Source mode toggle
   let prepSrcMode = 'dropdown';
 
-  document.getElementById('srcDropBtn').addEventListener('click', () => {
-    prepSrcMode = 'dropdown';
-    document.getElementById('srcDropBtn').classList.add('active');
-    document.getElementById('srcPasteBtn').classList.remove('active');
-    document.getElementById('prepRunSel').classList.remove('hidden');
-    document.getElementById('prepJdText').classList.add('hidden');
-  });
+  function setPrepSrcMode(mode) {
+    prepSrcMode = mode;
+    document.getElementById('srcTrackerBtn').classList.toggle('active', mode === 'tracker');
+    document.getElementById('srcDropBtn').classList.toggle('active',    mode === 'dropdown');
+    document.getElementById('srcPasteBtn').classList.toggle('active',   mode === 'paste');
+    document.getElementById('prepAppPickerWrap').classList.toggle('hidden', mode !== 'tracker');
+    document.getElementById('prepRunSel').classList.toggle('hidden',    mode !== 'dropdown');
+    document.getElementById('prepJdText').classList.toggle('hidden',    mode !== 'paste');
+    if (mode !== 'tracker') { _prepAppId = null; }
+  }
 
-  document.getElementById('srcPasteBtn').addEventListener('click', () => {
-    prepSrcMode = 'paste';
-    document.getElementById('srcPasteBtn').classList.add('active');
-    document.getElementById('srcDropBtn').classList.remove('active');
-    document.getElementById('prepRunSel').classList.add('hidden');
-    document.getElementById('prepJdText').classList.remove('hidden');
-  });
+  document.getElementById('srcTrackerBtn').addEventListener('click', () => setPrepSrcMode('tracker'));
+  document.getElementById('srcDropBtn').addEventListener('click',    () => setPrepSrcMode('dropdown'));
+  document.getElementById('srcPasteBtn').addEventListener('click',   () => setPrepSrcMode('paste'));
 
   // Folder selection → autofill company/role + fetch JD from Drive
   document.getElementById('prepRunSel').addEventListener('change', async (e) => {
@@ -1042,7 +1351,19 @@
     const focus   = document.getElementById('prepFocus').value.trim();
 
     let jd = '';
-    if (prepSrcMode === 'dropdown') {
+    if (prepSrcMode === 'tracker') {
+      if (!_prepAppId) {
+        errEl.textContent = 'Select an application from the tracker.';
+        errEl.style.display = 'block';
+        return;
+      }
+      jd = _prepJobPosting;
+      if (!jd) {
+        errEl.textContent = 'No saved job posting for this application — switch to Paste JD and paste it below.';
+        errEl.style.display = 'block';
+        return;
+      }
+    } else if (prepSrcMode === 'dropdown') {
       jd = _prepJobPosting;
       if (!jd) {
         errEl.textContent = 'Select a run with a saved job posting, or switch to Paste JD.';
@@ -1087,6 +1408,7 @@
           job_posting: jd, company, role,
           round_type:  round,
           focus:       focus || null,
+          ...(_prepAppId ? { app_id: _prepAppId } : {}),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
