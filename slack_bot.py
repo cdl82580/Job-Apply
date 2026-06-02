@@ -943,10 +943,10 @@ def jobstatus_command(ack, respond):
 
 
 # ---------------------------------------------------------------------------
-# /me — account info
+# /whoami — account info
 # ---------------------------------------------------------------------------
 
-@app.command("/me")
+@app.command("/whoami")
 def me_command(ack, respond):
     ack()
     try:
@@ -1212,7 +1212,7 @@ def help_command(ack, respond):
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🔍  Lookup & Info*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             "*/company `[name]`* — Search company info — logo, domain, description\n"
-            "*/me* — Show your account details and verification status\n"
+            "*/whoami* — Show your account details and verification status\n"
             "*/activity* — Show your 10 most recent audit events"
         )}},
         {"type": "divider"},

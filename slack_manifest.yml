@@ -25,7 +25,7 @@ display_information:
 
     🔍 Lookup & Info
       /company      — Search company info (logo, domain, description)
-      /me           — Show your account details
+      /whoami           — Show your account details
       /activity     — Show your 10 most recent audit events
 
     🛠️ System
@@ -85,7 +85,7 @@ features:
       description: Search company info — name, domain, and description via BrandFetch
       usage_hint: "[company name] e.g. Salesforce"
       should_escape: false
-    - command: /me
+    - command: /whoami
       description: Show your account details, role, and verification status
       usage_hint: (no arguments)
       should_escape: false

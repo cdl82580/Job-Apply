@@ -117,7 +117,7 @@ job-apply/
 | 📋 Tracker | `/track-note` | Add a comment to an application |
 | 📋 Tracker | `/track-delete` | Delete an application (two-step confirm) |
 | 🔍 Lookup | `/company [name]` | Search company info via BrandFetch |
-| 🔍 Lookup | `/me` | Show your account details |
+| 🔍 Lookup | `/whoami` | Show your account details |
 | 🔍 Lookup | `/activity` | Show your 10 most recent audit events |
 | 🛠️ System | `/jobstatus` | Check API health |
 | 🛠️ System | `/resend-verify` | Resend email verification |
@@ -237,7 +237,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/auth/register` | — | Create account + upload resume |
 | POST | `/api/auth/login` | — | Get session cookie |
 | POST | `/api/auth/logout` | cookie | Clear session |
-| GET | `/api/auth/me` | cookie | Current user info + role + email_verified |
+| GET | `/api/auth/whoami` | cookie | Current user info + role + email_verified |
 | GET | `/api/auth/google` | — | Start Google OAuth flow |
 | GET | `/api/auth/google/callback` | — | Google OAuth callback |
 | GET | `/api/auth/verify-email?token=` | — | Consume email verification token |
@@ -246,7 +246,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | PUT | `/api/profile` | cookie | Update display name or profile text |
 | POST | `/api/profile/resume` | cookie | Replace master resume |
 | POST | `/api/profile/password` | cookie | Change password |
-| GET | `/api/audit/me` | cookie | Current user's audit event log |
+| GET | `/api/audit/whoami` | cookie | Current user's audit event log |
 | GET | `/api/applications` | cookie | List applications (paginated) |
 | POST | `/api/applications` | cookie | Create application |
 | GET | `/api/applications/{id}` | cookie | Get full application record |
