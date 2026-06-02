@@ -564,6 +564,7 @@
         <th class="sortable" data-col="role_title">Role<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="status">Status<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="priority">Priority<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="created_at">Created<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="date_applied">Applied<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="last_updated">Updated<span class="sort-arrow">↕</span></th>
         <th></th>
@@ -571,9 +572,9 @@
     </thead>
     <tbody id="appTableBody">
       <!-- skeleton rows -->
-      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:70%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:55%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="7"><div class="skel" style="width:65%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:70%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:55%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:65%;height:14px"></div></td></tr>
     </tbody>
   </table>
 
@@ -776,6 +777,7 @@ function _sortVal(a, col) {
   switch (col) {
     case 'priority':     return PRIORITY_ORDER[a.priority] ?? 99;
     case 'status':       return STATUS_ORDER[a.status] ?? 99;
+    case 'created_at':   return a.created_at   || '';
     case 'date_applied': return a.date_applied || '';
     case 'last_updated': return a.last_updated || '';
     default:             return (a[col] || '').toString().toLowerCase();
@@ -821,6 +823,7 @@ document.addEventListener('click', (e) => {
     _sortDir = 'asc';
   }
   _updateSortHeaders();
+  _filtered = _sortList(_filtered);  // re-sort current view
   renderTable();
 });
 
@@ -937,6 +940,7 @@ function renderTable() {
       <td class="role-cell">${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}</td>
       <td>${priorityBadge(a.priority)}</td>
+      <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.created_at)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
