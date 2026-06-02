@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin — Job Application Agent</title>
+  <!-- ExcelJS loaded lazily on first Excel export -->
+  <script id="exceljs-placeholder" data-src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
   <link rel="icon" href="/favicon.png" type="image/png">
   <script>
     (function(){
@@ -127,6 +129,27 @@
       font-size: .875rem; font-family: inherit; background: var(--input-bg); color: var(--text); }
     /* Match button height to filter inputs across all 4 tabs */
     .filter-row .btn { padding: .4rem .85rem; font-size: .875rem; }
+
+    /* ── Export dropdown ─────────────────────────────────────────── */
+    .export-wrap { position: relative; display: inline-flex; }
+    .export-menu {
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 200;
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.15);
+      min-width: 220px; overflow: hidden;
+    }
+    .export-menu.hidden { display: none; }
+    .export-item {
+      display: flex; align-items: center; gap: .5rem;
+      width: 100%; text-align: left; padding: .65rem 1rem;
+      font-size: .825rem; font-weight: 500; background: none;
+      border: none; cursor: pointer; color: var(--text); font-family: inherit;
+      transition: background .1s;
+    }
+    .export-item:hover { background: var(--fill); }
+    .export-item-icon { font-size: .95rem; flex-shrink: 0; }
+    .export-item-label { flex: 1; }
+    .export-item-sub { font-size: .72rem; color: var(--muted); display: block; margin-top: .1rem; }
     .filter-row input:focus, .filter-row select:focus {
       outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
     .filter-row input { flex: 1; min-width: 180px; }
@@ -333,7 +356,19 @@
       <input type="date" id="userJoinedFrom" style="max-width:148px" title="Joined from">
       <input type="date" id="userJoinedTo"   style="max-width:148px" title="Joined to">
       <button class="btn btn-ghost" id="userClearFilters" style="margin-left:auto">Clear filters</button>
-      <button class="btn btn-ghost" id="exportUsersBtn">⬇ Export CSV</button>
+      <div class="export-wrap" id="usersExportWrap">
+        <button class="btn btn-ghost" id="exportUsersBtn">⬇ Export ▾</button>
+        <div class="export-menu hidden" id="usersExportMenu">
+          <button class="export-item" data-action="csv-users">
+            <span class="export-item-icon">📄</span>
+            <span class="export-item-label">CSV<span class="export-item-sub">Current filtered view</span></span>
+          </button>
+          <button class="export-item" data-action="xlsx-users">
+            <span class="export-item-icon">📊</span>
+            <span class="export-item-label">Excel<span class="export-item-sub">All users — formatted workbook</span></span>
+          </button>
+        </div>
+      </div>
     </div>
     <div id="usersAlert"></div>
     <table>
@@ -388,7 +423,19 @@
       <input type="date" id="appUpdatedFrom" style="max-width:148px" title="Updated from">
       <input type="date" id="appUpdatedTo"   style="max-width:148px" title="Updated to">
       <button class="btn btn-ghost" id="appClearFilters" style="margin-left:auto">Clear filters</button>
-      <button class="btn btn-ghost" id="exportAppsBtn">⬇ Export CSV</button>
+      <div class="export-wrap" id="appsExportWrap">
+        <button class="btn btn-ghost" id="exportAppsBtn">⬇ Export ▾</button>
+        <div class="export-menu hidden" id="appsExportMenu">
+          <button class="export-item" data-action="csv-apps">
+            <span class="export-item-icon">📄</span>
+            <span class="export-item-label">CSV<span class="export-item-sub">Current filtered view</span></span>
+          </button>
+          <button class="export-item" data-action="xlsx-apps">
+            <span class="export-item-icon">📊</span>
+            <span class="export-item-label">Excel<span class="export-item-sub">All applications — formatted workbook</span></span>
+          </button>
+        </div>
+      </div>
     </div>
     <div id="appsAlert"></div>
     <table>
@@ -441,7 +488,19 @@
       <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
       <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
       <button class="btn btn-ghost" id="runsClearFilters" style="margin-left:auto">Clear filters</button>
-      <button class="btn btn-ghost" id="exportRunsBtn">⬇ Export CSV</button>
+      <div class="export-wrap" id="runsExportWrap">
+        <button class="btn btn-ghost" id="exportRunsBtn">⬇ Export ▾</button>
+        <div class="export-menu hidden" id="runsExportMenu">
+          <button class="export-item" data-action="csv-runs">
+            <span class="export-item-icon">📄</span>
+            <span class="export-item-label">CSV<span class="export-item-sub">Current filtered view</span></span>
+          </button>
+          <button class="export-item" data-action="xlsx-runs">
+            <span class="export-item-icon">📊</span>
+            <span class="export-item-label">Excel<span class="export-item-sub">All agent runs — formatted workbook</span></span>
+          </button>
+        </div>
+      </div>
     </div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
     <table>
@@ -496,7 +555,19 @@
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">To:</label>
       <input type="datetime-local" id="auditTo"   style="max-width:190px">
       <button class="btn btn-ghost" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
-      <button class="btn btn-ghost" id="exportAuditBtn">⬇ Export CSV</button>
+      <div class="export-wrap" id="auditExportWrap">
+        <button class="btn btn-ghost" id="exportAuditBtn">⬇ Export ▾</button>
+        <div class="export-menu hidden" id="auditExportMenu">
+          <button class="export-item" data-action="csv-audit">
+            <span class="export-item-icon">📄</span>
+            <span class="export-item-label">CSV<span class="export-item-sub">Current filtered view</span></span>
+          </button>
+          <button class="export-item" data-action="xlsx-audit">
+            <span class="export-item-icon">📊</span>
+            <span class="export-item-label">Excel<span class="export-item-sub">All audit events — formatted workbook</span></span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <table>
@@ -697,11 +768,13 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
+let _adminEmail = '';
 (async () => {
   try {
     const u = await (await apiFetch('/api/auth/me')).json();
     if (u.role !== 'admin') { window.location.href = '/'; return; }
     document.getElementById('headerUser').textContent = u.display_name || u.email;
+    _adminEmail = u.email || '';
   } catch (_) {}
 })();
 
@@ -1636,11 +1709,45 @@ document.getElementById('usersHead').addEventListener('click', e => {
   _usersPage = 1; renderUsers();
 });
 
-// ── CSV Export ───────────────────────────────────────────────────────
+// ── Export (CSV + Excel) ─────────────────────────────────────────────
 
+// Lazy-load ExcelJS only when first Excel export is requested
+async function loadExcelJS() {
+  if (window.ExcelJS) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ── Dropdown show/hide ───────────────────────────────────────────────
+const _exportMenus = {
+  users: 'usersExportMenu', apps: 'appsExportMenu',
+  runs:  'runsExportMenu',  audit: 'auditExportMenu',
+};
+['exportUsersBtn','exportAppsBtn','exportRunsBtn','exportAuditBtn'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    e.stopPropagation();
+    const menu = id.replace('export','').replace('Btn','').toLowerCase();
+    const menuId = _exportMenus[menu] ||
+      Object.values(_exportMenus).find(m => m.toLowerCase().includes(menu));
+    // Close all others, toggle this one
+    Object.values(_exportMenus).forEach(m => {
+      if (m !== menuId) document.getElementById(m).classList.add('hidden');
+    });
+    document.getElementById(menuId).classList.toggle('hidden');
+  });
+});
+document.addEventListener('click', () => {
+  Object.values(_exportMenus).forEach(m => document.getElementById(m).classList.add('hidden'));
+});
+
+// ── CSV helper ───────────────────────────────────────────────────────
 function downloadCSV(filename, headers, rows) {
   const cell = v => {
-    if (v == null || v === undefined) return '';
+    if (v == null) return '';
     const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1648,73 +1755,86 @@ function downloadCSV(filename, headers, rows) {
   const lines = [headers.map(cell).join(',')];
   for (const row of rows) lines.push(row.map(cell).join(','));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
-  a.click();
+  const url = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'), { href: url, download: filename }).click();
   URL.revokeObjectURL(url);
 }
 
-async function logExport(screen, rowCount, filters = {}) {
-  try {
-    await apiFetch('/api/admin/log-activity', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ screen, row_count: rowCount, filters }),
+// ── Excel helper ─────────────────────────────────────────────────────
+async function downloadXLSX(filename, sheetTitle, description, headers, rows) {
+  await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Job Apply Admin';
+  wb.created = new Date();
+  const ws = wb.addWorksheet(sheetTitle, { views: [{ state: 'frozen', ySplit: 4, xSplit: 1 }] });
+
+  // Compute column widths from content
+  ws.columns = headers.map((h, i) => ({
+    header: '', width: Math.min(55, Math.max(12, h.length + 2,
+      ...rows.slice(0, 200).map(r => String(r[i] ?? '').length + 1)))
+  }));
+
+  // ── Row 1: Title ──────────────────────────────────────────────────
+  const tr = ws.addRow([sheetTitle]);
+  ws.mergeCells(1, 1, 1, headers.length);
+  tr.height = 24;
+  tr.getCell(1).font  = { bold: true, size: 14, color: { argb: 'FF1A3C5E' } };
+  tr.getCell(1).alignment = { vertical: 'middle' };
+
+  // ── Row 2: Description ────────────────────────────────────────────
+  const dr = ws.addRow([description]);
+  ws.mergeCells(2, 1, 2, headers.length);
+  dr.height = 15;
+  dr.getCell(1).font      = { size: 9, color: { argb: 'FF6B7280' }, italic: true };
+  dr.getCell(1).alignment = { vertical: 'middle' };
+
+  // ── Row 3: Spacer ─────────────────────────────────────────────────
+  ws.addRow([]);
+
+  // ── Row 4: Header ─────────────────────────────────────────────────
+  const hr = ws.addRow(headers);
+  hr.height = 18;
+  hr.eachCell(cell => {
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: false };
+    cell.border    = _border();
+  });
+
+  // ── Rows 5+: Data ─────────────────────────────────────────────────
+  const EVEN = 'FFFFFFFF', ODD = 'FFF3F4F6';
+  rows.forEach((row, i) => {
+    const dr2 = ws.addRow(row.map(v => v ?? ''));
+    dr2.height = 15;
+    const bg = i % 2 === 0 ? EVEN : ODD;
+    dr2.eachCell({ includeEmpty: true }, cell => {
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      cell.font      = { size: 10 };
+      cell.alignment = { vertical: 'middle', wrapText: false };
+      cell.border    = _border('FFDDDDDD');
     });
-  } catch (_) {}
+  });
+
+  // AutoFilter on header row
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: headers.length } };
+
+  // Download
+  const buf  = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url  = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
 }
 
-// Users export
-document.getElementById('exportUsersBtn').addEventListener('click', async () => {
-  const list = _lastFilteredUsers;
-  const runsByEmail = {};
-  for (const r of _allRuns) if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email]||0)+1;
-  const headers = ['User ID','Display Name','Email','Role','Active','Email Verified','Apps','Runs','Last Login','Joined'];
-  const rows = list.map(u => [
-    u.user_id, u.display_name||'', u.email||'', u.role||'',
-    u.active !== false ? 'Yes' : 'No',
-    u.email_verified !== false ? 'Yes' : 'No',
-    u.app_count||0, runsByEmail[u.email]||0,
-    u.last_login||'', u.created_at||'',
-  ]);
-  downloadCSV(`admin-users-${_today()}.csv`, headers, rows);
-  await logExport('users', rows.length, _userFilters());
-});
+function _border(color = 'FFCCCCCC') {
+  const s = { style: 'thin', color: { argb: color } };
+  return { top: s, left: s, bottom: s, right: s };
+}
 
-// Applications export
-document.getElementById('exportAppsBtn').addEventListener('click', async () => {
-  const list = _lastFilteredApps;
-  const headers = ['Company','Domain','Role Title','Status','Priority','Owner Email',
-                   'Date Applied','Last Updated','URL','Recruiter Name','Recruiter Email',
-                   'Location','Salary Range','Job Source','DUA'];
-  const rows = list.map(a => [
-    a.company, a.domain, a.role_title, a.status, a.priority, a._user_email||'',
-    a.date_applied||'', a.last_updated||'', a.url||'',
-    a.recruiter_name||'', a.recruiter_email||'',
-    a.location||'', a.salary_range||'', a.job_source||'',
-    a.dua ? 'Yes' : 'No',
-  ]);
-  downloadCSV(`admin-applications-${_today()}.csv`, headers, rows);
-  await logExport('applications', rows.length, _appFilters());
-});
-
-// Agent Runs export
-document.getElementById('exportRunsBtn').addEventListener('click', async () => {
-  const list = _lastFilteredRuns;
-  const headers = ['Type','Folder Name','User Email','Status','Created At','Drive URL'];
-  const rows = list.map(r => [
-    r.type === 'interview_prep' ? 'Interview Prep' : 'Resume',
-    r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
-  ]);
-  downloadCSV(`admin-runs-${_today()}.csv`, headers, rows);
-  await logExport('agent_runs', rows.length, _runsFilters());
-});
-
-// Audit Log export (fetches all matching from API)
-document.getElementById('exportAuditBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('exportAuditBtn');
-  btn.disabled = true; btn.textContent = '⬇ Exporting…';
-  try {
-    const params = new URLSearchParams({ sort_order: _auditSortOrder });
+// ── Audit export params helper ───────────────────────────────────────
+function _auditParams(allRecords = false) {
+  const params = new URLSearchParams({ sort_order: _auditSortOrder });
+  if (!allRecords) {
     const actor  = document.getElementById('auditActorFilter').value.trim();
     const action = document.getElementById('auditActionFilter').value;
     const userId = document.getElementById('auditUserFilter').value;
@@ -1727,43 +1847,138 @@ document.getElementById('exportAuditBtn').addEventListener('click', async () => 
     if (source) params.set('source',  source);
     if (from)   params.set('from_ts', from + ':00Z');
     if (to)     params.set('to_ts',   to   + ':59Z');
+  }
+  return params;
+}
 
-    const res    = await apiFetch(`/api/admin/audit/export?${params}`);
-    const events = await res.json();
+async function logExport(screen, format, rowCount, filters = {}) {
+  try {
+    await apiFetch('/api/admin/log-activity', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ screen: `${screen}_${format}`, row_count: rowCount, filters }),
+    });
+  } catch (_) {}
+}
 
-    const headers = ['Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
-    const rows = events.map(e => [
-      e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
-      e.source||'', e.entity_label||'', e.ip||'',
-      e.details ? JSON.stringify(e.details) : '',
-    ]);
-    downloadCSV(`admin-audit-${_today()}.csv`, headers, rows);
-    // audit log event already written server-side by /audit/export
-  } catch (err) { console.error('audit export', err); }
-  finally { btn.disabled = false; btn.textContent = '⬇ Export CSV'; }
-});
+// ── Data specs per screen ─────────────────────────────────────────────
+function _userRows(list) {
+  const runsByEmail = {};
+  for (const r of _allRuns) if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email]||0)+1;
+  return list.map(u => [
+    u.user_id, u.display_name||'', u.email||'', u.role||'',
+    u.active !== false ? 'Yes' : 'No',
+    u.email_verified !== false ? 'Yes' : 'No',
+    u.app_count||0, runsByEmail[u.email]||0,
+    u.last_login||'', u.created_at||'',
+  ]);
+}
+const USER_HEADERS = ['User ID','Display Name','Email','Role','Active','Email Verified','Apps','Runs','Last Login','Joined'];
 
-// Helpers
+function _appRows(list) {
+  return list.map(a => [
+    a.company||'', a.domain||'', a.role_title||'', a.status||'', a.priority||'',
+    a._user_email||'', a.date_applied||'', a.last_updated||'', a.url||'',
+    a.recruiter_name||'', a.recruiter_email||'',
+    a.location||'', a.salary_range||'', a.job_source||'',
+    a.dua ? 'Yes' : 'No',
+  ]);
+}
+const APP_HEADERS = ['Company','Domain','Role Title','Status','Priority','Owner Email',
+                     'Date Applied','Last Updated','URL','Recruiter Name','Recruiter Email',
+                     'Location','Salary Range','Job Source','DUA'];
+
+function _runRows(list) {
+  return list.map(r => [
+    r.type === 'interview_prep' ? 'Interview Prep' : 'Resume',
+    r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
+  ]);
+}
+const RUN_HEADERS = ['Type','Folder Name','User Email','Status','Created At','Drive URL'];
+
+function _auditRows(events) {
+  return events.map(e => [
+    e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
+    e.source||'', e.entity_label||'', e.ip||'',
+    e.details ? JSON.stringify(e.details) : '',
+  ]);
+}
+const AUDIT_HEADERS = ['Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
+
 function _today() { return new Date().toISOString().slice(0,10); }
-function _userFilters() {
-  return {
-    search:  document.getElementById('userSearch').value,
-    role:    document.getElementById('userRoleFilter').value,
-    verified: document.getElementById('userVerifiedFilter').value,
-  };
+function _ts()    {
+  return new Date().toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
 }
-function _appFilters() {
-  return {
-    search: document.getElementById('appSearch').value,
-    status: document.getElementById('appStatusFilter').value,
-  };
-}
-function _runsFilters() {
-  return {
-    type:   document.getElementById('runsTypeFilter').value,
-    status: document.getElementById('runsStatusFilter').value,
-  };
-}
+
+// ── Delegated export item click handler ──────────────────────────────
+document.addEventListener('click', async e => {
+  const item = e.target.closest('.export-item[data-action]');
+  if (!item) return;
+  // Close all menus
+  Object.values(_exportMenus).forEach(m => document.getElementById(m).classList.add('hidden'));
+
+  const action = item.dataset.action;
+  const btn = item.closest('.export-wrap').querySelector('.btn');
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = '⌛ Exporting…';
+
+  try {
+    // ── CSV exports (current filtered view) ──────────────────────────
+    if (action === 'csv-users') {
+      const rows = _userRows(_lastFilteredUsers);
+      downloadCSV(`admin-users-${_today()}.csv`, USER_HEADERS, rows);
+      await logExport('users', 'csv', rows.length);
+    }
+    else if (action === 'csv-apps') {
+      const rows = _appRows(_lastFilteredApps);
+      downloadCSV(`admin-applications-${_today()}.csv`, APP_HEADERS, rows);
+      await logExport('applications', 'csv', rows.length);
+    }
+    else if (action === 'csv-runs') {
+      const rows = _runRows(_lastFilteredRuns);
+      downloadCSV(`admin-runs-${_today()}.csv`, RUN_HEADERS, rows);
+      await logExport('agent_runs', 'csv', rows.length);
+    }
+    else if (action === 'csv-audit') {
+      const res    = await apiFetch(`/api/admin/audit/export?${_auditParams(false)}`);
+      const events = await res.json();
+      downloadCSV(`admin-audit-${_today()}.csv`, AUDIT_HEADERS, _auditRows(events));
+      // server logs export event
+    }
+
+    // ── Excel exports (all records) ──────────────────────────────────
+    else if (action === 'xlsx-users') {
+      const rows = _userRows(_users);
+      const desc = `All ${rows.length} user accounts  ·  Exported ${_ts()} by ${_adminEmail}`;
+      await downloadXLSX(`admin-users-${_today()}.xlsx`, 'Users', desc, USER_HEADERS, rows);
+      await logExport('users', 'xlsx', rows.length);
+    }
+    else if (action === 'xlsx-apps') {
+      const rows = _appRows(_allApps);
+      const desc = `All ${rows.length} applications across all users  ·  Exported ${_ts()} by ${_adminEmail}`;
+      await downloadXLSX(`admin-applications-${_today()}.xlsx`, 'All Applications', desc, APP_HEADERS, rows);
+      await logExport('applications', 'xlsx', rows.length);
+    }
+    else if (action === 'xlsx-runs') {
+      const rows = _runRows(_allRuns);
+      const desc = `All ${rows.length} agent runs  ·  Exported ${_ts()} by ${_adminEmail}`;
+      await downloadXLSX(`admin-runs-${_today()}.xlsx`, 'Agent Runs', desc, RUN_HEADERS, rows);
+      await logExport('agent_runs', 'xlsx', rows.length);
+    }
+    else if (action === 'xlsx-audit') {
+      btn.textContent = '⌛ Fetching events…';
+      const res    = await apiFetch(`/api/admin/audit/export?sort_order=${_auditSortOrder}`);
+      const events = await res.json();
+      const rows   = _auditRows(events);
+      const desc   = `All ${rows.length} audit events  ·  Exported ${_ts()} by ${_adminEmail}`;
+      await downloadXLSX(`admin-audit-${_today()}.xlsx`, 'Audit Log', desc, AUDIT_HEADERS, rows);
+      // server already logged via /audit/export
+    }
+  } catch (err) { console.error('export error', err); }
+  finally { btn.disabled = false; btn.textContent = origText; }
+});
 
 // Register page-number button callbacks for each paginated tab
 _pagCallbacks['users'] = p => { _usersPage = p; renderUsers(); };
