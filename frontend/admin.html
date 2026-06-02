@@ -263,10 +263,10 @@
 
   <!-- Stats -->
   <div class="stats-bar">
-    <div class="stat-chip"><div class="stat-num" id="statUsers">—</div><div class="stat-lbl">Users</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statUsers">—</div><div class="stat-lbl">Active Users</div></div>
     <div class="stat-chip"><div class="stat-num" id="statApps">—</div><div class="stat-lbl">Applications</div></div>
     <div class="stat-chip"><div class="stat-num" id="statAdmins">—</div><div class="stat-lbl">Admins</div></div>
-    <div class="stat-chip"><div class="stat-num" id="statRuns">—</div><div class="stat-lbl">Active Runs</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statRuns">—</div><div class="stat-lbl">Agent Runs</div></div>
   </div>
 
   <!-- Tabs -->
@@ -518,6 +518,7 @@ function showAlert(elId, msg, type = 'err') {
 // ── State ────────────────────────────────────────────────────────────
 let _users    = [];
 let _allApps  = [];
+let _allRuns  = [];
 let _pendingRoleUserId = null;
 let _pendingDeleteUserId = null;
 let _pendingDeleteAppId  = null;
@@ -557,17 +558,21 @@ async function loadApps() {
 async function loadRuns() {
   try {
     const res = await apiFetch('/api/admin/runs');
-    const runs = await res.json();
-    renderRuns(runs);
-    document.getElementById('statRuns').textContent =
-      runs.filter(r => r.status === 'running' || r.status === 'queued').length;
+    _allRuns = await res.json();
+    renderRuns(_allRuns);
+    updateStats();
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
 function updateStats() {
-  document.getElementById('statUsers').textContent  = _users.length;
-  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length;
+  // Active users: have >0 applications OR appear in any run
+  const runUserIds = new Set(_allRuns.map(r => r.user_id).filter(Boolean));
+  const activeUsers = _users.filter(u => u.app_count > 0 || runUserIds.has(u.user_id)).length;
+
+  document.getElementById('statUsers').textContent  = activeUsers || '—';
   document.getElementById('statApps').textContent   = _allApps.length || '—';
+  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
+  document.getElementById('statRuns').textContent   = _allRuns.length || '—';
 }
 
 // ── Render users ─────────────────────────────────────────────────────
