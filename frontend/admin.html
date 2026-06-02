@@ -775,40 +775,11 @@
 
     <!-- Filters -->
     <div style="margin-bottom:1rem">
-      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-bottom:.4rem;border-bottom:1px solid var(--card-border);margin-bottom:.75rem">
-        Delivery Filters <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(all conditions must match — leave blank to skip)</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <label style="font-size:.8rem;font-weight:600">Delivery Filters <span style="font-weight:400;color:var(--muted)">(all conditions AND — leave empty to receive everything)</span></label>
+        <button type="button" class="btn btn-ghost btn-sm" id="addFilterBtn">+ Add Filter</button>
       </div>
-      <div style="display:grid;gap:.75rem">
-        <div>
-          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Actor <span style="font-weight:400;color:var(--muted)">(email or user ID, comma-separated)</span></label>
-          <input type="text" id="whFilterActors" placeholder="e.g. cdl825@gmail.com, abc-uuid-123" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-          <div>
-            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Source</label>
-            <select id="whFilterSource" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
-              <option value="">All sources</option>
-              <option value="user">User events only</option>
-              <option value="application">Application events only</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Application ID <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-            <input type="text" id="whFilterAppId" placeholder="e.g. abc-uuid-123" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
-          </div>
-        </div>
-        <div>
-          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.4rem">Action Categories</label>
-          <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-            ${['auth','profile','applications','runs','admin'].map(c =>
-              `<label style="display:flex;align-items:center;gap:.3rem;font-size:.825rem;cursor:pointer">
-                <input type="checkbox" class="wh-cat-cb" value="${c}" style="accent-color:var(--primary)">
-                ${c.charAt(0).toUpperCase()+c.slice(1)}</label>`
-            ).join('')}
-          </div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Leave all unchecked to allow all categories.</div>
-        </div>
-      </div>
+      <div id="whFilterRows"></div>
     </div>
 
     <!-- Query params -->
@@ -2143,6 +2114,73 @@ document.addEventListener('click', async e => {
   finally { btn.disabled = false; btn.textContent = origText; }
 });
 
+// ── Webhook filter rows ───────────────────────────────────────────────
+
+const FILTER_OPTIONS = {
+  actor:    { label: 'Actor',         type: 'text',   placeholder: 'e.g. cdl825@gmail.com or user-uuid' },
+  source:   { label: 'Source',        type: 'select', options: ['user','application'] },
+  category: { label: 'Category',      type: 'select', options: ['auth','profile','applications','runs','admin'] },
+  app_id:   { label: 'Application ID',type: 'text',   placeholder: 'e.g. abc-uuid-123 (monospace)' },
+};
+
+function _filterRow(filterType = 'actor', value = '') {
+  const row    = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:160px 1fr auto;gap:.4rem;margin-bottom:.3rem;align-items:center';
+  const bSt    = '1px solid var(--input-border)';
+  const inpSt  = `padding:.35rem .5rem;border:${bSt};border-radius:5px;font-size:.8rem;background:var(--input-bg);color:var(--text);font-family:inherit`;
+  const selSt  = inpSt + ';appearance:none';
+  const delSt  = `padding:.25rem .5rem;border:${bSt.replace('--input', '--error')};border-radius:5px;background:none;color:var(--error);cursor:pointer;font-size:.8rem`;
+
+  // Filter type select
+  const typeOpts = Object.entries(FILTER_OPTIONS)
+    .map(([k, v]) => `<option value="${k}" ${k === filterType ? 'selected' : ''}>${v.label}</option>`)
+    .join('');
+  const typeEl = `<select class="wh-flt-type" style="${selSt}">${typeOpts}</select>`;
+
+  // Value input — built based on current type
+  function buildValEl(ft, val) {
+    const cfg = FILTER_OPTIONS[ft] || FILTER_OPTIONS.actor;
+    if (cfg.type === 'select') {
+      const opts = cfg.options.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('');
+      return `<select class="wh-flt-val" style="${selSt}">${opts}</select>`;
+    }
+    const mono = ft === 'app_id' ? ';font-family:\'SF Mono\',\'Fira Code\',monospace' : '';
+    return `<input type="text" class="wh-flt-val" value="${esc(val)}" placeholder="${FILTER_OPTIONS[ft]?.placeholder||''}" style="${inpSt}${mono}">`;
+  }
+
+  row.innerHTML = `${typeEl}${buildValEl(filterType, value)}<button type="button" style="${delSt}" onclick="this.parentElement.remove()">✕</button>`;
+
+  // Swap value control when type changes
+  row.querySelector('.wh-flt-type').addEventListener('change', function() {
+    const oldVal = row.querySelector('.wh-flt-val');
+    const newVal = document.createElement('div');
+    newVal.innerHTML = buildValEl(this.value, '');
+    oldVal.replaceWith(newVal.firstElementChild);
+  });
+
+  document.getElementById('whFilterRows').appendChild(row);
+}
+
+function _collectFilters() {
+  const actors = [], cats = [];
+  let source = '', appId = '';
+  document.querySelectorAll('#whFilterRows > div').forEach(row => {
+    const type = row.querySelector('.wh-flt-type')?.value || '';
+    const val  = (row.querySelector('.wh-flt-val')?.value || '').trim();
+    if (!val) return;
+    if (type === 'actor')    actors.push(val);
+    if (type === 'source')   source = val;
+    if (type === 'category') cats.push(val);
+    if (type === 'app_id')   appId  = val;
+  });
+  return {
+    filter_actors:     actors.join(','),
+    filter_source:     source,
+    filter_categories: cats,
+    filter_app_id:     appId,
+  };
+}
+
 // ── Webhooks ─────────────────────────────────────────────────────────
 let _webhooks   = [];
 let _editingWh  = null;  // null = create, string = edit ID
@@ -2385,13 +2423,15 @@ function openWebhookModal(wh = null) {
   document.getElementById('whSecret').value        = wh?.secret || '';
   document.getElementById('whFormat').value        = wh?.payload_format || 'generic';
   document.getElementById('whActive').checked      = wh ? (wh.active !== false) : true;
-  document.getElementById('whFilterActors').value  = wh?.filter_actors || '';
-  document.getElementById('whFilterSource').value  = wh?.filter_source || '';
-  document.getElementById('whFilterAppId').value   = wh?.filter_app_id || '';
-  const activeCats = wh?.filter_categories || [];
-  document.querySelectorAll('.wh-cat-cb').forEach(cb => {
-    cb.checked = activeCats.includes(cb.value);
-  });
+  // Rebuild filter rows from saved values
+  document.getElementById('whFilterRows').innerHTML = '';
+  if (wh) {
+    (wh.filter_actors || '').split(',').map(s => s.trim()).filter(Boolean)
+      .forEach(v => _filterRow('actor', v));
+    if (wh.filter_source)  _filterRow('source',   wh.filter_source);
+    (wh.filter_categories || []).forEach(v => _filterRow('category', v));
+    if (wh.filter_app_id)  _filterRow('app_id',   wh.filter_app_id);
+  }
   document.getElementById('webhookModalAlert').classList.add('hidden');
   document.getElementById('webhookModalSave').disabled = false;
   document.getElementById('webhookModalSave').textContent = 'Save Webhook';
@@ -2438,6 +2478,7 @@ document.getElementById('whSelectNone').addEventListener('click', () => {
   document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = false);
 });
 document.getElementById('addQpBtn').addEventListener('click', () => _qpRow('whQpRows'));
+document.getElementById('addFilterBtn').addEventListener('click', () => _filterRow());
 document.getElementById('addHdrBtn').addEventListener('click', () => _kvRow('whHdrRows'));
 
 document.getElementById('webhookModalCancel').addEventListener('click', () => {
@@ -2461,10 +2502,7 @@ document.getElementById('webhookModalSave').addEventListener('click', async () =
     secret:             document.getElementById('whSecret').value.trim(),
     active:             document.getElementById('whActive').checked,
     payload_format:     document.getElementById('whFormat').value,
-    filter_actors:      document.getElementById('whFilterActors').value.trim(),
-    filter_source:      document.getElementById('whFilterSource').value,
-    filter_app_id:      document.getElementById('whFilterAppId').value.trim(),
-    filter_categories:  [...document.querySelectorAll('.wh-cat-cb:checked')].map(c => c.value),
+    ..._collectFilters(),
     events,
     query_params: _collectKv('whQpRows'),
     headers:      _collectKv('whHdrRows'),
