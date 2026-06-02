@@ -2168,6 +2168,7 @@ function renderWebhooks() {
       <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${w.last_triggered_at ? fmtDateTime(w.last_triggered_at) : '—'}</td>
       <td>
         <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" data-wh-action="copy"     data-wh-url="${esc(w.url)}">Copy URL</button>
           <button class="btn btn-ghost btn-sm" data-wh-action="edit"     data-wh-id="${w.id}">Edit</button>
           <button class="btn btn-ghost btn-sm" data-wh-action="test"     data-wh-id="${w.id}">Test</button>
           <button class="btn btn-ghost btn-sm" data-wh-action="log"      data-wh-id="${w.id}" data-wh-name="${esc(w.name)}">Log</button>
@@ -2189,6 +2190,14 @@ document.getElementById('webhooksTable').addEventListener('click', async e => {
   if (act === 'edit') {
     const wh = await (await apiFetch(`/api/admin/webhooks/${id}`)).json();
     openWebhookModal(wh);
+  }
+  if (act === 'copy') {
+    navigator.clipboard.writeText(btn.dataset.whUrl).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => btn.textContent = orig, 2000);
+    }).catch(() => showAlert('webhooksAlert', 'Could not copy — check browser permissions.', 'err'));
+    return;
   }
   if (act === 'test') {
     btn.disabled = true; btn.textContent = '…';
