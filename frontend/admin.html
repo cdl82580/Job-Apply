@@ -132,24 +132,27 @@
 
     /* ── Webhook modal rows (filters, query params, headers) ─────── */
     .wh-row {
-      display: grid; gap: .4rem; margin-bottom: .35rem;
+      display: grid; gap: .5rem; margin-bottom: .5rem;
       height: 36px; align-items: stretch;
     }
     .wh-row input, .wh-row select {
-      padding: 0 .6rem;
-      border: 1px solid var(--input-border); border-radius: 5px;
-      font-size: .8rem; font-family: inherit;
+      padding: 0 .65rem;
+      border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .875rem; font-family: inherit;
       background: var(--input-bg); color: var(--text);
       box-sizing: border-box; -webkit-appearance: none; appearance: none;
     }
     .wh-row .wh-del {
-      padding: 0;
-      border: 1px solid var(--input-border); border-radius: 5px;
-      background: none; color: var(--muted); cursor: pointer; font-size: .85rem;
+      width: 36px; padding: 0;
+      border: 1px solid var(--input-border); border-radius: 6px;
+      background: none; color: var(--muted); cursor: pointer; font-size: .9rem;
       display: flex; align-items: center; justify-content: center;
-      transition: border-color .1s, color .1s;
+      transition: border-color .1s, color .1s; flex-shrink: 0;
     }
     .wh-row .wh-del:hover { border-color: var(--error); color: var(--error); }
+    /* Section spacing inside webhook modal */
+    .wh-section { margin-bottom: 1.25rem; }
+    .wh-section + .wh-section { padding-top: 1rem; border-top: 1px solid var(--card-border); }
 
     /* ── Export dropdown ─────────────────────────────────────────── */
     .export-wrap { position: relative; display: inline-flex; }
@@ -795,8 +798,8 @@
     </div>
 
     <!-- Filters -->
-    <div style="margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+    <div class="wh-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
         <label style="font-size:.8rem;font-weight:600">Delivery Filters <span style="font-weight:400;color:var(--muted)">(all conditions AND — leave empty to receive everything)</span></label>
         <button type="button" class="btn btn-ghost btn-sm" id="addFilterBtn">+ Add Filter</button>
       </div>
@@ -804,8 +807,8 @@
     </div>
 
     <!-- Query params -->
-    <div style="margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+    <div class="wh-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
         <label style="font-size:.8rem;font-weight:600">Query Parameters <span style="font-weight:400;color:var(--muted)">(appended to URL)</span></label>
         <button type="button" class="btn btn-ghost btn-sm" id="addQpBtn">+ Add</button>
       </div>
@@ -813,8 +816,8 @@
     </div>
 
     <!-- Headers -->
-    <div style="margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+    <div class="wh-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
         <label style="font-size:.8rem;font-weight:600">Custom Headers <span style="font-weight:400;color:var(--muted)">(e.g. Authorization)</span></label>
         <button type="button" class="btn btn-ghost btn-sm" id="addHdrBtn">+ Add</button>
       </div>
@@ -2167,7 +2170,7 @@ const FILTER_OPTIONS = {
 function _filterRow(filterType = 'actor', value = '') {
   const row = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '150px 1fr 32px';
+  row.style.gridTemplateColumns = '150px 1fr 36px';
 
   const typeOpts = Object.entries(FILTER_OPTIONS)
     .map(([k, v]) => `<option value="${k}" ${k === filterType ? 'selected' : ''}>${v.label}</option>`)
@@ -2411,7 +2414,7 @@ const QP_OPTIONS = [
 function _qpRow(containerId, key = '', val = '') {
   const row  = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '1fr 1fr 32px';
+  row.style.gridTemplateColumns = '1fr 1fr 36px';
   const opts   = QP_OPTIONS.map(o =>
     `<option value="${o.key}" ${o.key === key ? 'selected' : ''}>${o.key}</option>`
   ).join('');
@@ -2430,7 +2433,7 @@ function _qpRow(containerId, key = '', val = '') {
 function _kvRow(containerId, key = '', val = '') {
   const row = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '1fr 1fr 32px';
+  row.style.gridTemplateColumns = '1fr 1fr 36px';
   row.innerHTML = `
     <input type="text" class="kv-key" placeholder="Header name" value="${esc(key)}">
     <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}">
