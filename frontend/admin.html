@@ -840,8 +840,8 @@ function renderApps() {
       <td>${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
-      <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.date_applied)}</td>
-      <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.last_updated)}</td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${fmtDateTime(a.date_applied)}</td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${fmtDateTime(a.last_updated)}</td>
       <td><div style="display:flex;gap:.3rem">
         ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app"
