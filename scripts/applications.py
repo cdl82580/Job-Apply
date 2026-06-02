@@ -110,6 +110,12 @@ def save_application(user_id: str, record: dict[str, Any]) -> None:
     _upsert_index(user_id, record)
 
 
+def save_deleted_tombstone(user_id: str, record: dict[str, Any]) -> None:
+    """Persist a deleted application under a separate key for audit purposes."""
+    key = f"applications/{user_id}/_deleted/{record['id']}.json"
+    storage.put_text(key, json.dumps(record))
+
+
 def delete_application(user_id: str, app_id: str) -> bool:
     if not storage.exists(_app_key(user_id, app_id)):
         return False

@@ -137,15 +137,15 @@
       position: relative; flex: 1; min-width: 160px;
     }
     .search-wrap input {
-      width: 100%; padding: .45rem .75rem .45rem 2rem;
+      width: 100%; padding: .45rem .75rem .45rem 2.25rem;
       border: 1px solid var(--input-border); border-radius: 6px;
       font-size: .875rem; font-family: inherit;
       background: var(--input-bg); color: var(--text);
     }
     .search-wrap input:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
     .search-icon {
-      position: absolute; left: .6rem; top: 50%; transform: translateY(-50%);
-      color: var(--muted); pointer-events: none;
+      position: absolute; left: .65rem; top: 50%; transform: translateY(-50%);
+      color: var(--muted); pointer-events: none; flex-shrink: 0;
     }
 
     .pill-group { display: flex; gap: .375rem; flex-wrap: wrap; }
@@ -995,15 +995,23 @@ function renderSuggestions(list) {
 }
 
 function selectCompany(item) {
-  _selectedCompany      = item;
-  dCompanyInput.value   = item.name;
-  dDomainInput.value    = item.domain;
-  dLogoUrlInput.value   = item.logo_url;
+  _selectedCompany    = item;
+  dCompanyInput.value = item.name;
+  dDomainInput.value  = item.domain;
+
+  // Saved logo URL: prefer the CDN domain pattern (stable, works in list view)
+  const BF_KEY = '1idZFX8Ll28d4x2IVye';
+  const savedLogo = item.domain
+    ? `https://cdn.brandfetch.io/domain/${item.domain}?c=${BF_KEY}`
+    : (item.logo_url || '');
+  dLogoUrlInput.value = savedLogo;
+
   dSuggestionsEl.classList.add('hidden');
 
-  // Show logo preview
-  if (item.logo_url) {
-    dLogoPreview.src   = item.logo_url;
+  // Preview uses the signed icon URL from the BrandFetch response (immediate)
+  const previewSrc = item.logo_url || savedLogo;
+  if (previewSrc) {
+    dLogoPreview.src          = previewSrc;
     dLogoPreview.style.display = 'block';
   } else {
     dLogoPreview.style.display = 'none';

@@ -39,14 +39,13 @@ async def search_companies(q: str = Query(..., min_length=1)):
         icon   = item.get("icon", "")
         if not isinstance(icon, str):
             icon = ""
-        # Prefer the CDN URL pattern (more reliable for display sizes)
-        logo_url = f"https://cdn.brandfetch.io/domain/{domain}?c={_BRANDFETCH_KEY}" if domain else icon
-
+        # Use the icon URL from the response directly — it's a signed CDN URL
+        # that works immediately in <img> tags. The domain CDN URL is used
+        # on the list view (after the record is saved) via the domain field.
         results.append({
             "name":        item.get("name", ""),
             "domain":      domain,
-            "logo_url":    logo_url,
-            "icon_url":    icon,           # original icon from response
+            "logo_url":    icon,   # ready-to-use signed URL for dropdown display
             "description": item.get("claim", ""),
         })
 
