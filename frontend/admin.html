@@ -945,7 +945,16 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // Activate tab from ?tab= query param on load (default: users)
-activateTab(new URLSearchParams(location.search).get('tab') || 'users');
+// Also trigger lazy-loads for tabs that don't auto-load on init
+const _initialTab = new URLSearchParams(location.search).get('tab') || 'users';
+activateTab(_initialTab);
+if (_initialTab === 'webhooks' && !document.getElementById('webhooksBody').dataset.loaded) {
+  document.getElementById('webhooksBody').dataset.loaded = '1';
+  loadWebhooks();
+} else if (_initialTab === 'auditlog' && !_auditLoaded) {
+  _auditLoaded = true;
+  initAuditFilters().then(() => loadAudit(1));
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function esc(s) {
