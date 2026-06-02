@@ -526,6 +526,7 @@ let _pendingDeleteAppId  = null;
 // ── Load all data ────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadUsers(), loadApps(), loadRuns()]);
+  updateStats();  // call once after all three are populated
 }
 
 async function loadUsers() {
@@ -533,7 +534,6 @@ async function loadUsers() {
     const res = await apiFetch('/api/admin/users');
     _users = await res.json();
     renderUsers();
-    updateStats();
 
     // Populate user filter on apps tab
     const sel = document.getElementById('appUserFilter');
@@ -560,7 +560,6 @@ async function loadRuns() {
     const res = await apiFetch('/api/admin/runs');
     _allRuns = await res.json();
     renderRuns(_allRuns);
-    updateStats();
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
