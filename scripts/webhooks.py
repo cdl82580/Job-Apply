@@ -254,18 +254,11 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
         # Fallback text for push notifications
         fallback = f"[Job Apply] {cat_emoji} {action} — {actor}"
 
-        # Deep-link to the specific audit event
-        event_id   = event.get("id", "")
-        audit_url  = f"https://job-apply-corey.fly.dev/admin.html?tab=auditlog&event_id={event_id}"
-
-        # Header section — inline link avoids Slack interactivity requirement
+        # Header section
         blocks: list[dict] = [
             {
                 "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"{cat_emoji}  *`{action}`*    <{audit_url}|View in Audit Log →>",
-                },
+                "text": {"type": "mrkdwn", "text": f"{cat_emoji}  *`{action}`*"},
             },
             {"type": "divider"},
         ]
