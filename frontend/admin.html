@@ -273,7 +273,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="users">Users</button>
     <button class="tab" data-tab="applications">All Applications</button>
-    <button class="tab" data-tab="runs">Active Runs</button>
+    <button class="tab" data-tab="runs">All Agent Runs</button>
   </div>
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
@@ -309,13 +309,38 @@
     <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="appsCount"></div>
   </div>
 
-  <!-- ── Agent Runs tab ───────────────────────────────────────── -->
+  <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
+    <div class="filter-row" id="runsFilterRow">
+      <select id="runsTypeFilter">
+        <option value="">All types</option>
+        <option value="resume">Resume</option>
+        <option value="interview_prep">Interview Prep</option>
+      </select>
+      <select id="runsUserFilter"><option value="">All users</option></select>
+      <select id="runsStatusFilter">
+        <option value="">All statuses</option>
+        <option value="complete">Complete</option>
+        <option value="running">Running</option>
+        <option value="queued">Queued</option>
+        <option value="error">Error</option>
+      </select>
+      <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
+      <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
+    </div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
     <table>
       <thead><tr>
-        <th>Type</th><th>Run Folder</th><th>User</th><th>Status</th><th>Drive</th>
+        <th>Type</th>
+        <th>Run Folder</th>
+        <th>User</th>
+        <th>Status</th>
+        <th class="sortable-th" id="runsSortTh" style="cursor:pointer;user-select:none;white-space:nowrap">
+          Created <span id="runsSortArrow">↕</span>
+        </th>
+        <th>Drive</th>
       </tr></thead>
-      <tbody id="runsBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      <tbody id="runsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
   </div>
 
@@ -519,6 +544,7 @@ function showAlert(elId, msg, type = 'err') {
 let _users    = [];
 let _allApps  = [];
 let _allRuns  = [];
+let _runsSortDir = 'desc';  // 'asc' | 'desc'
 let _pendingRoleUserId = null;
 let _pendingDeleteUserId = null;
 let _pendingDeleteAppId  = null;
@@ -559,7 +585,12 @@ async function loadRuns() {
   try {
     const res = await apiFetch('/api/admin/runs');
     _allRuns = await res.json();
-    renderRuns(_allRuns);
+    // Populate user filter
+    const sel = document.getElementById('runsUserFilter');
+    const emails = [...new Set(_allRuns.map(r => r.user_email).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All users</option>';
+    emails.forEach(e => { const o = document.createElement('option'); o.value = o.textContent = e; sel.appendChild(o); });
+    filterAndRenderRuns();
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
@@ -651,29 +682,67 @@ function renderApps() {
 // ── Render runs ──────────────────────────────────────────────────────
 const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching' };
 
+function filterAndRenderRuns() {
+  const type     = document.getElementById('runsTypeFilter').value;
+  const user     = document.getElementById('runsUserFilter').value;
+  const status   = document.getElementById('runsStatusFilter').value;
+  const dateFrom = document.getElementById('runsDateFrom').value;   // 'YYYY-MM-DD'
+  const dateTo   = document.getElementById('runsDateTo').value;
+
+  let list = _allRuns;
+  if (type)   list = list.filter(r => r.type === type);
+  if (user)   list = list.filter(r => r.user_email === user);
+  if (status) list = list.filter(r => r.status === status);
+  if (dateFrom) list = list.filter(r => (r.created_at || '') >= dateFrom);
+  if (dateTo)   list = list.filter(r => (r.created_at || '') <= dateTo + 'T23:59:59Z');
+
+  // Sort by created_at
+  list = [...list].sort((a, b) => {
+    const av = a.created_at || '', bv = b.created_at || '';
+    return _runsSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  document.getElementById('runsCount').textContent = `${list.length} run${list.length !== 1 ? 's' : ''}`;
+  renderRuns(list);
+}
+
 function renderRuns(runs) {
   const tbody = document.getElementById('runsBody');
-  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">No runs found.</td></tr>'; return; }
+  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No runs match.</td></tr>'; return; }
   tbody.innerHTML = '';
   for (const r of runs) {
     const tr        = document.createElement('tr');
     const typeLabel = r.type === 'interview_prep' ? 'Interview Prep' : 'Resume';
     const typeClass = RUN_TYPE_CLASS[r.type] || '';
-    const statusColor = r.status === 'running' || r.status === 'queued' ? 'var(--primary)' : 'var(--muted)';
-    // Parse company/role from folder name (CompanyName_RoleName)
-    const nameParts  = (r.name || '').split('_');
+    const statusColor = (r.status === 'running' || r.status === 'queued')
+      ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
+    const nameParts   = (r.name || '').split('_');
     const folderLabel = nameParts.length > 1
-      ? `${nameParts[0]} · ${nameParts.slice(1).join('_')}`
+      ? `${nameParts[0]} · ${nameParts.slice(1).join(' ')}`
       : (r.name || '—');
     tr.innerHTML = `
       <td><span class="badge ${typeClass}" style="font-size:.7rem">${esc(typeLabel)}</span></td>
-      <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(folderLabel)}</td>
-      <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email)}</td>
+      <td style="font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(folderLabel)}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email || '—')}</td>
       <td><span style="font-size:.8rem;font-weight:600;color:${statusColor}">${esc(r.status)}</span></td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${r.created_at ? fmtDate(r.created_at) : '—'}</td>
       <td>${r.web_view_link ? `<a class="btn btn-ghost btn-sm" href="${esc(r.web_view_link)}" target="_blank" rel="noopener">Drive ↗</a>` : '<span style="color:var(--muted);font-size:.8rem">—</span>'}</td>`;
     tbody.appendChild(tr);
   }
 }
+
+// Runs filter change handlers
+['runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
+  document.getElementById(id).addEventListener('change', filterAndRenderRuns);
+  document.getElementById(id).addEventListener('input',  filterAndRenderRuns);
+});
+
+// Created column sort
+document.getElementById('runsSortTh').addEventListener('click', () => {
+  _runsSortDir = _runsSortDir === 'desc' ? 'asc' : 'desc';
+  document.getElementById('runsSortArrow').textContent = _runsSortDir === 'asc' ? '↑' : '↓';
+  filterAndRenderRuns();
+});
 
 // ── Delegated click handler ──────────────────────────────────────────
 document.addEventListener('click', e => {

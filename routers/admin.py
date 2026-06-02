@@ -321,70 +321,104 @@ async def delete_comment(user_id: str, app_id: str, comment_id: str, request: Re
 
 @router.get("/runs")
 async def list_all_runs(request: Request):
-    """Return all agent runs across all users from Google Drive (persistent history)
-    plus any still-active in-memory runs not yet in Drive."""
+    """Return ALL agent run folders from Google Drive (with createdTime) across all
+    users, plus any still-active in-memory runs not yet uploaded."""
     _admin(request)
     import re as _re  # noqa: PLC0415
-    from apply import list_gdrive_run_folders, WorkflowConfig  # noqa: PLC0415
+    from apply import GDRIVE_PARENT_FOLDER_ID, WorkflowConfig, _gdrive_service, _FOLDER_MIME  # noqa: PLC0415
 
     PREP_KEYWORDS = {"phonescreen", "hiringmanager", "technical", "executive", "panel", "peer"}
 
-    def _infer_type(folder_name: str) -> str:
-        norm = _re.sub(r"[^a-z0-9]", "", folder_name.lower())
+    def _infer_type(name: str) -> str:
+        norm = _re.sub(r"[^a-z0-9]", "", name.lower())
         return "interview_prep" if any(kw in norm for kw in PREP_KEYWORDS) else "resume"
 
-    users    = storage.list_all_users()
-    seen_ids: set[str] = set()
-    all_runs: list[dict] = []
+    config  = WorkflowConfig(progress=lambda _: None, user_label="admin")
+    service = _gdrive_service(config)
 
-    config = WorkflowConfig(progress=lambda _: None, user_label="admin")
-    for u in users:
-        email = u.get("email", "")
-        if not email:
-            continue
+    all_runs:  list[dict] = []
+    seen_ids:  set[str]   = set()
+
+    if service and GDRIVE_PARENT_FOLDER_ID:
         try:
-            folders = list_gdrive_run_folders(email, config)
-            for f in folders:
-                if f["id"] in seen_ids:
+            # Fetch all direct children of the root Job Applications folder
+            top_items = service.files().list(
+                q=f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and trashed=false",
+                fields="files(id, name, mimeType, webViewLink, createdTime)",
+                orderBy="createdTime desc",
+                pageSize=200,
+            ).execute().get("files", [])
+
+            for item in top_items:
+                if item.get("mimeType") != _FOLDER_MIME:
                     continue
-                seen_ids.add(f["id"])
-                all_runs.append({
-                    "id":            f["id"],
-                    "name":          f["name"],
-                    "type":          _infer_type(f["name"]),
-                    "web_view_link": f.get("web_view_link", ""),
-                    "source":        f.get("source", ""),
-                    "user_email":    email,
-                    "status":        "complete",   # Drive entry = completed run
-                })
-        except Exception:
-            pass
+                name = item["name"]
 
-    # Also surface any still-active in-memory runs not yet uploaded to Drive
+                if "@" in name:
+                    # Per-user subfolder — scan its run subfolders
+                    user_email = name
+                    children = service.files().list(
+                        q=f"'{item['id']}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
+                        fields="files(id, name, webViewLink, createdTime)",
+                        orderBy="createdTime desc",
+                        pageSize=200,
+                    ).execute().get("files", [])
+                    for child in children:
+                        if child["id"] in seen_ids:
+                            continue
+                        seen_ids.add(child["id"])
+                        all_runs.append({
+                            "id":            child["id"],
+                            "name":          child["name"],
+                            "type":          _infer_type(child["name"]),
+                            "web_view_link": child.get("webViewLink", ""),
+                            "created_at":    child.get("createdTime", ""),
+                            "user_email":    user_email,
+                            "status":        "complete",
+                        })
+                else:
+                    # Legacy flat-root run folder
+                    if item["id"] in seen_ids:
+                        continue
+                    seen_ids.add(item["id"])
+                    all_runs.append({
+                        "id":            item["id"],
+                        "name":          name,
+                        "type":          _infer_type(name),
+                        "web_view_link": item.get("webViewLink", ""),
+                        "created_at":    item.get("createdTime", ""),
+                        "user_email":    "",
+                        "status":        "complete",
+                    })
+        except Exception as exc:
+            logger.warning("Admin runs Drive scan failed: %s", exc)
+
+    # Surface any still-active in-memory runs not yet in Drive
     from api import _runs, _preps  # noqa: PLC0415
-    for run_id, r in list(_runs.items()):
-        if r.get("status") in ("queued", "running"):
-            user = storage.get_user_by_id(r.get("user_id", "")) or {}
-            all_runs.append({
-                "id":            run_id,
-                "name":          "",
-                "type":          "resume",
-                "web_view_link": "",
-                "source":        "in_progress",
-                "user_email":    user.get("email", ""),
-                "status":        r.get("status", "running"),
-            })
-    for prep_id, p in list(_preps.items()):
-        if p.get("status") in ("queued", "running"):
-            user = storage.get_user_by_id(p.get("user_id", "")) or {}
-            all_runs.append({
-                "id":            prep_id,
-                "name":          "",
-                "type":          "interview_prep",
-                "web_view_link": "",
-                "source":        "in_progress",
-                "user_email":    user.get("email", ""),
-                "status":        p.get("status", "running"),
-            })
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for rid, r in list(_runs.items()):
+        user = storage.get_user_by_id(r.get("user_id", "")) or {}
+        all_runs.append({
+            "id":            rid,
+            "name":          "",
+            "type":          "resume",
+            "web_view_link": "",
+            "created_at":    now_iso,
+            "user_email":    user.get("email", ""),
+            "status":        r.get("status", "running"),
+        })
+    for pid, p in list(_preps.items()):
+        user = storage.get_user_by_id(p.get("user_id", "")) or {}
+        all_runs.append({
+            "id":            pid,
+            "name":          "",
+            "type":          "interview_prep",
+            "web_view_link": "",
+            "created_at":    now_iso,
+            "user_email":    user.get("email", ""),
+            "status":        p.get("status", "running"),
+        })
 
+    # Default sort: newest first
+    all_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     return all_runs
