@@ -282,12 +282,15 @@
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
   <div class="tab-pane active" id="tab-users">
+    <div class="filter-row" style="margin-bottom:.875rem">
+      <input type="text" id="userSearch" placeholder="Search by name or email…" style="max-width:280px">
+    </div>
     <div id="usersAlert"></div>
     <table>
       <thead><tr>
-        <th>User</th><th>Role</th><th>Apps</th><th>Resume</th><th>Joined</th><th>Actions</th>
+        <th>User</th><th>Role</th><th>Apps</th><th>Runs</th><th>Email Verified</th><th>Last Login</th><th>Joined</th><th>Actions</th>
       </tr></thead>
-      <tbody id="usersBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      <tbody id="usersBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
     </table>
   </div>
 
@@ -448,18 +451,46 @@
   </div>
 </div>
 
-<!-- ── Role change modal ─────────────────────────────────────── -->
-<div class="modal-wrap" id="roleModal">
-  <div class="modal">
-    <h3>Change Role</h3>
-    <p id="roleModalUser"></p>
-    <select id="roleSelect">
-      <option value="user">User</option>
-      <option value="admin">Admin</option>
-    </select>
+<!-- ── User edit modal ───────────────────────────────────────── -->
+<div class="modal-wrap" id="userEditModal">
+  <div class="modal" style="max-width:480px">
+    <h3>Edit User</h3>
+    <p id="userEditSubtitle" style="font-size:.825rem;color:var(--muted);margin-bottom:1.25rem"></p>
+    <div style="display:grid;gap:.75rem;margin-bottom:1.25rem">
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Display Name</label>
+        <input type="text" id="ueDisplayName" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+      </div>
+      <div>
+        <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Email</label>
+        <input type="email" id="ueEmail" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div>
+          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Role</label>
+          <select id="ueRole" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Status</label>
+          <select id="ueActive" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text);appearance:none">
+            <option value="true">Active</option>
+            <option value="false">Deactivated</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.625rem">
+        <input type="checkbox" id="ueEmailVerified" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer">
+        <label for="ueEmailVerified" style="font-size:.875rem;cursor:pointer">Email verified</label>
+        <button class="btn btn-ghost btn-sm" id="ueResendBtn" style="margin-left:auto">Resend Verification</button>
+      </div>
+    </div>
+    <div class="alert hidden" id="userEditAlert"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost btn-sm" id="roleCancelBtn">Cancel</button>
-      <button class="btn btn-sm" id="roleConfirmBtn">Save</button>
+      <button class="btn btn-ghost btn-sm" id="userEditCancel">Cancel</button>
+      <button class="btn btn-sm" id="userEditSave">Save Changes</button>
     </div>
   </div>
 </div>
@@ -615,6 +646,7 @@ async function loadRuns() {
   try {
     const res = await apiFetch('/api/admin/runs');
     _allRuns = await res.json();
+    renderUsers();  // refresh Runs count column now that _allRuns is populated
     // Populate user filter
     const sel = document.getElementById('runsUserFilter');
     const emails = [...new Set(_allRuns.map(r => r.user_email).filter(Boolean))].sort();
@@ -638,23 +670,43 @@ function updateStats() {
 
 // ── Render users ─────────────────────────────────────────────────────
 function renderUsers() {
+  const q     = document.getElementById('userSearch').value.trim().toLowerCase();
   const tbody = document.getElementById('usersBody');
-  if (!_users.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>'; return; }
+  let list    = _users;
+  if (q) list = list.filter(u =>
+    (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q)
+  );
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
   tbody.innerHTML = '';
-  for (const u of _users) {
+
+  // Compute runs count per user email from _allRuns
+  const runsByEmail = {};
+  for (const r of _allRuns) {
+    if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email] || 0) + 1;
+  }
+
+  for (const u of list) {
+    const isActive   = u.active !== false;
+    const verifiedEl = u.email_verified === false
+      ? '<span style="color:var(--error);font-size:.8rem">✗ No</span>'
+      : '<span style="color:var(--success);font-size:.8rem">✓ Yes</span>';
+    const runsCount  = runsByEmail[u.email] || 0;
+    const rowStyle   = isActive ? '' : 'opacity:.55';
     const tr = document.createElement('tr');
+    tr.style.cssText = rowStyle;
     tr.innerHTML = `
       <td>
-        <div style="font-weight:600">${esc(u.display_name || u.email)}</div>
+        <div style="font-weight:600">${esc(u.display_name || u.email)}${!isActive ? ' <span style="font-size:.7rem;color:var(--error)">(deactivated)</span>' : ''}</div>
         <div style="font-size:.75rem;color:var(--muted)">${esc(u.email)}</div>
       </td>
       <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
       <td style="color:var(--muted)">${u.app_count}</td>
-      <td style="color:var(--muted)">${u.has_resume ? '✓' : '—'}</td>
+      <td style="color:var(--muted)">${runsCount || '—'}</td>
+      <td>${verifiedEl}</td>
+      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${u.last_login ? fmtDate(u.last_login) : '—'}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(u.created_at)}</td>
       <td><div style="display:flex;gap:.375rem;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" data-action="role" data-uid="${u.user_id}"
-                data-email="${esc(u.email)}" data-role="${u.role}">Change Role</button>
+        <button class="btn btn-ghost btn-sm" data-action="edit-user" data-uid="${u.user_id}">Edit</button>
         <a class="btn btn-ghost btn-sm" href="/tracking.html" target="_blank">Tracker ↗</a>
       </div></td>`;
     tbody.appendChild(tr);
@@ -803,12 +855,8 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
 
-  if (btn.dataset.action === 'role') {
-    _pendingRoleUserId = btn.dataset.uid;
-    document.getElementById('roleModalUser').textContent =
-      `${btn.dataset.email} (current: ${btn.dataset.role})`;
-    document.getElementById('roleSelect').value = btn.dataset.role;
-    document.getElementById('roleModal').classList.add('open');
+  if (btn.dataset.action === 'edit-user') {
+    openUserEdit(btn.dataset.uid);
   }
 
   if (btn.dataset.action === 'edit-app') {
@@ -845,31 +893,69 @@ document.getElementById('appsHead').addEventListener('click', e => {
   renderApps();
 });
 
-// ── Role modal ───────────────────────────────────────────────────────
-document.getElementById('roleCancelBtn').addEventListener('click', () => {
-  document.getElementById('roleModal').classList.remove('open');
+// ── User edit modal ──────────────────────────────────────────────────
+let _editingUserId = null;
+
+function openUserEdit(uid) {
+  _editingUserId = uid;
+  const u = _users.find(x => x.user_id === uid);
+  if (!u) return;
+  document.getElementById('userEditSubtitle').textContent = u.email;
+  document.getElementById('ueDisplayName').value    = u.display_name || '';
+  document.getElementById('ueEmail').value          = u.email || '';
+  document.getElementById('ueRole').value           = u.role || 'user';
+  document.getElementById('ueActive').value         = u.active === false ? 'false' : 'true';
+  document.getElementById('ueEmailVerified').checked = u.email_verified !== false;
+  document.getElementById('ueResendBtn').classList.toggle('hidden', u.email_verified !== false);
+  document.getElementById('userEditAlert').classList.add('hidden');
+  document.getElementById('userEditModal').classList.add('open');
+}
+
+document.getElementById('userEditCancel').addEventListener('click', () => {
+  document.getElementById('userEditModal').classList.remove('open');
 });
 
-document.getElementById('roleConfirmBtn').addEventListener('click', async () => {
-  const newRole = document.getElementById('roleSelect').value;
-  const btn = document.getElementById('roleConfirmBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span>';
+document.getElementById('userEditSave').addEventListener('click', async () => {
+  const btn     = document.getElementById('userEditSave');
+  const alertEl = document.getElementById('userEditAlert');
+  alertEl.classList.add('hidden');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+
+  const payload = {
+    display_name:   document.getElementById('ueDisplayName').value.trim(),
+    email:          document.getElementById('ueEmail').value.trim(),
+    role:           document.getElementById('ueRole').value,
+    active:         document.getElementById('ueActive').value === 'true',
+    email_verified: document.getElementById('ueEmailVerified').checked,
+  };
+
   try {
-    const res = await apiFetch(`/api/admin/users/${_pendingRoleUserId}/role`, {
+    const res = await apiFetch(`/api/admin/users/${_editingUserId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: newRole }),
+      body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
-    document.getElementById('roleModal').classList.remove('open');
-    showAlert('usersAlert', `Role updated to "${newRole}" successfully.`, 'ok');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Save failed');
+    document.getElementById('userEditModal').classList.remove('open');
+    showAlert('usersAlert', 'User updated successfully.', 'ok');
     await loadUsers();
   } catch (err) {
-    showAlert('usersAlert', `Error: ${err.message}`, 'err');
+    alertEl.textContent = err.message;
+    alertEl.className   = 'alert alert-err';
+    alertEl.classList.remove('hidden');
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Save';
+    btn.disabled = false; btn.textContent = 'Save Changes';
   }
+});
+
+document.getElementById('ueResendBtn').addEventListener('click', async function() {
+  this.disabled = true; this.textContent = 'Sending…';
+  try {
+    const res  = await apiFetch(`/api/admin/users/${_editingUserId}/resend-verification`, { method: 'POST' });
+    const data = await res.json();
+    this.textContent = data.sent ? '✓ Sent!' : '✓ Already verified';
+    setTimeout(() => { this.textContent = 'Resend Verification'; this.disabled = false; }, 3000);
+  } catch (_) { this.textContent = 'Failed'; this.disabled = false; }
 });
 
 // ── Delete modal ─────────────────────────────────────────────────────
@@ -1088,6 +1174,9 @@ document.getElementById('addCommentBtn').addEventListener('click', async () => {
   const text = document.getElementById('newCommentText').value.trim();
   if (text && _drawerUserId) await addComment(text);
 });
+
+// User search filter
+document.getElementById('userSearch').addEventListener('input', renderUsers);
 
 // ── Init ─────────────────────────────────────────────────────────────
 loadAll();

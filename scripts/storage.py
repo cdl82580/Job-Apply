@@ -128,6 +128,25 @@ def get_user_by_google_id(google_id: str) -> dict[str, Any] | None:
     return None
 
 
+def update_user_email(user: dict[str, Any], new_email: str) -> None:
+    """Rename a user's email, updating all index keys atomically (best-effort)."""
+    old_email = user["email"].strip().lower()
+    new_email  = new_email.strip().lower()
+    if old_email == new_email:
+        return
+    # Remove old key
+    try:
+        delete_bytes(f"users/{_email_key(old_email)}.json")
+    except Exception:
+        pass
+    user["email"] = new_email
+    # Write new key + reverse index
+    put_text(f"users/{_email_key(new_email)}.json", json.dumps(user))
+    put_text(f"user_ids/{user['user_id']}.txt", new_email)
+    if user.get("google_id"):
+        put_text(f"google_ids/{user['google_id']}.txt", new_email)
+
+
 def save_user(user: dict[str, Any]) -> None:
     """Persist a user record. Also writes index entries for user_id and google_id."""
     put_text(f"users/{_email_key(user['email'])}.json", json.dumps(user))

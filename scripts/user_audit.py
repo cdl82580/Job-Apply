@@ -109,3 +109,11 @@ def get_events(user_id: str) -> list[dict[str, Any]]:
     """Return all audit events for a user, newest first."""
     events = _read_events(_events_key(user_id))
     return list(reversed(events))
+
+
+def get_last_login(user_id: str) -> str | None:
+    """Return ISO timestamp of the most recent login event, or None."""
+    for event in get_events(user_id):
+        if event.get("action") in ("login_success", "login_google"):
+            return event.get("timestamp")
+    return None

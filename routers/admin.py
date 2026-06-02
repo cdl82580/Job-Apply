@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from scripts import storage
 from scripts import applications as app_store
 from scripts import user_audit
+from scripts import email_verification as ev
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -51,6 +52,14 @@ def _now() -> str:
 
 class RoleUpdate(BaseModel):
     role: str
+
+
+class UserUpdate(BaseModel):
+    display_name:   str | None = None
+    email:          str | None = None
+    role:           str | None = None
+    email_verified: bool | None = None
+    active:         bool | None = None
 
 
 class CommentCreate(BaseModel):
@@ -86,48 +95,116 @@ async def list_users(request: Request):
     result = []
     for u in users:
         uid = u["user_id"]
-        # Get app count from index
         try:
             apps = app_store.list_applications(uid)
             app_count = apps["total"]
         except Exception:
             app_count = 0
 
+        last_login = user_audit.get_last_login(uid)
+
         result.append({
-            "user_id":      uid,
-            "email":        u.get("email", ""),
-            "display_name": u.get("display_name", ""),
-            "role":         u.get("role", "user"),
-            "created_at":   u.get("created_at", ""),
-            "app_count":    app_count,
-            "has_resume":   storage.has_resume(uid),
+            "user_id":        uid,
+            "email":          u.get("email", ""),
+            "display_name":   u.get("display_name", ""),
+            "role":           u.get("role", "user"),
+            "active":         u.get("active", True),
+            "email_verified": u.get("email_verified", True),
+            "created_at":     u.get("created_at", ""),
+            "last_login":     last_login,
+            "app_count":      app_count,
+            "has_resume":     storage.has_resume(uid),
         })
 
     result.sort(key=lambda u: u.get("created_at", ""))
     return result
 
 
-@router.put("/users/{user_id}/role")
-async def set_user_role(user_id: str, body: RoleUpdate, request: Request):
+@router.put("/users/{user_id}")
+async def update_user(user_id: str, body: UserUpdate, request: Request):
+    """Edit display name, email, role, email_verified, or active status."""
     admin = _admin(request)
-
-    if body.role not in VALID_ROLES:
-        raise HTTPException(400, f"role must be one of: {', '.join(sorted(VALID_ROLES))}")
-
-    user = storage.get_user_by_id(user_id)
+    user  = storage.get_user_by_id(user_id)
     if not user:
         raise HTTPException(404, "User not found")
 
+    changes: dict = {}
+
+    if body.display_name is not None:
+        changes["display_name"] = {"from": user.get("display_name"), "to": body.display_name}
+        user["display_name"] = body.display_name.strip()
+
+    if body.email is not None:
+        new_email = body.email.strip().lower()
+        if new_email != user.get("email", ""):
+            # Check email not already taken
+            if storage.get_user_by_email(new_email):
+                raise HTTPException(400, "That email is already in use by another account")
+            changes["email"] = {"from": user.get("email"), "to": new_email}
+            storage.update_user_email(user, new_email)
+            # user dict now has updated email; skip save_user below for email field
+            user["email"] = new_email
+
+    if body.role is not None:
+        if body.role not in VALID_ROLES:
+            raise HTTPException(400, f"role must be one of: {', '.join(sorted(VALID_ROLES))}")
+        changes["role"] = {"from": user.get("role", "user"), "to": body.role}
+        user["role"] = body.role
+
+    if body.email_verified is not None:
+        changes["email_verified"] = {"from": user.get("email_verified"), "to": body.email_verified}
+        user["email_verified"] = body.email_verified
+
+    if body.active is not None:
+        changes["active"] = {"from": user.get("active", True), "to": body.active}
+        user["active"] = body.active
+
+    storage.save_user(user)
+    user_audit.log(user_id, "admin_user_updated", admin["email"],
+                   changes=changes, changed_by=admin["email"])
+
+    return {
+        "ok":             True,
+        "user_id":        user_id,
+        "email":          user.get("email"),
+        "display_name":   user.get("display_name"),
+        "role":           user.get("role", "user"),
+        "active":         user.get("active", True),
+        "email_verified": user.get("email_verified", True),
+    }
+
+
+@router.post("/users/{user_id}/resend-verification")
+async def admin_resend_verification(user_id: str, request: Request):
+    admin = _admin(request)
+    user  = storage.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.get("email_verified", True):
+        return {"ok": True, "already_verified": True}
+
+    from api import _send_verification_email  # noqa: PLC0415
+    token = ev.create_token(user_id, user["email"])
+    sent  = _send_verification_email(user["email"], user.get("display_name", "there"), token)
+    user_audit.log(user_id, "admin_verification_resent", admin["email"],
+                   sent=sent, target=user["email"])
+    return {"ok": True, "sent": sent}
+
+
+# Keep the old role-only endpoint for backward compat with Slack bot
+@router.put("/users/{user_id}/role")
+async def set_user_role(user_id: str, body: RoleUpdate, request: Request):
+    admin = _admin(request)
+    if body.role not in VALID_ROLES:
+        raise HTTPException(400, f"role must be one of: {', '.join(sorted(VALID_ROLES))}")
+    user = storage.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
     old_role = user.get("role", "user")
     user["role"] = body.role
     storage.save_user(user)
-
-    user_audit.log(
-        user_id, "role_changed", admin["email"],
-        old_role=old_role, new_role=body.role,
-        changed_by=admin["email"],
-    )
-
+    user_audit.log(user_id, "role_changed", admin["email"],
+                   old_role=old_role, new_role=body.role, changed_by=admin["email"])
     return {"ok": True, "user_id": user_id, "role": body.role}
 
 

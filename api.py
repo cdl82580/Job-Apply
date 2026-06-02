@@ -139,6 +139,10 @@ def _require_user(request: Request) -> dict:
     user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    # Check active flag — deactivated accounts are blocked immediately
+    record = storage.get_user_by_id(user["user_id"])
+    if record and record.get("active") is False:
+        raise HTTPException(status_code=401, detail="Account deactivated")
     return user
 
 
