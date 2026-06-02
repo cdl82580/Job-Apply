@@ -1308,7 +1308,8 @@
     document.getElementById('srcPasteBtn').classList.toggle('active',   mode === 'paste');
     document.getElementById('prepAppPickerWrap').classList.toggle('hidden', mode !== 'tracker');
     document.getElementById('prepRunSel').classList.toggle('hidden',    mode !== 'dropdown');
-    document.getElementById('prepJdText').classList.toggle('hidden',    mode !== 'paste');
+    // Tracker mode: keep the textarea visible so the user can paste the JD in
+    document.getElementById('prepJdText').classList.toggle('hidden',    mode === 'dropdown');
     if (mode !== 'tracker') { _prepAppId = null; }
   }
 
@@ -1360,9 +1361,10 @@
         errEl.style.display = 'block';
         return;
       }
-      jd = _prepJobPosting;
+      // Use Drive JD if loaded, otherwise fall back to the visible textarea
+      jd = _prepJobPosting || document.getElementById('prepJdText').value.trim();
       if (!jd) {
-        errEl.textContent = 'No saved job posting for this application — switch to Paste JD and paste it below.';
+        errEl.textContent = 'Open the job posting, copy the description, and paste it in the field below.';
         errEl.style.display = 'block';
         return;
       }
