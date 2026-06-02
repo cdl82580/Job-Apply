@@ -361,6 +361,11 @@
       width: 22px; height: 22px; border-radius: 3px; object-fit: contain; flex-shrink: 0;
     }
     .app-picker-selected .sel-name { font-weight: 600; flex: 1; }
+    .app-picker-selected .sel-job-link {
+      font-size: .775rem; font-weight: 600; color: var(--border);
+      text-decoration: none; flex-shrink: 0; white-space: nowrap;
+    }
+    .app-picker-selected .sel-job-link:hover { text-decoration: underline; }
     .app-picker-selected .sel-clear {
       background: none; border: none; cursor: pointer; color: var(--muted);
       font-size: .9rem; padding: 0 .1rem; line-height: 1;
@@ -568,6 +573,7 @@
         <div class="app-picker-selected hidden" id="runAppSelected">
           <img class="sel-logo" id="runSelLogo" alt="">
           <span class="sel-name" id="runSelName"></span>
+          <a class="sel-job-link hidden" id="runJobLink" target="_blank" rel="noopener">Job Posting ↗</a>
           <button type="button" class="sel-clear" id="runSelClear" title="Clear">&#x2715;</button>
         </div>
         <!-- search input -->
@@ -675,6 +681,7 @@
           <div class="app-picker-selected hidden" id="prepAppSelected">
             <img class="sel-logo" id="prepSelLogo" alt="">
             <span class="sel-name" id="prepSelName"></span>
+            <a class="sel-job-link hidden" id="prepJobLink" target="_blank" rel="noopener">Job Posting ↗</a>
             <button type="button" class="sel-clear" id="prepSelClear" title="Clear">&#x2715;</button>
           </div>
           <div class="app-picker-input-row" id="prepAppInputRow">
@@ -896,6 +903,8 @@
         inputRowEl.classList.remove('hidden');
         searchEl.value = '';
         if (jdStatusEl) jdStatusEl.classList.add('hidden');
+        const jobLinkEl = selectedEl.querySelector('.sel-job-link');
+        if (jobLinkEl) jobLinkEl.classList.add('hidden');
         if (onClear) onClear();
       });
     }
@@ -932,15 +941,23 @@
     }
 
     if (jdStatusEl) {
-      const urlPart = app.url
-        ? ` &nbsp;·&nbsp; <a href="${esc(app.url)}" target="_blank" rel="noopener" style="color:var(--border);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">View Job Posting ↗</a>`
-        : '';
       if (jd) {
-        jdStatusEl.innerHTML = '✓ Job posting loaded from Drive' + urlPart;
+        jdStatusEl.innerHTML = '✓ Job posting loaded from Drive';
         jdStatusEl.className = 'jd-status loaded';
       } else {
-        jdStatusEl.innerHTML = 'No saved JD — paste below' + urlPart;
+        jdStatusEl.innerHTML = 'No saved JD — paste below';
         jdStatusEl.className = 'jd-status';
+      }
+    }
+
+    // Show job posting URL link inside the selected chip
+    const jobLinkEl = selectedEl.querySelector('.sel-job-link');
+    if (jobLinkEl) {
+      if (app.url) {
+        jobLinkEl.href = app.url;
+        jobLinkEl.classList.remove('hidden');
+      } else {
+        jobLinkEl.classList.add('hidden');
       }
     }
 
