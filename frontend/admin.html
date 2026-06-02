@@ -2223,8 +2223,12 @@ async function showDeliveryLog(id, name) {
   wrap.classList.remove('hidden');
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
-    const res       = await apiFetch(`/api/admin/webhooks/${id}/deliveries`);
-    const deliveries = await res.json();
+    const res  = await apiFetch(`/api/admin/webhooks/${id}/deliveries`);
+    const deliveries = (await res.json())
+      .sort((a, b) => (b.timestamp||'').localeCompare(a.timestamp||''))
+      .slice(0, 25);
+    document.getElementById('deliveryLogTitle').textContent =
+      `Delivery Log — ${name}  (last ${deliveries.length} of 25 max)`;
     const tbody = document.getElementById('deliveryLogBody');
     if (!deliveries.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty">No deliveries yet.</td></tr>'; return;

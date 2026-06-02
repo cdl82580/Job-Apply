@@ -873,4 +873,7 @@ async def get_deliveries(webhook_id: str, request: Request):
     w = wh_store.get_webhook(webhook_id)
     if not w:
         raise HTTPException(404, "Webhook not found")
-    return w.get("recent_deliveries", [])
+    deliveries = w.get("recent_deliveries", [])
+    # Sort descending by timestamp and enforce the cap server-side
+    deliveries = sorted(deliveries, key=lambda d: d.get("timestamp", ""), reverse=True)
+    return deliveries[:wh_store._MAX_DELIVERIES]
