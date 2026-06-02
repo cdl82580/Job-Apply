@@ -592,6 +592,7 @@
     <div class="header-actions">
       <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
       <span class="header-user" id="headerUser"></span>
+      <a class="header-link hidden" id="adminLink" href="/admin.html">Admin</a>
       <a class="header-link" href="/">Agent</a>
       <a class="header-link" href="/profile.html">Profile</a>
       <button class="header-link" id="logoutBtn">Sign Out</button>
@@ -861,6 +862,7 @@ async function apiFetch(url, opts = {}) {
     const res = await apiFetch('/api/auth/me');
     const u   = await res.json();
     document.getElementById('headerUser').textContent = u.display_name || u.email;
+    if (u.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
   } catch (_) {}
 })();
 

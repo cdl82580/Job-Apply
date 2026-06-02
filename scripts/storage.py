@@ -100,6 +100,25 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
     return get_user_by_email(email.strip()) if email else None
 
 
+def list_all_users() -> list[dict[str, Any]]:
+    """Scan user_ids/ prefix and return all user records. Admin use only."""
+    try:
+        paginator = _client().get_paginator("list_objects_v2")
+        users = []
+        for page in paginator.paginate(Bucket=BUCKET, Prefix="user_ids/"):
+            for obj in page.get("Contents", []):
+                # key = "user_ids/{user_id}.txt"
+                user_id = obj["Key"].split("/", 1)[1].removesuffix(".txt")
+                if not user_id:
+                    continue
+                u = get_user_by_id(user_id)
+                if u:
+                    users.append(u)
+        return users
+    except Exception:
+        return []
+
+
 def get_user_by_google_id(google_id: str) -> dict[str, Any] | None:
     """Look up a user by their Google OAuth sub (stored in user record as google_id).
     Uses an index file to avoid scanning all user records."""

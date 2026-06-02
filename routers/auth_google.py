@@ -186,7 +186,7 @@ async def google_callback(
     # Issue session cookie using the same secret as api.py
     from api import _SESSION_SECRET, FLY_MACHINE_ID  # noqa: PLC0415
 
-    token = create_session_token(user["user_id"], email, _SESSION_SECRET)
+    token = create_session_token(user["user_id"], email, _SESSION_SECRET, role=user.get("role", "user"))
     response = RedirectResponse(f"{_APP_URL}{return_to}", status_code=302)
     response.set_cookie(
         _SESSION_COOKIE, token,

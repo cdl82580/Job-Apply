@@ -55,6 +55,7 @@ from scripts.session import create_session_token, verify_session_token
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
+from routers.admin import router as admin_router
 from apply import (
     DEFAULT_MODEL,
     MASTER_RESUME,
@@ -102,8 +103,8 @@ _NOTIFY_EMAIL = os.environ.get("APP_USER_EMAIL", "cdl825@gmail.com")
 # Session helpers (stateless HMAC — works across both Fly.io machines)
 # ---------------------------------------------------------------------------
 
-def _create_session(user_id: str, email: str) -> str:
-    return create_session_token(user_id, email, _SESSION_SECRET)
+def _create_session(user_id: str, email: str, role: str = "user") -> str:
+    return create_session_token(user_id, email, _SESSION_SECRET, role=role)
 
 
 def _verify_session(token: str) -> dict | None:
@@ -138,6 +139,18 @@ def _require_user(request: Request) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
+
+
+def _require_admin(request: Request) -> dict:
+    user = _require_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def _is_admin(request: Request) -> bool:
+    user = _current_user(request)
+    return bool(user and user.get("role") == "admin")
 
 # ---------------------------------------------------------------------------
 # Password hashing (stdlib scrypt — no extra deps)
@@ -224,6 +237,7 @@ app = FastAPI(title="Job Application Agent")
 app.include_router(applications_router)
 app.include_router(companies_router)
 app.include_router(auth_google_router)
+app.include_router(admin_router)
 
 _PUBLIC_PATHS = frozenset({
     "/login.html", "/register.html",
@@ -357,7 +371,7 @@ async def register(
                    display_name=display_name.strip(), resume_filename=resume.filename)
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"]})
-    token = _create_session(user_id, email)
+    token = _create_session(user_id, email, role=user.get("role", "user"))
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:
@@ -382,7 +396,7 @@ async def login(req: LoginRequest, request: Request):
     user_audit.log(user["user_id"], "login_success", email, _client_ip(request))
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"]})
-    token = _create_session(user["user_id"], email)
+    token = _create_session(user["user_id"], email, role=user.get("role", "user"))
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:
@@ -416,6 +430,7 @@ async def me(request: Request):
         "user_id":      user_data["user_id"],
         "email":        user_data["email"],
         "display_name": record.get("display_name", user_data["email"]),
+        "role":         record.get("role", "user"),
         "has_resume":   storage.has_resume(user_data["user_id"]),
         "has_profile":  bool(storage.get_profile(user_data["user_id"])),
     }
@@ -617,7 +632,7 @@ async def stream_run(run_id: str, request: Request):
     user_data = _require_user(request)
     if run_id not in _runs:
         raise HTTPException(404, "Run not found")
-    if _runs[run_id].get("user_id") != user_data["user_id"]:
+    if _runs[run_id].get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
 
     q    = _runs[run_id]["queue"]
@@ -647,7 +662,7 @@ async def run_status(run_id: str, request: Request):
     run = _runs.get(run_id)
     if not run:
         raise HTTPException(404, "Run not found")
-    if run.get("user_id") != user_data["user_id"]:
+    if run.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
     return {"run_id": run_id, "status": run["status"], "error": run.get("error")}
 
@@ -658,7 +673,7 @@ async def get_file(run_id: str, filename: str, request: Request):
     run = _runs.get(run_id)
     if not run or run["status"] != "done" or not run.get("result"):
         raise HTTPException(404, "Run not complete")
-    if run.get("user_id") != user_data["user_id"]:
+    if run.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
 
     result: WorkflowResult = run["result"]
@@ -848,7 +863,7 @@ async def stream_prep(prep_id: str, request: Request):
     user_data = _require_user(request)
     if prep_id not in _preps:
         raise HTTPException(404, "Prep run not found")
-    if _preps[prep_id].get("user_id") != user_data["user_id"]:
+    if _preps[prep_id].get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
 
     q    = _preps[prep_id]["queue"]
@@ -878,7 +893,7 @@ async def prep_status(prep_id: str, request: Request):
     prep = _preps.get(prep_id)
     if not prep:
         raise HTTPException(404, "Prep run not found")
-    if prep.get("user_id") != user_data["user_id"]:
+    if prep.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
     return {"prep_id": prep_id, "status": prep["status"], "error": prep.get("error")}
 
@@ -889,7 +904,7 @@ async def get_prep_file(prep_id: str, filename: str, request: Request):
     prep = _preps.get(prep_id)
     if not prep or prep["status"] != "done" or not prep.get("result"):
         raise HTTPException(404, "Prep not complete")
-    if prep.get("user_id") != user_data["user_id"]:
+    if prep.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
 
     result: InterviewPrepResult = prep["result"]

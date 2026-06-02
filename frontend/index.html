@@ -534,6 +534,7 @@
         <span id="themeIcon"></span>
       </button>
       <span class="header-user" id="headerUser"></span>
+      <a class="header-link hidden" id="adminLink" href="/admin.html" title="Admin">Admin</a>
       <a class="header-link" href="/tracking.html" title="Application Tracker">
         <span class="link-full">Tracker</span>
         <span class="link-icon" aria-hidden="true">
@@ -783,6 +784,7 @@
       const res = await apiFetch('/api/auth/me');
       const u   = await res.json();
       document.getElementById('headerUser').textContent = u.display_name || u.email;
+      if (u.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
     } catch (_) {}
     await loadAllApps();
     initRunPicker();

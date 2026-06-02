@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Job Application Agent</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --primary: #1A3C5E; --border: #2B6CB0; --fill: #EEF4FB;
+      --text: #111827; --muted: #6B7280; --error: #DC2626; --success: #065F46;
+      --radius: 8px; --bg-page: #F9FAFB; --bg-card: #FFFFFF;
+      --card-border: #E5E7EB; --input-bg: #FFFFFF; --input-border: #D1D5DB;
+    }
+    [data-theme="dark"] {
+      --primary: #A5B4FC; --border: #6366F1; --fill: #1A1A2E;
+      --text: #F0F0F5; --muted: #94A3B8; --error: #F87171; --success: #4ADE80;
+      --bg-page: #0A0A0A; --bg-card: #111111; --card-border: #1E1E1E;
+      --input-bg: #161616; --input-border: #2B2B2B;
+    }
+    body { font-family: system-ui,-apple-system,sans-serif; background: var(--bg-page);
+           color: var(--text); margin: 0; padding: 2rem 1rem; min-height: 100vh;
+           transition: background .2s, color .2s; }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid var(--primary);
+             display: flex; align-items: flex-start; justify-content: space-between; }
+    .header-left { display: flex; align-items: flex-start; gap: .875rem; }
+    header h1 { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
+    header p  { color: var(--muted); margin: 0; font-size: .9rem; }
+    .header-actions { display: flex; align-items: center; gap: .75rem; flex-shrink: 0; margin-top: .25rem; }
+    .header-link { font-size: .825rem; font-weight: 600; color: var(--border);
+                   text-decoration: none; background: none; border: none; cursor: pointer; padding: 0; }
+    .header-link:hover { text-decoration: underline; }
+    .app-logo { width: 44px; height: 44px; }
+    .app-logo img { width: 44px; height: 44px; }
+    .logo-light { display: block; } .logo-dark { display: none; }
+    [data-theme="dark"] .logo-light { display: none; } [data-theme="dark"] .logo-dark { display: block; }
+    .theme-toggle { background: none; border: 1px solid var(--card-border); border-radius: 20px;
+                    padding: .3rem .65rem; cursor: pointer; font-size: .8rem; color: var(--muted);
+                    transition: border-color .15s; }
+    .theme-toggle:hover { border-color: var(--border); }
+
+    /* Stats bar */
+    .stats-bar { display: flex; gap: .75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat-chip { background: var(--bg-card); border: 1px solid var(--card-border);
+                 border-radius: var(--radius); padding: .6rem 1rem; min-width: 100px; }
+    .stat-num { font-size: 1.35rem; font-weight: 700; color: var(--primary); line-height: 1; }
+    .stat-lbl { font-size: .7rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+
+    /* Section */
+    .section-title { font-size: 1.1rem; font-weight: 700; color: var(--primary);
+                     margin: 0 0 1rem; padding-bottom: .5rem; border-bottom: 1px solid var(--card-border); }
+
+    /* Card */
+    .card { background: var(--bg-card); border: 1px solid var(--card-border);
+            border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th { padding: .65rem 1rem; text-align: left; font-size: .75rem; font-weight: 700;
+         text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+         background: var(--bg-page); border-bottom: 1px solid var(--card-border); white-space: nowrap; }
+    td { padding: .7rem 1rem; border-bottom: 1px solid var(--card-border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background .1s; }
+    tbody tr:hover { background: var(--fill); }
+
+    /* Badges */
+    .badge { display: inline-flex; align-items: center; font-size: .7rem; padding: .2rem .55rem;
+             border-radius: 999px; font-weight: 700; letter-spacing: .02em; }
+    .role-admin { background: #FEF3C7; color: #92400E; }
+    .role-user  { background: #F3F4F6; color: #6B7280; }
+    [data-theme="dark"] .role-admin { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .role-user  { background: #1F2937; color: #9CA3AF; }
+
+    .s-interviewing { background: #FEF3C7; color: #92400E; }
+    .s-phone-screen { background: #CFFAFE; color: #0E7490; }
+    .s-applied      { background: #DBEAFE; color: #1D4ED8; }
+    .s-on-hold      { background: #FED7AA; color: #9A3412; }
+    .s-researching  { background: #EDE9FE; color: #7C3AED; }
+    .s-offer        { background: #D1FAE5; color: #065F46; }
+    .s-rejected     { background: #FEE2E2; color: #991B1B; }
+    .s-not-applying { background: #F3F4F6; color: #6B7280; }
+    [data-theme="dark"] .s-interviewing { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .s-phone-screen { background: #083344; color: #67E8F9; }
+    [data-theme="dark"] .s-applied      { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .s-on-hold      { background: #3D1A0A; color: #FDBA74; }
+    [data-theme="dark"] .s-researching  { background: #2E1065; color: #C4B5FD; }
+    [data-theme="dark"] .s-offer        { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .s-rejected     { background: #2B1010; color: #F87171; }
+    [data-theme="dark"] .s-not-applying { background: #1F2937; color: #9CA3AF; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem 1rem;
+           background: var(--primary); color: white; border: none; border-radius: 6px;
+           font-size: .8rem; font-weight: 600; cursor: pointer; transition: filter .15s; white-space: nowrap; }
+    .btn:hover:not(:disabled) { filter: brightness(1.12); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: var(--bg-card); color: var(--primary); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--fill); }
+    .btn-danger { background: #DC2626; color: white; }
+    .btn-sm { padding: .3rem .65rem; font-size: .75rem; }
+
+    /* Company logo */
+    .co-logo { width: 24px; height: 24px; border-radius: 3px; object-fit: contain;
+               background: var(--bg-page); border: 1px solid var(--card-border); flex-shrink: 0; }
+    .co-logo-ph { width: 24px; height: 24px; border-radius: 3px; background: var(--fill);
+                  border: 1px solid var(--card-border); display: inline-flex; align-items: center;
+                  justify-content: center; font-size: .55rem; font-weight: 700; color: var(--muted); }
+    .company-cell { display: flex; align-items: center; gap: .5rem; }
+    .co-name { font-weight: 600; }
+    .co-email { font-size: .75rem; color: var(--muted); }
+
+    /* Filter row */
+    .filter-row { display: flex; gap: .625rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .filter-row input, .filter-row select {
+      padding: .4rem .65rem; border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .875rem; font-family: inherit; background: var(--input-bg); color: var(--text); }
+    .filter-row input:focus, .filter-row select:focus {
+      outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .filter-row input { flex: 1; min-width: 180px; }
+
+    /* Modal */
+    .modal-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100;
+                  display: flex; align-items: center; justify-content: center; padding: 1rem;
+                  opacity: 0; pointer-events: none; transition: opacity .15s; }
+    .modal-wrap.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 10px;
+             padding: 1.5rem; width: 100%; max-width: 400px;
+             transform: scale(.95); transition: transform .15s; }
+    .modal-wrap.open .modal { transform: scale(1); }
+    .modal h3 { font-size: 1rem; font-weight: 700; margin: 0 0 .5rem; }
+    .modal p  { font-size: .875rem; color: var(--muted); margin: 0 0 1rem; }
+    .modal select { width: 100%; padding: .5rem .75rem; border: 1px solid var(--input-border);
+                    border-radius: 6px; font-size: .875rem; background: var(--input-bg); color: var(--text);
+                    margin-bottom: 1.25rem; appearance: none; }
+    .modal-footer { display: flex; gap: .5rem; justify-content: flex-end; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--card-border); }
+    .tab { padding: .6rem 1.25rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+           background: none; border: none; color: var(--muted); border-bottom: 2px solid transparent;
+           margin-bottom: -2px; transition: color .12s, border-color .12s; }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab:hover:not(.active) { color: var(--text); }
+    .tab-pane { display: none; } .tab-pane.active { display: block; }
+
+    /* Inline alert */
+    .alert { padding: .625rem .875rem; border-radius: 6px; font-size: .825rem; margin-bottom: 1rem; }
+    .alert-err  { background: #FEF2F2; border: 1px solid #FECACA; color: var(--error); }
+    .alert-ok   { background: #D1FAE5; border: 1px solid #6EE7B7; color: var(--success); }
+    [data-theme="dark"] .alert-err { background: #2B1010; border-color: #7F1D1D; }
+    [data-theme="dark"] .alert-ok  { background: #0D2B1E; border-color: #065F46; }
+
+    .hidden { display: none !important; }
+    .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
+            border-top-color: white; border-radius: 50%; animation: rot .7s linear infinite; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+    .empty { color: var(--muted); font-size: .875rem; padding: 1rem 0; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="header-left">
+      <div class="app-logo">
+        <img class="logo-light" src="/img/logo-light.png" alt="">
+        <img class="logo-dark"  src="/img/logo-dark.png"  alt="">
+      </div>
+      <div>
+        <h1>Admin Dashboard</h1>
+        <p>User management and cross-user application oversight.</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
+      <span style="font-size:.825rem;color:var(--muted)" id="headerUser"></span>
+      <a class="header-link" href="/">Agent</a>
+      <a class="header-link" href="/tracking.html">Tracker</a>
+      <button class="header-link" id="logoutBtn">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-chip"><div class="stat-num" id="statUsers">—</div><div class="stat-lbl">Users</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statApps">—</div><div class="stat-lbl">Applications</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statAdmins">—</div><div class="stat-lbl">Admins</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statRuns">—</div><div class="stat-lbl">Active Runs</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="users">Users</button>
+    <button class="tab" data-tab="applications">All Applications</button>
+    <button class="tab" data-tab="runs">Active Runs</button>
+  </div>
+
+  <!-- ── Users tab ──────────────────────────────────────────────── -->
+  <div class="tab-pane active" id="tab-users">
+    <div id="usersAlert"></div>
+    <table>
+      <thead><tr>
+        <th>User</th><th>Role</th><th>Apps</th><th>Resume</th><th>Joined</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="usersBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ── Applications tab ──────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-applications">
+    <div class="filter-row">
+      <input type="text" id="appSearch" placeholder="Search company or role…">
+      <select id="appUserFilter"><option value="">All users</option></select>
+      <select id="appStatusFilter">
+        <option value="">All statuses</option>
+        <option>Interviewing</option><option>Phone Screen</option><option>Applied</option>
+        <option>On Hold</option><option>Researching</option><option>Offer</option>
+        <option>Rejected</option><option>Not Applying</option>
+      </select>
+    </div>
+    <div id="appsAlert"></div>
+    <table>
+      <thead><tr>
+        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th></th>
+      </tr></thead>
+      <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="appsCount"></div>
+  </div>
+
+  <!-- ── Active Runs tab ──────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-runs">
+    <table>
+      <thead><tr>
+        <th>Type</th><th>User</th><th>Status</th><th>Finished</th>
+      </tr></thead>
+      <tbody id="runsBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ── Role change modal ─────────────────────────────────────── -->
+<div class="modal-wrap" id="roleModal">
+  <div class="modal">
+    <h3>Change Role</h3>
+    <p id="roleModalUser"></p>
+    <select id="roleSelect">
+      <option value="user">User</option>
+      <option value="admin">Admin</option>
+    </select>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="roleCancelBtn">Cancel</button>
+      <button class="btn btn-sm" id="roleConfirmBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete app confirm modal ──────────────────────────────── -->
+<div class="modal-wrap" id="deleteModal">
+  <div class="modal">
+    <h3>Delete Application?</h3>
+    <p id="deleteModalMsg">This cannot be undone.</p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="deleteCancelBtn">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="deleteConfirmBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme ───────────────────────────────────────────────────────────
+const ICONS = { light: '☀', dark: '🌙' };
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+  document.getElementById('themeIcon').textContent = ICONS[t];
+}
+document.getElementById('themeToggle').addEventListener('click', () => {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+document.getElementById('themeIcon').textContent =
+  ICONS[document.documentElement.getAttribute('data-theme')] || ICONS.light;
+
+// ── Auth ────────────────────────────────────────────────────────────
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(url, opts);
+  if (res.status === 401) { window.location.href = '/login.html'; throw new Error('401'); }
+  if (res.status === 403) { window.location.href = '/'; throw new Error('403'); }
+  return res;
+}
+
+(async () => {
+  try {
+    const u = await (await apiFetch('/api/auth/me')).json();
+    if (u.role !== 'admin') { window.location.href = '/'; return; }
+    document.getElementById('headerUser').textContent = u.display_name || u.email;
+  } catch (_) {}
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
+// ── Tabs ────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ── Helpers ─────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }); }
+  catch { return iso.split('T')[0]; }
+}
+
+const BF = '1idZFX8Ll28d4x2IVye';
+function logoHtml(domain, company, size = 24) {
+  if (domain) return `<img class="co-logo" style="width:${size}px;height:${size}px"
+    src="https://cdn.brandfetch.io/domain/${esc(domain)}?c=${BF}"
+    alt="${esc(company)}" data-company="${esc(company)}"
+    onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'co-logo-ph',textContent:'${esc(company).slice(0,2).toUpperCase()}'}))">`;
+  return `<div class="co-logo-ph">${esc(company).slice(0,2).toUpperCase()}</div>`;
+}
+
+const STATUS_CLASS = {
+  'Interviewing':'s-interviewing','Phone Screen':'s-phone-screen','Applied':'s-applied',
+  'On Hold':'s-on-hold','Researching':'s-researching','Offer':'s-offer',
+  'Rejected':'s-rejected','Not Applying':'s-not-applying',
+};
+
+function statusBadge(s) {
+  return `<span class="badge ${STATUS_CLASS[s]||''}">${esc(s)}</span>`;
+}
+
+function showAlert(elId, msg, type = 'err') {
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="alert alert-${type}">${esc(msg)}</div>`;
+  setTimeout(() => el.innerHTML = '', 4000);
+}
+
+// ── State ────────────────────────────────────────────────────────────
+let _users    = [];
+let _allApps  = [];
+let _pendingRoleUserId = null;
+let _pendingDeleteUserId = null;
+let _pendingDeleteAppId  = null;
+
+// ── Load all data ────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadUsers(), loadApps(), loadRuns()]);
+}
+
+async function loadUsers() {
+  try {
+    const res = await apiFetch('/api/admin/users');
+    _users = await res.json();
+    renderUsers();
+    updateStats();
+
+    // Populate user filter on apps tab
+    const sel = document.getElementById('appUserFilter');
+    sel.innerHTML = '<option value="">All users</option>';
+    for (const u of _users) {
+      const opt = document.createElement('option');
+      opt.value = u.user_id;
+      opt.textContent = `${u.display_name || u.email} (${u.email})`;
+      sel.appendChild(opt);
+    }
+  } catch (e) { if (e.message !== '401') console.error(e); }
+}
+
+async function loadApps() {
+  try {
+    const res = await apiFetch('/api/admin/applications');
+    _allApps = await res.json();
+    renderApps();
+  } catch (e) { if (e.message !== '401') console.error(e); }
+}
+
+async function loadRuns() {
+  try {
+    const res = await apiFetch('/api/admin/runs');
+    const runs = await res.json();
+    renderRuns(runs);
+    document.getElementById('statRuns').textContent =
+      runs.filter(r => r.status === 'running' || r.status === 'queued').length;
+  } catch (e) { if (e.message !== '401') console.error(e); }
+}
+
+function updateStats() {
+  document.getElementById('statUsers').textContent  = _users.length;
+  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length;
+  document.getElementById('statApps').textContent   = _allApps.length || '—';
+}
+
+// ── Render users ─────────────────────────────────────────────────────
+function renderUsers() {
+  const tbody = document.getElementById('usersBody');
+  if (!_users.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>'; return; }
+  tbody.innerHTML = '';
+  for (const u of _users) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div style="font-weight:600">${esc(u.display_name || u.email)}</div>
+        <div style="font-size:.75rem;color:var(--muted)">${esc(u.email)}</div>
+      </td>
+      <td><span class="badge role-${u.role}">${esc(u.role)}</span></td>
+      <td style="color:var(--muted)">${u.app_count}</td>
+      <td style="color:var(--muted)">${u.has_resume ? '✓' : '—'}</td>
+      <td style="color:var(--muted);font-size:.8rem">${fmtDate(u.created_at)}</td>
+      <td><div style="display:flex;gap:.375rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" data-action="role" data-uid="${u.user_id}"
+                data-email="${esc(u.email)}" data-role="${u.role}">Change Role</button>
+        <a class="btn btn-ghost btn-sm" href="/tracking.html" target="_blank">Tracker ↗</a>
+      </div></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Render apps ──────────────────────────────────────────────────────
+function renderApps() {
+  const q    = document.getElementById('appSearch').value.trim().toLowerCase();
+  const uid  = document.getElementById('appUserFilter').value;
+  const stat = document.getElementById('appStatusFilter').value;
+
+  let list = _allApps;
+  if (q)    list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q));
+  if (uid)  list = list.filter(a => a._user_id === uid);
+  if (stat) list = list.filter(a => a.status === stat);
+
+  const tbody = document.getElementById('appsBody');
+  document.getElementById('appsCount').textContent = `${list.length} application${list.length !== 1 ? 's' : ''}`;
+
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No applications match.</td></tr>'; return; }
+  tbody.innerHTML = '';
+  for (const a of list.slice(0, 200)) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="company-cell">
+        ${logoHtml(a.domain, a.company)}
+        <div><div class="co-name">${esc(a.company)}</div>
+             <div class="co-email">${esc(a.domain || '')}</div></div>
+      </div></td>
+      <td>${esc(a.role_title)}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.date_applied)}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.last_updated)}</td>
+      <td><div style="display:flex;gap:.3rem">
+        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+        <button class="btn btn-danger btn-sm" data-action="del-app"
+                data-uid="${a._user_id}" data-aid="${a.id}"
+                data-label="${esc(a.company)} — ${esc(a.role_title)}">Delete</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  }
+  if (list.length > 200) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Render runs ──────────────────────────────────────────────────────
+function renderRuns(runs) {
+  const tbody = document.getElementById('runsBody');
+  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">No active runs.</td></tr>'; return; }
+  tbody.innerHTML = '';
+  for (const r of runs) {
+    const tr = document.createElement('tr');
+    const statusClass = r.status === 'done' ? 'success' : r.status === 'error' ? 'error' : 'primary';
+    tr.innerHTML = `
+      <td style="font-size:.875rem">${esc(r.type === 'interview_prep' ? 'Prep' : 'Resume')}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email)}</td>
+      <td><span style="font-size:.8rem;font-weight:600;color:var(--${statusClass})">${esc(r.status)}</span></td>
+      <td style="font-size:.8rem;color:var(--muted)">${r.finished_at ? fmtDate(new Date(r.finished_at * 1000).toISOString()) : '—'}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Delegated click handler ──────────────────────────────────────────
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+
+  if (btn.dataset.action === 'role') {
+    _pendingRoleUserId = btn.dataset.uid;
+    document.getElementById('roleModalUser').textContent =
+      `${btn.dataset.email} (current: ${btn.dataset.role})`;
+    document.getElementById('roleSelect').value = btn.dataset.role;
+    document.getElementById('roleModal').classList.add('open');
+  }
+
+  if (btn.dataset.action === 'del-app') {
+    _pendingDeleteUserId = btn.dataset.uid;
+    _pendingDeleteAppId  = btn.dataset.aid;
+    document.getElementById('deleteModalMsg').textContent =
+      `Delete "${btn.dataset.label}"? This cannot be undone.`;
+    document.getElementById('deleteModal').classList.add('open');
+  }
+});
+
+// ── Filters ──────────────────────────────────────────────────────────
+['appSearch','appUserFilter','appStatusFilter'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderApps);
+  document.getElementById(id).addEventListener('change', renderApps);
+});
+
+// ── Role modal ───────────────────────────────────────────────────────
+document.getElementById('roleCancelBtn').addEventListener('click', () => {
+  document.getElementById('roleModal').classList.remove('open');
+});
+
+document.getElementById('roleConfirmBtn').addEventListener('click', async () => {
+  const newRole = document.getElementById('roleSelect').value;
+  const btn = document.getElementById('roleConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  try {
+    const res = await apiFetch(`/api/admin/users/${_pendingRoleUserId}/role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    document.getElementById('roleModal').classList.remove('open');
+    showAlert('usersAlert', `Role updated to "${newRole}" successfully.`, 'ok');
+    await loadUsers();
+  } catch (err) {
+    showAlert('usersAlert', `Error: ${err.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+});
+
+// ── Delete modal ─────────────────────────────────────────────────────
+document.getElementById('deleteCancelBtn').addEventListener('click', () => {
+  document.getElementById('deleteModal').classList.remove('open');
+});
+
+document.getElementById('deleteConfirmBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('deleteConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  try {
+    const res = await apiFetch(
+      `/api/admin/applications/${_pendingDeleteUserId}/${_pendingDeleteAppId}`,
+      { method: 'DELETE' }
+    );
+    if (!res.ok && res.status !== 204) throw new Error('Delete failed');
+    document.getElementById('deleteModal').classList.remove('open');
+    showAlert('appsAlert', 'Application deleted.', 'ok');
+    await loadApps();
+    updateStats();
+  } catch (err) {
+    showAlert('appsAlert', `Error: ${err.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────
+loadAll();
+</script>
+</body>
+</html>
