@@ -932,11 +932,14 @@
     }
 
     if (jdStatusEl) {
+      const urlPart = app.url
+        ? ` &nbsp;·&nbsp; <a href="${esc(app.url)}" target="_blank" rel="noopener" style="color:var(--border);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">View Job Posting ↗</a>`
+        : '';
       if (jd) {
-        jdStatusEl.innerHTML = '✓ Job posting loaded from Drive';
+        jdStatusEl.innerHTML = '✓ Job posting loaded from Drive' + urlPart;
         jdStatusEl.className = 'jd-status loaded';
       } else {
-        jdStatusEl.innerHTML = 'No saved JD found — paste the job description below';
+        jdStatusEl.innerHTML = 'No saved JD — paste below' + urlPart;
         jdStatusEl.className = 'jd-status';
       }
     }
