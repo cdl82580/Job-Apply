@@ -278,6 +278,7 @@
     <button class="tab active" data-tab="users">Users</button>
     <button class="tab" data-tab="applications">All Applications</button>
     <button class="tab" data-tab="runs">All Agent Runs</button>
+    <button class="tab" data-tab="auditlog">Audit Log</button>
   </div>
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
@@ -389,6 +390,66 @@
       </tr></thead>
       <tbody id="runsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
+  </div>
+
+  <!-- ── Audit Log tab ────────────────────────────────────────── -->
+  <div class="tab-pane" id="tab-auditlog">
+    <!-- Filter row 1 -->
+    <div class="filter-row">
+      <input type="text" id="auditActorFilter" placeholder="Filter by actor…" style="max-width:220px">
+      <select id="auditActionFilter"><option value="">All actions</option></select>
+      <select id="auditUserFilter"><option value="">All users</option></select>
+      <select id="auditSourceFilter">
+        <option value="">All sources</option>
+        <option value="user">User events</option>
+        <option value="application">Application events</option>
+      </select>
+    </div>
+    <!-- Filter row 2 -->
+    <div class="filter-row" style="margin-top:-.5rem">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0">From:</label>
+      <input type="datetime-local" id="auditFrom" style="max-width:190px">
+      <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">To:</label>
+      <input type="datetime-local" id="auditTo"   style="max-width:190px">
+      <button class="btn btn-ghost btn-sm" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem">
+      <div style="font-size:.8rem;color:var(--muted)" id="auditCount">—</div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--muted)">
+        Per page
+        <select id="auditPerPage" style="padding:.25rem .5rem;font-size:.8rem;border:1px solid var(--input-border);border-radius:5px;background:var(--input-bg);color:var(--text)">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+        </select>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th class="aud-sort-th" data-col="timestamp" style="cursor:pointer;white-space:nowrap">Timestamp <span class="sort-arrow">↓</span></th>
+        <th class="aud-sort-th" data-col="action"    style="cursor:pointer;white-space:nowrap">Action <span class="sort-arrow">↕</span></th>
+        <th class="aud-sort-th" data-col="actor"     style="cursor:pointer;white-space:nowrap">Actor <span class="sort-arrow">↕</span></th>
+        <th class="aud-sort-th" data-col="user_email"style="cursor:pointer;white-space:nowrap">User <span class="sort-arrow">↕</span></th>
+        <th>Source</th>
+        <th>Entity</th>
+        <th>IP</th>
+        <th>Details</th>
+      </tr></thead>
+      <tbody id="auditBody"><tr><td colspan="8" class="empty">Load events to begin.</td></tr></tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination-bar hidden" id="auditPagBar" style="margin-top:.875rem">
+      <div class="pagination-info" id="auditPagInfo"></div>
+      <div class="pagination-controls" id="auditPagCtrl">
+        <button class="page-btn" id="auditPrev">← Prev</button>
+        <div id="auditPageNums" style="display:flex;align-items:center;gap:.25rem"></div>
+        <button class="page-btn" id="auditNext">Next →</button>
+      </div>
+    </div>
   </div>
 
 </div><!-- /container -->
@@ -1248,6 +1309,144 @@ document.getElementById('drawerDiscardBtn').addEventListener('click', async () =
 document.getElementById('addCommentBtn').addEventListener('click', async () => {
   const text = document.getElementById('newCommentText').value.trim();
   if (text && _drawerUserId) await addComment(text);
+});
+
+// ── Audit Log ────────────────────────────────────────────────────────
+let _auditPage      = 1;
+let _auditPerPage   = 50;
+let _auditSortCol   = 'timestamp';
+let _auditSortOrder = 'desc';
+let _auditLoaded    = false;
+
+async function loadAudit(page = 1) {
+  _auditPage = page;
+  const actor    = document.getElementById('auditActorFilter').value.trim();
+  const action   = document.getElementById('auditActionFilter').value;
+  const userId   = document.getElementById('auditUserFilter').value;
+  const source   = document.getElementById('auditSourceFilter').value;
+  const fromVal  = document.getElementById('auditFrom').value;
+  const toVal    = document.getElementById('auditTo').value;
+
+  const params = new URLSearchParams({ page: _auditPage, per_page: _auditPerPage, sort_order: _auditSortOrder });
+  if (actor)   params.set('actor',   actor);
+  if (action)  params.set('action',  action);
+  if (userId)  params.set('user_id', userId);
+  if (source)  params.set('source',  source);
+  if (fromVal) params.set('from_ts', fromVal + ':00Z');
+  if (toVal)   params.set('to_ts',   toVal   + ':59Z');
+
+  document.getElementById('auditBody').innerHTML =
+    '<tr><td colspan="8" class="empty"><span class="spin-muted"></span> Loading…</td></tr>';
+
+  try {
+    const res  = await apiFetch(`/api/admin/audit?${params}`);
+    const data = await res.json();
+    renderAudit(data);
+  } catch (e) { if (e.message !== '401') console.error('audit', e); }
+}
+
+function renderAudit({ items, total, page, per_page, pages }) {
+  const tbody = document.getElementById('auditBody');
+  document.getElementById('auditCount').textContent =
+    `${total.toLocaleString()} event${total !== 1 ? 's' : ''}`;
+
+  document.querySelectorAll('.aud-sort-th').forEach(th => {
+    const active = th.dataset.col === _auditSortCol;
+    th.classList.toggle('sort-active', active);
+    th.querySelector('.sort-arrow').textContent =
+      active ? (_auditSortOrder === 'asc' ? '↑' : '↓') : '↕';
+  });
+
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No events match.</td></tr>';
+    document.getElementById('auditPagBar').classList.add('hidden'); return;
+  }
+
+  tbody.innerHTML = '';
+  const SRC = { user: 's-applied', application: 's-researching' };
+  for (const e of items) {
+    const det = e.details && Object.keys(e.details).length
+      ? JSON.stringify(e.details) : '';
+    const detShort = det.length > 140 ? det.slice(0, 140) + '…' : det;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-size:.72rem;font-family:'SF Mono','Fira Code',monospace;white-space:nowrap;color:var(--muted)">${esc(e.timestamp||'—')}</td>
+      <td style="font-size:.775rem;font-weight:600;white-space:nowrap">${esc(e.action||'—')}</td>
+      <td style="font-size:.775rem;color:var(--muted);white-space:nowrap">${esc(e.actor||'—')}</td>
+      <td style="font-size:.775rem;color:var(--muted)">${esc(e.user_email||'—')}</td>
+      <td><span class="badge ${SRC[e.source]||''}" style="font-size:.65rem">${esc(e.source||'—')}</span></td>
+      <td style="font-size:.775rem;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.entity_label||'')}">${esc(e.entity_label||'—')}</td>
+      <td style="font-size:.72rem;color:var(--muted);white-space:nowrap">${esc(e.ip||'—')}</td>
+      <td style="font-size:.72rem;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono','Fira Code',monospace" title="${esc(det)}">${esc(detShort||'—')}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  // Pagination
+  const bar = document.getElementById('auditPagBar');
+  bar.classList.toggle('hidden', pages <= 1 && total <= per_page);
+  document.getElementById('auditPagInfo').textContent =
+    `Showing ${(page-1)*per_page+1}–${Math.min(page*per_page,total)} of ${total.toLocaleString()}`;
+  document.getElementById('auditPrev').disabled = page <= 1;
+  document.getElementById('auditNext').disabled = page >= pages;
+  const numsEl = document.getElementById('auditPageNums');
+  numsEl.innerHTML = '';
+  for (const p of pageRange(page, pages)) {
+    if (p === '…') {
+      const s = document.createElement('span'); s.className = 'page-ellipsis'; s.textContent = '…';
+      numsEl.appendChild(s);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'page-btn' + (p === page ? ' active' : '');
+      btn.textContent = p;
+      btn.addEventListener('click', () => loadAudit(p));
+      numsEl.appendChild(btn);
+    }
+  }
+}
+
+async function initAuditFilters() {
+  try {
+    const types = await (await apiFetch('/api/admin/audit/action-types')).json();
+    const sel   = document.getElementById('auditActionFilter');
+    types.forEach(t => { const o = document.createElement('option'); o.value = o.textContent = t; sel.appendChild(o); });
+  } catch (_) {}
+  const usel = document.getElementById('auditUserFilter');
+  _users.forEach(u => {
+    const o = document.createElement('option');
+    o.value = u.user_id;
+    o.textContent = `${u.display_name || u.email} (${u.email})`;
+    usel.appendChild(o);
+  });
+}
+
+['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id =>
+  document.getElementById(id).addEventListener('change', () => loadAudit(1))
+);
+document.getElementById('auditActorFilter').addEventListener('input', function() {
+  clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
+});
+['auditFrom','auditTo'].forEach(id =>
+  document.getElementById(id).addEventListener('change', () => loadAudit(1))
+);
+document.getElementById('auditPerPage').addEventListener('change', e => {
+  _auditPerPage = parseInt(e.target.value); loadAudit(1);
+});
+document.getElementById('auditPrev').addEventListener('click', () => loadAudit(_auditPage - 1));
+document.getElementById('auditNext').addEventListener('click', () => loadAudit(_auditPage + 1));
+document.getElementById('auditClearFilters').addEventListener('click', () => {
+  ['auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
+  ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
+  loadAudit(1);
+});
+document.querySelector('[data-tab="auditlog"]').addEventListener('click', () => {
+  if (!_auditLoaded) { _auditLoaded = true; initAuditFilters().then(() => loadAudit(1)); }
+});
+document.getElementById('tab-auditlog').addEventListener('click', e => {
+  const th = e.target.closest('.aud-sort-th');
+  if (!th) return;
+  if (_auditSortCol === th.dataset.col) _auditSortOrder = _auditSortOrder === 'asc' ? 'desc' : 'asc';
+  else { _auditSortCol = th.dataset.col; _auditSortOrder = 'asc'; }
+  loadAudit(1);
 });
 
 // User filters

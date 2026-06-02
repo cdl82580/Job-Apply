@@ -20,7 +20,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from scripts import storage
@@ -491,3 +491,140 @@ async def list_all_runs(request: Request):
     # Default sort: newest first
     all_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     return all_runs
+
+# ---------------------------------------------------------------------------
+# Unified audit log
+# ---------------------------------------------------------------------------
+
+# All known action types across both audit streams
+AUDIT_ACTION_TYPES = sorted([
+    # Auth / account
+    "user_registered", "user_registered_google", "google_account_linked",
+    "login_success", "login_google", "login_failed", "logout",
+    "email_verified", "verification_email_resent",
+    "profile_updated", "resume_uploaded", "password_changed",
+    # Admin user management
+    "role_changed", "admin_user_updated", "admin_verification_resent",
+    # Applications
+    "created", "updated", "deleted",
+    "comment_added", "comment_edited", "comment_deleted",
+    "run_linked", "run_unlinked",
+    # Admin application management
+    "admin_updated", "admin_deleted",
+    "admin_comment_added", "admin_comment_edited", "admin_comment_deleted",
+    # Import
+    "imported",
+])
+
+
+@router.get("/audit/action-types")
+async def get_action_types(request: Request):
+    """Return the list of known audit action types."""
+    _admin(request)
+    return AUDIT_ACTION_TYPES
+
+
+@router.get("/audit")
+async def get_unified_audit_log(
+    request: Request,
+    page:       int          = Query(1, ge=1),
+    per_page:   int          = Query(50, ge=1, le=500),
+    action:     str | None   = None,
+    actor:      str | None   = None,
+    user_id:    str | None   = None,
+    source:     str | None   = None,   # "user" | "application"
+    from_ts:    str | None   = None,   # ISO timestamp
+    to_ts:      str | None   = None,
+    sort_order: str          = Query("desc", pattern="^(asc|desc)$"),
+):
+    """Unified audit log across all users and all application records."""
+    _admin(request)
+
+    users       = storage.list_all_users()
+    user_map    = {u["user_id"]: u.get("email", "") for u in users}
+    all_events: list[dict[str, Any]] = []
+
+    # ── 1. User-level audit events ──────────────────────────────────
+    if source in (None, "user"):
+        for u in users:
+            uid   = u["user_id"]
+            email = u.get("email", "")
+            try:
+                events = user_audit.get_events(uid)   # newest-first list
+                for e in events:
+                    all_events.append({
+                        **e,
+                        "source":     "user",
+                        "user_id":    uid,
+                        "user_email": email,
+                        "entity_id":  None,
+                        "entity_label": None,
+                    })
+            except Exception:
+                pass
+
+    # ── 2. Application-level audit events ───────────────────────────
+    if source in (None, "application"):
+        for u in users:
+            uid = u["user_id"]
+            try:
+                result = app_store.list_applications(uid)
+                items  = result.get("items", result) if isinstance(result, dict) else result
+                for item in items:
+                    app_id = item["id"]
+                    try:
+                        full = app_store.get_application(uid, app_id)
+                        if not full:
+                            continue
+                        label = f"{full.get('company','')} · {full.get('role_title','')}"
+                        for e in full.get("audit_log", []):
+                            all_events.append({
+                                **e,
+                                "source":       "application",
+                                "user_id":      uid,
+                                "user_email":   user_map.get(uid, ""),
+                                "entity_id":    app_id,
+                                "entity_label": label,
+                                # Normalise field names to match user events
+                                "actor":        e.get("actor", ""),
+                                "ip":           e.get("ip"),
+                                "details":      e.get("changes") or e.get("details") or {},
+                            })
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    # ── 3. Filter ───────────────────────────────────────────────────
+    if action:
+        all_events = [e for e in all_events if e.get("action") == action]
+    if actor:
+        lc = actor.lower()
+        all_events = [e for e in all_events if lc in (e.get("actor") or "").lower()]
+    if user_id:
+        all_events = [e for e in all_events if e.get("user_id") == user_id]
+    if from_ts:
+        all_events = [e for e in all_events if (e.get("timestamp") or "") >= from_ts]
+    if to_ts:
+        all_events = [e for e in all_events if (e.get("timestamp") or "") <= to_ts]
+
+    # ── 4. Sort ─────────────────────────────────────────────────────
+    all_events.sort(
+        key=lambda e: e.get("timestamp") or "",
+        reverse=(sort_order == "desc"),
+    )
+
+    # ── 5. Paginate ──────────────────────────────────────────────────
+    total  = len(all_events)
+    pages  = max(1, (total + per_page - 1) // per_page)
+    page   = max(1, min(page, pages))
+    start  = (page - 1) * per_page
+    items  = all_events[start : start + per_page]
+
+    return {
+        "items":    items,
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    pages,
+    }
