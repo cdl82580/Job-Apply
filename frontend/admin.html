@@ -132,22 +132,23 @@
 
     /* ── Webhook modal rows (filters, query params, headers) ─────── */
     .wh-row {
-      display: grid; gap: .4rem; margin-bottom: .35rem; align-items: center;
+      display: grid; gap: .4rem; margin-bottom: .35rem; align-items: stretch;
     }
     .wh-row input, .wh-row select {
-      height: 32px; padding: 0 .5rem;
+      padding: .45rem .6rem;
       border: 1px solid var(--input-border); border-radius: 5px;
-      font-size: .8rem; font-family: inherit;
+      font-size: .8rem; font-family: inherit; line-height: 1.4;
       background: var(--input-bg); color: var(--text);
-      box-sizing: border-box;
+      box-sizing: border-box; min-height: 0;
     }
     .wh-row select { appearance: none; }
     .wh-row .wh-del {
-      height: 32px; width: 32px; flex-shrink: 0;
+      padding: 0 .5rem;
       border: 1px solid var(--input-border); border-radius: 5px;
       background: none; color: var(--muted); cursor: pointer;
-      font-size: .85rem; display: flex; align-items: center; justify-content: center;
-      transition: border-color .1s, color .1s;
+      font-size: .85rem; font-family: inherit;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .1s, color .1s; box-sizing: border-box;
     }
     .wh-row .wh-del:hover { border-color: var(--error); color: var(--error); }
 
