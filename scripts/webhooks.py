@@ -223,15 +223,79 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
     fmt = webhook.get("payload_format", "generic")
 
     if fmt == "slack":
-        # Slack Incoming Webhooks format
-        action  = event.get("action", "unknown")
-        actor   = event.get("actor") or event.get("user_email") or "—"
-        details = event.get("details") or {}
-        det_str = ", ".join(f"{k}: {v}" for k, v in details.items()) if details else ""
-        text    = f"*Job Apply* · `{action}`\n*Actor:* {actor} | *Time:* {now_ts}"
-        if det_str:
-            text += f"\n*Details:* {det_str}"
-        payload_dict = {"text": text, "mrkdwn": True}
+        action   = event.get("action", "unknown")
+        actor    = event.get("actor") or event.get("user_email") or "—"
+        source   = event.get("source") or "—"
+        ip       = event.get("ip") or "—"
+        entity   = event.get("entity_label") or ""
+        details  = event.get("details") or {}
+
+        # Emoji per action category
+        _CAT_EMOJI = {
+            "auth":         "🔐",
+            "profile":      "👤",
+            "applications": "📋",
+            "runs":         "🤖",
+            "admin":        "🛠️",
+        }
+        cat_emoji = "📡"
+        for cat, actions in CATEGORY_ACTIONS.items():
+            if action in actions:
+                cat_emoji = _CAT_EMOJI.get(cat, "📡")
+                break
+
+        # Human-readable timestamp
+        try:
+            import datetime as _dt
+            ts_human = _dt.datetime.strptime(now_ts, "%Y-%m-%dT%H:%M:%SZ").strftime("%-m/%-d/%y, %-I:%M %p UTC")
+        except Exception:
+            ts_human = now_ts
+
+        # Fallback text for push notifications
+        fallback = f"[Job Apply] {cat_emoji} {action} — {actor}"
+
+        # Header section
+        blocks: list[dict] = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{cat_emoji}  *`{action}`*",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Job Apply"},
+                    "url": "https://job-apply-corey.fly.dev/admin.html?tab=auditlog",
+                    "action_id": "open_admin",
+                },
+            },
+            {"type": "divider"},
+        ]
+
+        # Core fields
+        fields = [
+            {"type": "mrkdwn", "text": f"*Actor*\n{actor}"},
+            {"type": "mrkdwn", "text": f"*Time*\n{ts_human}"},
+            {"type": "mrkdwn", "text": f"*Source*\n{source}"},
+            {"type": "mrkdwn", "text": f"*IP*\n{ip}"},
+        ]
+        if entity:
+            fields.append({"type": "mrkdwn", "text": f"*Entity*\n{entity}"})
+        blocks.append({"type": "section", "fields": fields[:10]})  # Slack max 10
+
+        # Details context row
+        if details:
+            det_parts = [f"`{k}`: {v}" for k, v in details.items() if v is not None]
+            if det_parts:
+                det_text = "  ·  ".join(det_parts)
+                if len(det_text) > 300:
+                    det_text = det_text[:297] + "…"
+                blocks.append({
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": f"*Details:*  {det_text}"}],
+                })
+
+        payload_dict = {"text": fallback, "blocks": blocks}
 
     elif fmt == "ms_teams":
         # MS Teams Incoming Webhook — MessageCard format
