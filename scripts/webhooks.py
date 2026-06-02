@@ -258,19 +258,13 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
         event_id   = event.get("id", "")
         audit_url  = f"https://job-apply-corey.fly.dev/admin.html?tab=auditlog&event_id={event_id}"
 
-        # Header section
+        # Header section — inline link avoids Slack interactivity requirement
         blocks: list[dict] = [
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"{cat_emoji}  *`{action}`*",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "View in Audit Log"},
-                    "url": audit_url,
-                    "action_id": "open_audit",
+                    "text": f"{cat_emoji}  *`{action}`*    <{audit_url}|View in Audit Log →>",
                 },
             },
             {"type": "divider"},
