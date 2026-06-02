@@ -132,25 +132,24 @@
 
     /* ── Webhook modal rows (filters, query params, headers) ─────── */
     .wh-row {
-      display: grid; gap: .5rem; margin-bottom: .5rem;
-      height: 36px; align-items: stretch;
+      display: flex; gap: .5rem; margin-bottom: .5rem; align-items: center;
     }
     .wh-row input, .wh-row select {
-      padding: 0 .65rem;
+      flex: 1; min-width: 0;
+      height: 36px; padding: 0 .65rem;
       border: 1px solid var(--input-border); border-radius: 6px;
       font-size: .875rem; font-family: inherit;
       background: var(--input-bg); color: var(--text);
       box-sizing: border-box; -webkit-appearance: none; appearance: none;
     }
     .wh-row .wh-del {
-      width: 36px; padding: 0;
+      flex: 0 0 36px; height: 36px;
       border: 1px solid var(--input-border); border-radius: 6px;
       background: none; color: var(--muted); cursor: pointer; font-size: .9rem;
       display: flex; align-items: center; justify-content: center;
-      transition: border-color .1s, color .1s; flex-shrink: 0;
+      transition: border-color .1s, color .1s; box-sizing: border-box;
     }
     .wh-row .wh-del:hover { border-color: var(--error); color: var(--error); }
-    /* Section spacing inside webhook modal */
     .wh-section { margin-bottom: 1.25rem; }
     .wh-section + .wh-section { padding-top: 1rem; border-top: 1px solid var(--card-border); }
 
@@ -2170,7 +2169,6 @@ const FILTER_OPTIONS = {
 function _filterRow(filterType = 'actor', value = '') {
   const row = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '150px 1fr 36px';
 
   const typeOpts = Object.entries(FILTER_OPTIONS)
     .map(([k, v]) => `<option value="${k}" ${k === filterType ? 'selected' : ''}>${v.label}</option>`)
@@ -2187,7 +2185,7 @@ function _filterRow(filterType = 'actor', value = '') {
   }
 
   row.innerHTML = `
-    <select class="wh-flt-type">${typeOpts}</select>
+    <select class="wh-flt-type" style="flex:0 0 150px">${typeOpts}</select>
     ${buildValEl(filterType, value)}
     <button type="button" class="wh-del" onclick="this.parentElement.remove()">✕</button>`;
 
@@ -2414,7 +2412,7 @@ const QP_OPTIONS = [
 function _qpRow(containerId, key = '', val = '') {
   const row  = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '1fr 1fr 36px';
+  // flex layout handled by .wh-row CSS
   const opts   = QP_OPTIONS.map(o =>
     `<option value="${o.key}" ${o.key === key ? 'selected' : ''}>${o.key}</option>`
   ).join('');
@@ -2433,7 +2431,7 @@ function _qpRow(containerId, key = '', val = '') {
 function _kvRow(containerId, key = '', val = '') {
   const row = document.createElement('div');
   row.className = 'wh-row';
-  row.style.gridTemplateColumns = '1fr 1fr 36px';
+  // flex layout handled by .wh-row CSS
   row.innerHTML = `
     <input type="text" class="kv-key" placeholder="Header name" value="${esc(key)}">
     <input type="text" class="kv-val" placeholder="Value" value="${esc(val)}">
