@@ -140,11 +140,14 @@ def get_application(user_id: str, app_id: str) -> dict[str, Any] | None:
         return None
 
 
-def save_application(user_id: str, record: dict[str, Any]) -> None:
-    record["last_updated"] = _now()
+def save_application(user_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Persist record and update the index. Returns a new dict with last_updated
+    set — does not mutate the caller's object."""
+    saved = {**record, "last_updated": _now()}
     with _user_lock(user_id):
-        storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
-        _upsert_index(user_id, record)
+        storage.put_text(_app_key(user_id, saved["id"]), json.dumps(saved))
+        _upsert_index(user_id, saved)
+    return saved
 
 
 def link_run(user_id: str, app_id: str, run_info: dict[str, Any]) -> dict[str, Any] | None:

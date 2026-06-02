@@ -46,7 +46,7 @@ def _now() -> str:
 
 class ApplicationCreate(BaseModel):
     company: str
-    domain: str
+    domain: str = ""
     company_logo_url: str = ""
     role_title: str
     status: str = "Researching"
@@ -182,7 +182,7 @@ async def create_application(body: ApplicationCreate, request: Request):
         **body.model_dump(),
     }
     record["audit_log"].append(_audit_entry("created", actor))
-    app_store.save_application(user_id, record)
+    record = app_store.save_application(user_id, record)
     return record
 
 
@@ -218,7 +218,7 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
             _audit_entry("updated", actor, changes)
         )
 
-    app_store.save_application(user_id, record)
+    record = app_store.save_application(user_id, record)
     return record
 
 
@@ -299,7 +299,7 @@ async def update_comment(
             record["updated_at"] = _now()
             record["updated_by"] = actor
             app_store.save_application(user_id, record)
-            return c
+            return c  # comment object, not record — no need to reassign
 
     raise HTTPException(404, "Comment not found")
 

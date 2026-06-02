@@ -29,6 +29,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import tempfile
@@ -36,6 +37,8 @@ import threading
 import time
 import urllib.request
 import uuid
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Any
@@ -80,7 +83,13 @@ FLY_APP_NAME   = os.environ.get("FLY_APP_NAME", "job-apply-corey")
 # Signing secret for session tokens.  Generated fresh on each deploy if unset
 # (means all existing sessions are invalidated on restart) — set SESSION_SECRET
 # as a Fly.io secret to get persistent sessions across restarts.
-_SESSION_SECRET  = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
+_SESSION_SECRET  = os.environ.get("SESSION_SECRET", "")
+if not _SESSION_SECRET:
+    logger.warning(
+        "SESSION_SECRET is not set. Using a random secret — all sessions will be "
+        "invalidated on every restart. Set SESSION_SECRET as a Fly.io secret."
+    )
+    _SESSION_SECRET = secrets.token_hex(32)
 _SESSION_COOKIE  = "session"
 _SESSION_DAYS    = _SESSION_DAYS_SHARED
 # Bearer token for the Slack bot — set BOT_API_KEY as a Fly.io secret.
@@ -768,64 +777,65 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
         resume_path = Path(tmp.name)
 
         try:
-            _preps[prep_id]["status"] = "running"
+            with _workflow_lock:
+                _preps[prep_id]["status"] = "running"
 
-            def progress(msg: str):
-                q.put({"type": "progress", "message": msg})
+                def progress(msg: str):
+                    q.put({"type": "progress", "message": msg})
 
-            config = InterviewPrepConfig(
-                round_type=req.round_type,
-                focus=req.focus or "",
-                interviewer=req.interviewer or "",
-                model=req.model or DEFAULT_MODEL,
-                progress=progress,
-                master_resume=resume_path,
-                profile_text=profile_text,
-                user_id=user_id,
-                user_label=user_data["email"],
-            )
-            try:
-                result: InterviewPrepResult = generate_interview_prep(
-                    job_posting=req.job_posting,
-                    company=req.company,
-                    role=req.role,
-                    config=config,
+                config = InterviewPrepConfig(
+                    round_type=req.round_type,
+                    focus=req.focus or "",
+                    interviewer=req.interviewer or "",
+                    model=req.model or DEFAULT_MODEL,
+                    progress=progress,
+                    master_resume=resume_path,
+                    profile_text=profile_text,
+                    user_id=user_id,
+                    user_label=user_data["email"],
                 )
-                _preps[prep_id]["result"]       = result
-                _preps[prep_id]["status"]       = "done"
-                _preps[prep_id]["_finished_at"] = time.time()
-
-                if req.app_id:
-                    _link_run_to_app(
-                        user_id=user_id,
-                        app_id=req.app_id,
-                        run_type="interview_prep",
-                        result_dir=result.run_dir,
-                        folder_url=result.folder_url or "",
+                try:
+                    result: InterviewPrepResult = generate_interview_prep(
+                        job_posting=req.job_posting,
+                        company=req.company,
+                        role=req.role,
+                        config=config,
                     )
+                    _preps[prep_id]["result"]       = result
+                    _preps[prep_id]["status"]       = "done"
+                    _preps[prep_id]["_finished_at"] = time.time()
 
-                q.put({
-                    "type":       "done",
-                    "prep_id":    prep_id,
-                    "folder_url": result.folder_url,
-                    "app_id":     req.app_id,
-                    "files": {
-                        "prep": result.prep_path.name,
-                    },
-                })
-            except WorkflowError as exc:
-                _preps[prep_id]["status"]      = "error"
-                _preps[prep_id]["error"]        = str(exc)
-                _preps[prep_id]["_finished_at"] = time.time()
-                q.put({"type": "error", "message": str(exc)})
-            except Exception as exc:
-                msg = f"Unexpected error: {type(exc).__name__}: {exc}"
-                _preps[prep_id]["status"]      = "error"
-                _preps[prep_id]["error"]        = msg
-                _preps[prep_id]["_finished_at"] = time.time()
-                q.put({"type": "error", "message": msg})
-            finally:
-                q.put(None)
+                    if req.app_id:
+                        _link_run_to_app(
+                            user_id=user_id,
+                            app_id=req.app_id,
+                            run_type="interview_prep",
+                            result_dir=result.run_dir,
+                            folder_url=result.folder_url or "",
+                        )
+
+                    q.put({
+                        "type":       "done",
+                        "prep_id":    prep_id,
+                        "folder_url": result.folder_url,
+                        "app_id":     req.app_id,
+                        "files": {
+                            "prep": result.prep_path.name,
+                        },
+                    })
+                except WorkflowError as exc:
+                    _preps[prep_id]["status"]      = "error"
+                    _preps[prep_id]["error"]        = str(exc)
+                    _preps[prep_id]["_finished_at"] = time.time()
+                    q.put({"type": "error", "message": str(exc)})
+                except Exception as exc:
+                    msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                    _preps[prep_id]["status"]      = "error"
+                    _preps[prep_id]["error"]        = msg
+                    _preps[prep_id]["_finished_at"] = time.time()
+                    q.put({"type": "error", "message": msg})
+                finally:
+                    q.put(None)
         finally:
             resume_path.unlink(missing_ok=True)
 

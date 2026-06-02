@@ -172,17 +172,31 @@ def _add_comment(app_id: str, text: str) -> dict:
     return r.json()
 
 
-def _app_options(apps: list[dict] | None = None, max_opts: int = 100) -> list[dict]:
-    """Return Slack static_select options for an application list.
-    Sorted by status priority so most active appear first."""
+# Statuses excluded from the default Slack select — typically low-value for
+# update/note/delete actions and too numerous to show by default.
+_INACTIVE_STATUSES = {"Not Applying", "Rejected"}
+# Slack static_select hard cap
+_SLACK_MAX_OPTIONS = 100
+
+
+def _app_options(apps: list[dict] | None = None, active_only: bool = True) -> list[dict]:
+    """Return Slack static_select options (max 100).
+
+    active_only=True (default) excludes 'Not Applying' and 'Rejected' to keep
+    the list short and relevant. Pass active_only=False for the delete command
+    where you may want to clean up any record.
+    """
     if apps is None:
         apps = _get_apps()
 
+    if active_only:
+        apps = [a for a in apps if a.get("status") not in _INACTIVE_STATUSES]
+
     order = {s: i for i, s in enumerate(VALID_STATUSES)}
-    apps = sorted(apps, key=lambda a: (order.get(a.get("status", ""), 99), a.get("company", "")))
+    apps  = sorted(apps, key=lambda a: (order.get(a.get("status", ""), 99), a.get("company", "")))
 
     options = []
-    for a in apps[:max_opts]:
+    for a in apps[:_SLACK_MAX_OPTIONS]:
         label = f"{a.get('company', '?')} · {a.get('role_title', '?')} ({a.get('status', '?')})"
         if len(label) > 75:
             label = label[:72] + "…"
@@ -608,7 +622,7 @@ def track_note_view_submit(ack, body, client, view):
 def track_delete_command(ack, body, client, respond):
     ack()
     try:
-        options = _app_options()
+        options = _app_options(active_only=False)  # allow deleting any record
     except Exception as exc:
         respond(f":x: Could not load applications: {exc}")
         return
