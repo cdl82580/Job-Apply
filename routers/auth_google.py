@@ -26,6 +26,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from scripts import storage
+from scripts import user_audit
 
 router = APIRouter(tags=["auth"])
 
@@ -152,6 +153,9 @@ async def google_callback(
         )
 
     # Find or create user
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
+        request.client.host if request.client else None
+    )
     user = storage.get_user_by_google_id(google_id)
 
     if not user:
@@ -160,6 +164,8 @@ async def google_callback(
         if user:
             user["google_id"] = google_id
             storage.save_user(user)
+            user_audit.log(user["user_id"], "google_account_linked", email, ip,
+                           google_id=google_id)
         else:
             # Brand-new user via Google
             user_id = str(uuid.uuid4())
@@ -172,6 +178,10 @@ async def google_callback(
                 "created_at":    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             storage.save_user(user)
+            user_audit.log(user_id, "user_registered_google", email, ip,
+                           display_name=name, google_id=google_id)
+    else:
+        user_audit.log(user["user_id"], "login_google", email, ip)
 
     # Issue session cookie using the same secret as api.py
     from api import _SESSION_SECRET, FLY_MACHINE_ID  # noqa: PLC0415

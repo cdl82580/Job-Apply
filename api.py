@@ -46,6 +46,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from scripts import storage
+from scripts import user_audit
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
@@ -153,6 +154,16 @@ def _hash_password(password: str) -> str:
     salt = os.urandom(16)
     dk   = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
     return f"scrypt:{salt.hex()}:{dk.hex()}"
+
+
+def _client_ip(request: Request) -> str | None:
+    """Best-effort client IP — respects X-Forwarded-For set by Fly.io proxy."""
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return None
 
 
 def _verify_password(password: str, stored: str) -> bool:
@@ -275,6 +286,7 @@ async def health():
 
 @app.post("/api/auth/register")
 async def register(
+    request:      Request,
     display_name: str      = Form(...),
     email:        str      = Form(...),
     password:     str      = Form(...),
@@ -307,6 +319,8 @@ async def register(
     storage.save_user(user)
     storage.save_resume(user_id, resume_data)
     storage.save_profile(user_id, profile_text)
+    user_audit.log(user_id, "user_registered", email, _client_ip(request),
+                   display_name=display_name.strip(), resume_filename=resume.filename)
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"]})
     token = _create_session(user_id, email)
@@ -318,7 +332,7 @@ async def register(
 
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
     email = req.email.strip().lower()
     user  = storage.get_user_by_email(email)
 
@@ -328,7 +342,10 @@ async def login(req: LoginRequest):
     ok = _verify_password(req.password, stored) and user is not None
 
     if not ok:
+        user_audit.log_login_failure(email, _client_ip(request))
         raise HTTPException(401, "Incorrect email or password.")
+
+    user_audit.log(user["user_id"], "login_success", email, _client_ip(request))
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"]})
     token = _create_session(user["user_id"], email)
@@ -340,11 +357,21 @@ async def login(req: LoginRequest):
 
 
 @app.post("/api/auth/logout")
-async def logout():
+async def logout(request: Request):
+    user = _current_user(request)
+    if user:
+        user_audit.log(user["user_id"], "logout", user["email"], _client_ip(request))
     response = JSONResponse({"ok": True})
     response.delete_cookie(_SESSION_COOKIE)
     response.delete_cookie("fly-force-instance-id")
     return response
+
+
+@app.get("/api/audit/me")
+async def my_audit_log(request: Request):
+    """Return the current user's full action audit log, newest first."""
+    user_data = _require_user(request)
+    return user_audit.get_events(user_data["user_id"])
 
 
 @app.get("/api/auth/me")
@@ -384,12 +411,21 @@ async def update_profile(req: ProfileUpdateRequest, request: Request):
     if not record:
         raise HTTPException(404, "User not found.")
 
+    changes = {}
     if req.display_name is not None:
+        old_name = record.get("display_name", "")
         record["display_name"] = req.display_name.strip()
         storage.save_user(record)
+        if old_name != record["display_name"]:
+            changes["display_name"] = {"from": old_name, "to": record["display_name"]}
 
     if req.profile_text is not None:
         storage.save_profile(user_data["user_id"], req.profile_text)
+        changes["profile_text"] = "updated"
+
+    if changes:
+        user_audit.log(user_data["user_id"], "profile_updated", user_data["email"],
+                       _client_ip(request), changes=changes)
 
     return {"ok": True}
 
@@ -407,6 +443,8 @@ async def upload_resume(request: Request, resume: UploadFile = File(...)):
         record["resume_filename"] = resume.filename
         storage.save_user(record)
     storage.save_resume(user_data["user_id"], data)
+    user_audit.log(user_data["user_id"], "resume_uploaded", user_data["email"],
+                   _client_ip(request), filename=resume.filename, size_bytes=len(data))
     return {"ok": True}
 
 
@@ -423,6 +461,7 @@ async def change_password(req: PasswordChangeRequest, request: Request):
 
     record["password_hash"] = _hash_password(req.new_password)
     storage.save_user(record)
+    user_audit.log(user_data["user_id"], "password_changed", user_data["email"], _client_ip(request))
 
     emailed = _send_email(
         to=user_data["email"],
