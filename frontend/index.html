@@ -811,8 +811,8 @@
     try {
       const res = await apiFetch('/api/auth/me');
       const u   = await res.json();
+      if (u.role === 'admin') { window.location.replace('/admin.html'); return; }
       document.getElementById('headerUser').textContent = u.display_name || u.email;
-      if (u.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
       if (u.email_verified === false) document.getElementById('verifyBanner').classList.remove('hidden');
     } catch (_) {}
     await loadAllApps();

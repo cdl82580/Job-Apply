@@ -620,6 +620,8 @@ async def change_password(req: PasswordChangeRequest, request: Request):
 @app.post("/api/run")
 async def create_run(req: RunRequest, request: Request, response: Response):
     user_data = _require_user(request)
+    if user_data.get("role") == "admin":
+        raise HTTPException(403, "Admin accounts cannot create runs")
     user_id   = user_data["user_id"]
 
     # Fetch user's resume and profile from Tigris
@@ -853,6 +855,8 @@ async def get_run_job_posting(folder: str, request: Request):
 @app.post("/api/prep")
 async def create_prep(req: PrepRequest, request: Request, response: Response):
     user_data = _require_user(request)
+    if user_data.get("role") == "admin":
+        raise HTTPException(403, "Admin accounts cannot create prep runs")
     user_id   = user_data["user_id"]
 
     _evict_stale()

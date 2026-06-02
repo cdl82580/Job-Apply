@@ -447,6 +447,11 @@
   }
 
   async function loadProfile() {
+    // Admins have no profile — send them to the dashboard
+    try {
+      const me = await (await apiFetch('/api/auth/me')).json();
+      if (me.role === 'admin') { window.location.replace('/admin.html'); return; }
+    } catch (_) {}
     const res = await apiFetch('/api/profile');
     const d   = await res.json();
 

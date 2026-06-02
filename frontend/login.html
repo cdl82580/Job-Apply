@@ -225,7 +225,9 @@
         btn.disabled = false;
         btn.textContent = 'Sign In';
       } else {
-        window.location.href = '/';
+        // Admins go straight to the admin dashboard
+        const me = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({}));
+        window.location.href = me.role === 'admin' ? '/admin.html' : '/';
       }
     } catch (ex) {
       err.textContent = 'Network error — please try again.';
