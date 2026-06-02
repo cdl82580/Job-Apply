@@ -137,7 +137,8 @@ async def set_user_role(user_id: str, body: RoleUpdate, request: Request):
 
 @router.get("/applications")
 async def list_all_applications(request: Request):
-    """Return all applications across all users with a 'user_email' field added."""
+    """Return all applications across all users.
+    Fetches full records to include _gdrive_url (first linked run's folder URL)."""
     _admin(request)
     users = storage.list_all_users()
     all_apps = []
@@ -149,6 +150,13 @@ async def list_all_applications(request: Request):
             for item in items:
                 item["_user_id"]    = uid
                 item["_user_email"] = u.get("email", "")
+                # Fetch first linked run's Drive URL from the full record
+                try:
+                    full = app_store.get_application(uid, item["id"])
+                    runs = (full or {}).get("linked_runs", [])
+                    item["_gdrive_url"] = runs[0]["folder_url"] if runs else ""
+                except Exception:
+                    item["_gdrive_url"] = ""
             all_apps.extend(items)
         except Exception:
             pass
@@ -312,23 +320,71 @@ async def delete_comment(user_id: str, app_id: str, comment_id: str, request: Re
 # ---------------------------------------------------------------------------
 
 @router.get("/runs")
-async def list_active_runs(request: Request):
-    """Return all in-memory runs and preps across all users (admin only)."""
+async def list_all_runs(request: Request):
+    """Return all agent runs across all users from Google Drive (persistent history)
+    plus any still-active in-memory runs not yet in Drive."""
     _admin(request)
+    import re as _re  # noqa: PLC0415
+    from apply import list_gdrive_run_folders, WorkflowConfig  # noqa: PLC0415
+
+    PREP_KEYWORDS = {"phonescreen", "hiringmanager", "technical", "executive", "panel", "peer"}
+
+    def _infer_type(folder_name: str) -> str:
+        norm = _re.sub(r"[^a-z0-9]", "", folder_name.lower())
+        return "interview_prep" if any(kw in norm for kw in PREP_KEYWORDS) else "resume"
+
+    users    = storage.list_all_users()
+    seen_ids: set[str] = set()
+    all_runs: list[dict] = []
+
+    config = WorkflowConfig(progress=lambda _: None, user_label="admin")
+    for u in users:
+        email = u.get("email", "")
+        if not email:
+            continue
+        try:
+            folders = list_gdrive_run_folders(email, config)
+            for f in folders:
+                if f["id"] in seen_ids:
+                    continue
+                seen_ids.add(f["id"])
+                all_runs.append({
+                    "id":            f["id"],
+                    "name":          f["name"],
+                    "type":          _infer_type(f["name"]),
+                    "web_view_link": f.get("web_view_link", ""),
+                    "source":        f.get("source", ""),
+                    "user_email":    email,
+                    "status":        "complete",   # Drive entry = completed run
+                })
+        except Exception:
+            pass
+
+    # Also surface any still-active in-memory runs not yet uploaded to Drive
     from api import _runs, _preps  # noqa: PLC0415
+    for run_id, r in list(_runs.items()):
+        if r.get("status") in ("queued", "running"):
+            user = storage.get_user_by_id(r.get("user_id", "")) or {}
+            all_runs.append({
+                "id":            run_id,
+                "name":          "",
+                "type":          "resume",
+                "web_view_link": "",
+                "source":        "in_progress",
+                "user_email":    user.get("email", ""),
+                "status":        r.get("status", "running"),
+            })
+    for prep_id, p in list(_preps.items()):
+        if p.get("status") in ("queued", "running"):
+            user = storage.get_user_by_id(p.get("user_id", "")) or {}
+            all_runs.append({
+                "id":            prep_id,
+                "name":          "",
+                "type":          "interview_prep",
+                "web_view_link": "",
+                "source":        "in_progress",
+                "user_email":    user.get("email", ""),
+                "status":        p.get("status", "running"),
+            })
 
-    def _run_summary(run_id: str, r: dict, kind: str) -> dict:
-        user = storage.get_user_by_id(r.get("user_id", "")) or {}
-        return {
-            "id":         run_id,
-            "type":       kind,
-            "status":     r.get("status", "?"),
-            "user_id":    r.get("user_id", ""),
-            "user_email": user.get("email", ""),
-            "finished_at": r.get("_finished_at"),
-        }
-
-    runs = [_run_summary(k, v, "resume") for k, v in _runs.items()]
-    runs += [_run_summary(k, v, "interview_prep") for k, v in _preps.items()]
-    runs.sort(key=lambda r: r.get("finished_at") or 0, reverse=True)
-    return runs
+    return all_runs

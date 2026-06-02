@@ -265,8 +265,8 @@
   <div class="stats-bar">
     <div class="stat-chip"><div class="stat-num" id="statUsers">—</div><div class="stat-lbl">Active Users</div></div>
     <div class="stat-chip"><div class="stat-num" id="statApps">—</div><div class="stat-lbl">Applications</div></div>
-    <div class="stat-chip"><div class="stat-num" id="statAdmins">—</div><div class="stat-lbl">Admins</div></div>
     <div class="stat-chip"><div class="stat-num" id="statRuns">—</div><div class="stat-lbl">Agent Runs</div></div>
+    <div class="stat-chip"><div class="stat-num" id="statAdmins">—</div><div class="stat-lbl">Admins</div></div>
   </div>
 
   <!-- Tabs -->
@@ -302,20 +302,20 @@
     <div id="appsAlert"></div>
     <table>
       <thead><tr>
-        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th></th>
+        <th>Company</th><th>Role</th><th>Status</th><th>Owner</th><th>Applied</th><th>Updated</th><th>Drive</th><th></th>
       </tr></thead>
-      <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      <tbody id="appsBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
     </table>
     <div style="margin-top:.75rem;font-size:.8rem;color:var(--muted)" id="appsCount"></div>
   </div>
 
-  <!-- ── Active Runs tab ──────────────────────────────────────── -->
+  <!-- ── Agent Runs tab ───────────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
     <table>
       <thead><tr>
-        <th>Type</th><th>User</th><th>Status</th><th>Finished</th>
+        <th>Type</th><th>Run Folder</th><th>User</th><th>Status</th><th>Drive</th>
       </tr></thead>
-      <tbody id="runsBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+      <tbody id="runsBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
     </table>
   </div>
 
@@ -570,8 +570,9 @@ function updateStats() {
 
   document.getElementById('statUsers').textContent  = activeUsers || '—';
   document.getElementById('statApps').textContent   = _allApps.length || '—';
-  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
+  // Runs chip swapped to position 3 — count all Drive runs (complete + in-progress)
   document.getElementById('statRuns').textContent   = _allRuns.length || '—';
+  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
 }
 
 // ── Render users ─────────────────────────────────────────────────────
@@ -613,7 +614,7 @@ function renderApps() {
   const tbody = document.getElementById('appsBody');
   document.getElementById('appsCount').textContent = `${list.length} application${list.length !== 1 ? 's' : ''}`;
 
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No applications match.</td></tr>'; return; }
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No applications match.</td></tr>'; return; }
   tbody.innerHTML = '';
   for (const a of list.slice(0, 200)) {
     const tr = document.createElement('tr');
@@ -628,8 +629,9 @@ function renderApps() {
       <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
       <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.date_applied)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${fmtDate(a.last_updated)}</td>
+      <td>${a._gdrive_url ? `<a class="btn btn-ghost btn-sm" href="${esc(a._gdrive_url)}" target="_blank" rel="noopener">Drive ↗</a>` : '<span style="color:var(--muted);font-size:.8rem">—</span>'}</td>
       <td><div style="display:flex;gap:.3rem">
-        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app"
                 data-uid="${a._user_id}" data-aid="${a.id}"
                 data-uemail="${esc(a._user_email || '')}">Edit</button>
@@ -641,24 +643,34 @@ function renderApps() {
   }
   if (list.length > 200) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
+    tr.innerHTML = `<td colspan="8" style="text-align:center;color:var(--muted);font-size:.8rem;padding:.75rem">…and ${list.length - 200} more — use filters to narrow down</td>`;
     tbody.appendChild(tr);
   }
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
+const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching' };
+
 function renderRuns(runs) {
   const tbody = document.getElementById('runsBody');
-  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">No active runs.</td></tr>'; return; }
+  if (!runs.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">No runs found.</td></tr>'; return; }
   tbody.innerHTML = '';
   for (const r of runs) {
-    const tr = document.createElement('tr');
-    const statusClass = r.status === 'done' ? 'success' : r.status === 'error' ? 'error' : 'primary';
+    const tr        = document.createElement('tr');
+    const typeLabel = r.type === 'interview_prep' ? 'Interview Prep' : 'Resume';
+    const typeClass = RUN_TYPE_CLASS[r.type] || '';
+    const statusColor = r.status === 'running' || r.status === 'queued' ? 'var(--primary)' : 'var(--muted)';
+    // Parse company/role from folder name (CompanyName_RoleName)
+    const nameParts  = (r.name || '').split('_');
+    const folderLabel = nameParts.length > 1
+      ? `${nameParts[0]} · ${nameParts.slice(1).join('_')}`
+      : (r.name || '—');
     tr.innerHTML = `
-      <td style="font-size:.875rem">${esc(r.type === 'interview_prep' ? 'Prep' : 'Resume')}</td>
+      <td><span class="badge ${typeClass}" style="font-size:.7rem">${esc(typeLabel)}</span></td>
+      <td style="font-size:.8rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(folderLabel)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email)}</td>
-      <td><span style="font-size:.8rem;font-weight:600;color:var(--${statusClass})">${esc(r.status)}</span></td>
-      <td style="font-size:.8rem;color:var(--muted)">${r.finished_at ? fmtDate(new Date(r.finished_at * 1000).toISOString()) : '—'}</td>`;
+      <td><span style="font-size:.8rem;font-weight:600;color:${statusColor}">${esc(r.status)}</span></td>
+      <td>${r.web_view_link ? `<a class="btn btn-ghost btn-sm" href="${esc(r.web_view_link)}" target="_blank" rel="noopener">Drive ↗</a>` : '<span style="color:var(--muted);font-size:.8rem">—</span>'}</td>`;
     tbody.appendChild(tr);
   }
 }
