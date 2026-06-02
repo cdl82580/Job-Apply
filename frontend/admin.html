@@ -805,14 +805,6 @@
       <div id="whFilterRows"></div>
     </div>
 
-    <!-- Query params -->
-    <div class="wh-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
-        <label style="font-size:.8rem;font-weight:600">Query Parameters <span style="font-weight:400;color:var(--muted)">(appended to URL)</span></label>
-        <button type="button" class="btn btn-ghost btn-sm" id="addQpBtn">+ Add</button>
-      </div>
-      <div id="whQpRows"></div>
-    </div>
 
     <!-- Headers -->
     <div class="wh-section">
@@ -2487,9 +2479,6 @@ function openWebhookModal(wh = null) {
     grid.appendChild(lbl);
   }
 
-  // Query params
-  document.getElementById('whQpRows').innerHTML = '';
-  Object.entries(wh?.query_params || {}).forEach(([k, v]) => _qpRow('whQpRows', k, v));
 
   // Headers
   document.getElementById('whHdrRows').innerHTML = '';
@@ -2511,7 +2500,6 @@ document.getElementById('whSelectNone').addEventListener('click', () => {
   document.getElementById('whEvAll').checked = false;
   document.querySelectorAll('.wh-ev-cb').forEach(cb => cb.checked = false);
 });
-document.getElementById('addQpBtn').addEventListener('click', () => _qpRow('whQpRows'));
 document.getElementById('addFilterBtn').addEventListener('click', () => _filterRow());
 document.getElementById('addHdrBtn').addEventListener('click', () => _kvRow('whHdrRows'));
 
@@ -2538,7 +2526,7 @@ document.getElementById('webhookModalSave').addEventListener('click', async () =
     payload_format:     document.getElementById('whFormat').value,
     ..._collectFilters(),
     events,
-    query_params: _collectKv('whQpRows'),
+    query_params: {},
     headers:      _collectKv('whHdrRows'),
   };
   if (!payload.name || !payload.url) {
