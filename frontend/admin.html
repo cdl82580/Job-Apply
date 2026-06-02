@@ -125,6 +125,8 @@
     .filter-row input, .filter-row select {
       padding: .4rem .65rem; border: 1px solid var(--input-border); border-radius: 6px;
       font-size: .875rem; font-family: inherit; background: var(--input-bg); color: var(--text); }
+    /* Match button height to filter inputs across all 4 tabs */
+    .filter-row .btn { padding: .4rem .85rem; font-size: .875rem; }
     .filter-row input:focus, .filter-row select:focus {
       outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
     .filter-row input { flex: 1; min-width: 180px; }
@@ -330,9 +332,8 @@
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">Joined:</label>
       <input type="date" id="userJoinedFrom" style="max-width:148px" title="Joined from">
       <input type="date" id="userJoinedTo"   style="max-width:148px" title="Joined to">
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">
-      <button class="btn btn-ghost btn-sm" id="exportUsersBtn">⬇ Export CSV</button>
+      <button class="btn btn-ghost" id="userClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-ghost" id="exportUsersBtn">⬇ Export CSV</button>
     </div>
     <div id="usersAlert"></div>
     <table>
@@ -386,9 +387,8 @@
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">Updated:</label>
       <input type="date" id="appUpdatedFrom" style="max-width:148px" title="Updated from">
       <input type="date" id="appUpdatedTo"   style="max-width:148px" title="Updated to">
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">
-      <button class="btn btn-ghost btn-sm" id="exportAppsBtn">⬇ Export CSV</button>
+      <button class="btn btn-ghost" id="appClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-ghost" id="exportAppsBtn">⬇ Export CSV</button>
     </div>
     <div id="appsAlert"></div>
     <table>
@@ -440,11 +440,10 @@
       </select>
       <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
       <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
+      <button class="btn btn-ghost" id="runsClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-ghost" id="exportRunsBtn">⬇ Export CSV</button>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-      <div style="font-size:.8rem;color:var(--muted)" id="runsCount"></div>
-      <button class="btn btn-ghost btn-sm" id="exportRunsBtn">⬇ Export CSV</button>
-    </div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
     <table>
       <thead><tr>
         <th>Type</th>
@@ -496,8 +495,8 @@
       <input type="datetime-local" id="auditFrom" style="max-width:190px">
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">To:</label>
       <input type="datetime-local" id="auditTo"   style="max-width:190px">
-      <button class="btn btn-ghost btn-sm" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
-      <button class="btn btn-ghost btn-sm" id="exportAuditBtn">⬇ Export CSV</button>
+      <button class="btn btn-ghost" id="auditClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-ghost" id="exportAuditBtn">⬇ Export CSV</button>
     </div>
 
     <table>
@@ -1571,6 +1570,34 @@ document.getElementById('auditPerPage').addEventListener('change', e => {
 document.getElementById('auditPrev').addEventListener('click', () => loadAudit(_auditPage - 1));
 document.getElementById('auditNext').addEventListener('click', () => loadAudit(_auditPage + 1));
 _pagCallbacks['audit'] = p => loadAudit(p);
+// Clear filters — Users
+document.getElementById('userClearFilters').addEventListener('click', () => {
+  ['userSearch','userLoginFrom','userLoginTo','userJoinedFrom','userJoinedTo']
+    .forEach(id => document.getElementById(id).value = '');
+  ['userRoleFilter','userVerifiedFilter']
+    .forEach(id => document.getElementById(id).value = '');
+  _usersPage = 1; renderUsers();
+});
+
+// Clear filters — Applications
+document.getElementById('appClearFilters').addEventListener('click', () => {
+  ['appSearch','appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo']
+    .forEach(id => document.getElementById(id).value = '');
+  ['appUserFilter','appStatusFilter']
+    .forEach(id => document.getElementById(id).value = '');
+  _appsPage = 1; renderApps();
+});
+
+// Clear filters — Agent Runs
+document.getElementById('runsClearFilters').addEventListener('click', () => {
+  ['runsDateFrom','runsDateTo']
+    .forEach(id => document.getElementById(id).value = '');
+  ['runsTypeFilter','runsUserFilter','runsStatusFilter']
+    .forEach(id => document.getElementById(id).value = '');
+  _runsPage = 1; filterAndRenderRuns();
+});
+
+// Clear filters — Audit Log
 document.getElementById('auditClearFilters').addEventListener('click', () => {
   ['auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
   ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
