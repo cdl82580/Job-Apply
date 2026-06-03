@@ -169,7 +169,8 @@ def _require_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Not authenticated")
     # Check active flag and password version — deactivated accounts and sessions
     # issued before a password change are rejected immediately.
-    record = storage.get_user_by_id(user["user_id"])
+    # Uses a 30-second cache to avoid an S3 round-trip on every request.
+    record = _get_cached_user(user["user_id"])
     if record and record.get("active") is False:
         raise HTTPException(status_code=401, detail="Account deactivated")
     if record and user.get("pwv") and user["pwv"] != _pw_version(record.get("password_hash", "")):
@@ -179,18 +180,12 @@ def _require_user(request: Request) -> dict:
 
 def _require_admin(request: Request) -> dict:
     user = _require_user(request)
-    # Re-read role from the live DB record (already fetched inside _require_user)
-    # so a downgraded admin can't keep using their old token.
-    record = storage.get_user_by_id(user["user_id"])
+    # Re-read role from the cached record (cache TTL is 30s, acceptable for role checks).
+    record = _get_cached_user(user["user_id"])
     if not record or record.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     user["role"] = record["role"]  # keep the returned dict consistent
     return user
-
-
-def _is_admin(request: Request) -> bool:
-    user = _current_user(request)
-    return bool(user and user.get("role") == "admin")
 
 # ---------------------------------------------------------------------------
 # Password hashing (stdlib scrypt — no extra deps)
@@ -258,7 +253,7 @@ def _verify_password(password: str, stored: str) -> bool:
 
 _FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
 _APP_URL = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
-_LOGO_URL = f"{_APP_URL}/img/logo-light.png"
+_LOGO_URL = f"{_APP_URL}/img/logo.png"
 
 
 def _email_html(body_html: str) -> str:
@@ -372,6 +367,7 @@ async def _on_startup():
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
+    response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -438,6 +434,20 @@ def _rate_limit(key: str, max_hits: int, window_secs: int) -> bool:
         hits.append(now)
         _rl_buckets[key] = hits
         return True
+
+def _sweep_rate_limit_buckets() -> None:
+    """Evict all rate-limit entries whose window has fully expired.
+    Call periodically (e.g. from the reminder scheduler loop) to prevent
+    unbounded growth when rotating IPs hit endpoints and never come back."""
+    now = time.time()
+    # Use a generous window ceiling — 1 hour covers all configured windows
+    MAX_WINDOW = 3600
+    with _rl_mu:
+        stale_keys = [k for k, hits in _rl_buckets.items()
+                      if not any(now - t < MAX_WINDOW for t in hits)]
+        for k in stale_keys:
+            del _rl_buckets[k]
+
 
 def _check_rate_limit(request: Request, bucket: str, max_hits: int, window_secs: int) -> None:
     """Raise 429 if the per-IP rate limit for bucket is exceeded."""
@@ -537,10 +547,35 @@ def _fire_reminder(user_id: str, reminder: dict, event: dict) -> None:
         _send_slack_dm(slack_text)
 
 
+_RL_SWEEP_INTERVAL = 600   # sweep rate-limit buckets every 10 minutes
+_EVICT_INTERVAL    = 600   # evict stale runs/preps every 10 minutes
+_last_rl_sweep     = 0.0
+_last_evict        = 0.0
+
+
 def _reminder_scheduler_loop() -> None:
-    """Background thread: poll every 60s and fire due reminders."""
+    """Background thread: poll every 60s and fire due reminders.
+    Also does periodic housekeeping (rate-limit sweep, stale run eviction)."""
+    global _last_rl_sweep, _last_evict
     time.sleep(15)  # brief startup delay
     while True:
+        now = time.time()
+
+        # Periodic housekeeping (piggy-back on this thread to avoid extra threads)
+        if now - _last_rl_sweep >= _RL_SWEEP_INTERVAL:
+            try:
+                _sweep_rate_limit_buckets()
+            except Exception:
+                logger.exception("Rate-limit bucket sweep error")
+            _last_rl_sweep = now
+
+        if now - _last_evict >= _EVICT_INTERVAL:
+            try:
+                _evict_stale()
+            except Exception:
+                logger.exception("Stale run eviction error")
+            _last_evict = now
+
         try:
             user_ids = cal_store.list_all_user_ids_with_reminders()
             for uid in user_ids:
@@ -565,6 +600,33 @@ def _start_reminder_scheduler() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Short-lived user-record cache (avoids an S3 round-trip on every request)
+# ---------------------------------------------------------------------------
+
+_USER_CACHE_TTL = 30  # seconds — max staleness for deactivated-account / role checks
+_user_cache: dict[str, tuple[float, dict | None]] = {}   # user_id → (expires_at, record)
+_user_cache_mu = threading.Lock()
+
+
+def _get_cached_user(user_id: str) -> dict | None:
+    now = time.time()
+    with _user_cache_mu:
+        entry = _user_cache.get(user_id)
+        if entry and entry[0] > now:
+            return entry[1]
+    record = storage.get_user_by_id(user_id)
+    with _user_cache_mu:
+        _user_cache[user_id] = (now + _USER_CACHE_TTL, record)
+    return record
+
+
+def _invalidate_user_cache(user_id: str) -> None:
+    """Call after any write that changes active, role, or password_hash."""
+    with _user_cache_mu:
+        _user_cache.pop(user_id, None)
+
+
+# ---------------------------------------------------------------------------
 # In-memory stores
 # ---------------------------------------------------------------------------
 
@@ -584,6 +646,65 @@ def _get_user_lock(user_id: str) -> threading.Lock:
         return _user_locks[user_id]
 
 _RUN_TTL = 3600 * 4  # evict terminal runs/preps after 4 hours
+
+
+def _worker_thread(
+    store:        dict,
+    entry_id:     str,
+    user_id:      str,
+    user_email:   str,
+    resume_bytes: bytes,
+    run_fn,               # callable(resume_path, progress_cb) → result
+    done_payload_fn,      # callable(result) → dict  (merged into the SSE done event)
+    audit_success: str,
+    audit_failure: str,
+    audit_kwargs:  dict,
+) -> None:
+    """Generic worker thread: write temp resume, acquire user lock, call run_fn,
+    update the store entry, and put SSE events onto the queue. Handles both
+    WorkflowError and unexpected exceptions uniformly."""
+    q = store[entry_id]["queue"]
+    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+    tmp.write(resume_bytes)
+    tmp.close()
+    resume_path = Path(tmp.name)
+
+    try:
+        with _get_user_lock(user_id):
+            store[entry_id]["status"] = "running"
+
+            def progress(msg: str):
+                q.put({"type": "progress", "message": msg})
+
+            try:
+                result = run_fn(resume_path, progress)
+                store[entry_id]["result"]       = result
+                store[entry_id]["status"]       = "done"
+                store[entry_id]["_finished_at"] = time.time()
+                user_audit.log(user_id, audit_success, user_email, **audit_kwargs)
+                payload = {"type": "done", entry_id.split("_")[0] + "_id": entry_id}
+                payload.update(done_payload_fn(result))
+                q.put(payload)
+            except WorkflowError as exc:
+                store[entry_id]["status"]       = "error"
+                store[entry_id]["error"]        = str(exc)
+                store[entry_id]["_finished_at"] = time.time()
+                user_audit.log(user_id, audit_failure, user_email,
+                               error=str(exc), **audit_kwargs)
+                q.put({"type": "error", "message": str(exc)})
+            except Exception as exc:
+                msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                logger.exception("Unexpected error in %s %s", audit_success, entry_id)
+                store[entry_id]["status"]       = "error"
+                store[entry_id]["error"]        = msg
+                store[entry_id]["_finished_at"] = time.time()
+                user_audit.log(user_id, audit_failure, user_email,
+                               error=msg, **audit_kwargs)
+                q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
+            finally:
+                q.put(None)
+    finally:
+        resume_path.unlink(missing_ok=True)
 
 
 def _evict_stale() -> None:
@@ -905,6 +1026,7 @@ async def update_profile(req: ProfileUpdateRequest, request: Request):
 
 @app.post("/api/profile/resume")
 async def upload_resume(request: Request, resume: UploadFile = File(...)):
+    _check_rate_limit(request, "upload_resume", max_hits=10, window_secs=3600)
     user_data = _require_user(request)
     if not resume.filename.lower().endswith(".docx"):
         raise HTTPException(400, "Resume must be a .docx file.")
@@ -925,6 +1047,7 @@ async def upload_resume(request: Request, resume: UploadFile = File(...)):
 
 @app.post("/api/profile/password")
 async def change_password(req: PasswordChangeRequest, request: Request):
+    _check_rate_limit(request, "change_password", max_hits=5, window_secs=3600)
     user_data = _require_user(request)
     record = storage.get_user_by_id(user_data["user_id"])
     if not record:
@@ -936,6 +1059,7 @@ async def change_password(req: PasswordChangeRequest, request: Request):
 
     record["password_hash"] = _hash_password(req.new_password)
     storage.save_user(record)
+    _invalidate_user_cache(user_data["user_id"])
     user_audit.log(user_data["user_id"], "password_changed", user_data["email"], _client_ip(request))
 
     _pw_text = (
@@ -968,6 +1092,7 @@ async def change_password(req: PasswordChangeRequest, request: Request):
 
 @app.post("/api/profile/email")
 async def change_email(req: EmailChangeRequest, request: Request):
+    _check_rate_limit(request, "change_email", max_hits=5, window_secs=3600)
     user_data = _require_user(request)
     record = storage.get_user_by_id(user_data["user_id"])
     if not record:
@@ -991,6 +1116,7 @@ async def change_email(req: EmailChangeRequest, request: Request):
     record["email"] = new_email
     record["email_verified"] = False
     storage.save_user(record)
+    _invalidate_user_cache(record["user_id"])
 
     user_audit.log(record["user_id"], "email_changed", old_email,
                    _client_ip(request), new_email=new_email)
@@ -1079,89 +1205,50 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
 
-    def _thread():
-        # Write resume to a temp file (pandoc + unpack need a real path)
-        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
-        tmp.write(resume_bytes)
-        tmp.close()
-        resume_path = Path(tmp.name)
+    def _run_fn(resume_path: Path, progress) -> WorkflowResult:
+        config = WorkflowConfig(
+            model=req.model or _get_active_model(),
+            progress=progress,
+            master_resume=resume_path,
+            profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
+            user_id=user_id,
+            user_label=user_data["email"],
+        )
+        result = run_workflow(
+            job_posting=req.job_posting,
+            company=req.company,
+            role=req.role,
+            contact=req.contact,
+            config=config,
+        )
+        if req.app_id:
+            _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="resume",
+                             result_dir=result.run_dir, folder_url=result.folder_url or "")
+        return result
 
-        try:
-            with _get_user_lock(user_id):
-                _runs[run_id]["status"] = "running"
+    def _done_payload(result: WorkflowResult) -> dict:
+        return {
+            "run_id":               run_id,
+            "framing_angle":        result.framing_angle,
+            "folder_url":           result.folder_url,
+            "app_id":               req.app_id,
+            "replacements_warning": result.replacements_warning,
+            "files": {
+                "resume":       result.resume_path.name,
+                "ats":          result.ats_path.name,
+                "cover_letter": result.cover_letter_path.name,
+            },
+        }
 
-                def progress(msg: str):
-                    q.put({"type": "progress", "message": msg})
-
-                config = WorkflowConfig(
-                    model=req.model or _get_active_model(),
-                    progress=progress,
-                    master_resume=resume_path,
-                    profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
-                    user_id=user_id,
-                    user_label=user_data["email"],
-                )
-                try:
-                    result: WorkflowResult = run_workflow(
-                        job_posting=req.job_posting,
-                        company=req.company,
-                        role=req.role,
-                        contact=req.contact,
-                        config=config,
-                    )
-                    _runs[run_id]["result"]       = result
-                    _runs[run_id]["status"]       = "done"
-                    _runs[run_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "run_completed", user_data["email"],
-                                   run_id=run_id, company=req.company, role=req.role,
-                                   folder_url=result.folder_url or "")
-
-                    # Auto-link to application tracker record if requested
-                    if req.app_id:
-                        _link_run_to_app(
-                            user_id=user_id,
-                            app_id=req.app_id,
-                            run_type="resume",
-                            result_dir=result.run_dir,
-                            folder_url=result.folder_url or "",
-                        )
-
-                    q.put({
-                        "type":          "done",
-                        "run_id":        run_id,
-                        "framing_angle": result.framing_angle,
-                        "folder_url":    result.folder_url,
-                        "app_id":        req.app_id,
-                        "files": {
-                            "resume":       result.resume_path.name,
-                            "ats":          result.ats_path.name,
-                            "cover_letter": result.cover_letter_path.name,
-                        },
-                    })
-                except WorkflowError as exc:
-                    _runs[run_id]["status"]      = "error"
-                    _runs[run_id]["error"]        = str(exc)
-                    _runs[run_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "run_failed", user_data["email"],
-                                   run_id=run_id, company=req.company, role=req.role,
-                                   error=str(exc))
-                    q.put({"type": "error", "message": str(exc)})
-                except Exception as exc:
-                    msg = f"Unexpected error: {type(exc).__name__}: {exc}"
-                    logger.exception("Unexpected error in run %s", run_id)
-                    _runs[run_id]["status"]      = "error"
-                    _runs[run_id]["error"]        = msg
-                    _runs[run_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "run_failed", user_data["email"],
-                                   run_id=run_id, company=req.company, role=req.role,
-                                   error=msg)
-                    q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
-                finally:
-                    q.put(None)
-        finally:
-            resume_path.unlink(missing_ok=True)
-
-    threading.Thread(target=_thread, daemon=True).start()
+    threading.Thread(
+        target=_worker_thread,
+        args=(_runs, run_id, user_id, user_data["email"], resume_bytes,
+              _run_fn, _done_payload,
+              "run_completed", "run_failed",
+              {"run_id": run_id, "company": req.company, "role": req.role,
+               "folder_url": ""}),
+        daemon=True,
+    ).start()
     return {"run_id": run_id}
 
 
@@ -1257,15 +1344,15 @@ async def gdrive_get_job_posting(folder_id: str, request: Request):
     user_data  = _require_user(request)
     user_label = user_data["email"]
     # Verify the folder belongs to this user before fetching its contents.
+    # Fail closed: if listing succeeds and the folder is not in the result, deny.
+    # If listing fails entirely, also deny rather than falling through.
     try:
         user_folders = list_gdrive_run_folders(user_label, WorkflowConfig(progress=lambda _: None, user_label=user_label))
-        allowed_ids  = {f.get("id") for f in user_folders if f.get("id")}
-        if allowed_ids and folder_id not in allowed_ids:
-            raise HTTPException(403, "Access denied to this Drive folder")
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # if listing fails, fall through and let get_gdrive_job_posting handle it
+    except Exception as _list_exc:
+        raise HTTPException(503, "Could not verify Drive folder ownership — please try again")
+    allowed_ids = {f.get("id") for f in user_folders if f.get("id")}
+    if folder_id not in allowed_ids:
+        raise HTTPException(403, "Access denied to this Drive folder")
     config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
     text = get_gdrive_job_posting(folder_id, config)
     if text is None:
@@ -1347,87 +1434,46 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
 
-    def _thread():
-        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
-        tmp.write(resume_bytes)
-        tmp.close()
-        resume_path = Path(tmp.name)
+    def _prep_fn(resume_path: Path, progress) -> InterviewPrepResult:
+        config = InterviewPrepConfig(
+            round_type=req.round_type,
+            focus=req.focus or "",
+            interviewer=req.interviewer or "",
+            model=req.model or _get_active_model(),
+            progress=progress,
+            master_resume=resume_path,
+            profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
+            user_id=user_id,
+            user_label=user_data["email"],
+        )
+        result = generate_interview_prep(
+            job_posting=req.job_posting,
+            company=req.company,
+            role=req.role,
+            config=config,
+        )
+        if req.app_id:
+            _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="interview_prep",
+                             result_dir=result.run_dir, folder_url=result.folder_url or "")
+        return result
 
-        try:
-            with _get_user_lock(user_id):
-                _preps[prep_id]["status"] = "running"
+    def _prep_done_payload(result: InterviewPrepResult) -> dict:
+        return {
+            "prep_id":    prep_id,
+            "folder_url": result.folder_url,
+            "app_id":     req.app_id,
+            "files":      {"prep": result.prep_path.name},
+        }
 
-                def progress(msg: str):
-                    q.put({"type": "progress", "message": msg})
-
-                config = InterviewPrepConfig(
-                    round_type=req.round_type,
-                    focus=req.focus or "",
-                    interviewer=req.interviewer or "",
-                    model=req.model or _get_active_model(),
-                    progress=progress,
-                    master_resume=resume_path,
-                    profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
-                    user_id=user_id,
-                    user_label=user_data["email"],
-                )
-                try:
-                    result: InterviewPrepResult = generate_interview_prep(
-                        job_posting=req.job_posting,
-                        company=req.company,
-                        role=req.role,
-                        config=config,
-                    )
-                    _preps[prep_id]["result"]       = result
-                    _preps[prep_id]["status"]       = "done"
-                    _preps[prep_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "prep_completed", user_data["email"],
-                                   prep_id=prep_id, company=req.company, role=req.role,
-                                   round_type=req.round_type,
-                                   folder_url=result.folder_url or "")
-
-                    if req.app_id:
-                        _link_run_to_app(
-                            user_id=user_id,
-                            app_id=req.app_id,
-                            run_type="interview_prep",
-                            result_dir=result.run_dir,
-                            folder_url=result.folder_url or "",
-                        )
-
-                    q.put({
-                        "type":       "done",
-                        "prep_id":    prep_id,
-                        "folder_url": result.folder_url,
-                        "app_id":     req.app_id,
-                        "files": {
-                            "prep": result.prep_path.name,
-                        },
-                    })
-                except WorkflowError as exc:
-                    _preps[prep_id]["status"]      = "error"
-                    _preps[prep_id]["error"]        = str(exc)
-                    _preps[prep_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "prep_failed", user_data["email"],
-                                   prep_id=prep_id, company=req.company, role=req.role,
-                                   round_type=req.round_type, error=str(exc))
-                    q.put({"type": "error", "message": str(exc)})
-                except Exception as exc:
-                    msg = f"Unexpected error: {type(exc).__name__}: {exc}"
-                    logger.exception("Unexpected error in prep %s", prep_id)
-                    _preps[prep_id]["status"]      = "error"
-                    _preps[prep_id]["error"]        = msg
-                    _preps[prep_id]["_finished_at"] = time.time()
-                    user_audit.log(user_id, "prep_failed", user_data["email"],
-                                   prep_id=prep_id, company=req.company, role=req.role,
-                                   round_type=req.round_type, error=msg)
-                    q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
-                finally:
-                    q.put(None)
-        finally:
-            resume_path.unlink(missing_ok=True)
-
-    threading.Thread(target=_thread, daemon=True).start()
+    threading.Thread(
+        target=_worker_thread,
+        args=(_preps, prep_id, user_id, user_data["email"], resume_bytes,
+              _prep_fn, _prep_done_payload,
+              "prep_completed", "prep_failed",
+              {"prep_id": prep_id, "company": req.company, "role": req.role,
+               "round_type": req.round_type, "folder_url": ""}),
+        daemon=True,
+    ).start()
     return {"prep_id": prep_id}
 
 

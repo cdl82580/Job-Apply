@@ -57,13 +57,7 @@
     }
 
     .logo-wrap { display: flex; align-items: center; gap: .75rem; margin-bottom: .25rem; }
-    .logo-img  { width: 36px; height: 36px; }
-    .logo-light { display: block; }
-    .logo-dark  { display: none;  }
-    [data-theme="dark"] .logo-light { display: none;  }
-    [data-theme="dark"] .logo-dark  { display: block; }
-
-    .logo { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
+    .logo-img  { width: 36px; height: 36px; } .theme-toggle { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
     .sub  { font-size: .875rem; color: var(--muted); margin-bottom: 1.75rem; margin-top: .2rem; }
 
     .field { margin-bottom: 1rem; }
@@ -145,8 +139,7 @@
 <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
 <div class="card">
   <div class="logo-wrap">
-    <img class="logo-img logo-light" src="/img/logo-light.png" alt="Logo">
-    <img class="logo-img logo-dark"  src="/img/logo-dark.png"  alt="Logo">
+    <img class="logo-img" src="/img/logo.png" alt="Logo">
     <div class="logo">Job Application Agent</div>
   </div>
   <div class="sub">Create your account</div>

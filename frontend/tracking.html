@@ -101,13 +101,7 @@
     .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
     .header-link { display: none; }
     .app-logo { width: 44px; height: 44px; flex-shrink: 0; }
-    .app-logo img { width: 44px; height: 44px; }
-    .logo-light { display: block; }
-    .logo-dark  { display: none;  }
-    [data-theme="dark"] .logo-light { display: none;  }
-    [data-theme="dark"] .logo-dark  { display: block; }
-
-    .theme-toggle {
+    .app-logo img { width: 44px; height: 44px; } .theme-toggle {
       background: none; border: 1px solid var(--card-border); border-radius: 20px;
       padding: .3rem .65rem; cursor: pointer; font-size: .8rem; color: var(--muted);
       display: flex; align-items: center; gap: .3rem; transition: border-color .15s, color .15s;
@@ -619,8 +613,7 @@
     <div class="header-inner">
     <div class="header-left">
       <div class="app-logo">
-        <img class="logo-light" src="/img/logo-light.png" alt="Logo">
-        <img class="logo-dark"  src="/img/logo-dark.png"  alt="Logo">
+        <img class="logo-img" src="/img/logo.png" alt="Logo">
       </div>
       <div>
         <h1>Application Tracker</h1>
@@ -1143,7 +1136,7 @@ function renderTable() {
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
-        ${a.url ? `<a class="icon-btn" href="${esc(a.url)}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
+        ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
         <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
       </div></td>`;
@@ -1167,7 +1160,7 @@ function renderTable() {
       </div>
       <div class="app-card-actions">
         <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">Edit</button>
-        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
+        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
         <button class="btn btn-danger btn-sm" data-id="${a.id}" data-action="delete">Delete</button>
       </div>`;
     cards.appendChild(card);
@@ -1339,7 +1332,7 @@ function selectCompany(item) {
   dSuggestionsEl.classList.add('hidden');
 
   // Preview uses the signed icon URL from the BrandFetch response (immediate)
-  const previewSrc = item.logo_url || savedLogo;
+  const previewSrc = safeHref(item.logo_url) || safeHref(savedLogo);
   if (previewSrc) {
     dLogoPreview.src          = previewSrc;
     dLogoPreview.style.display = 'block';
@@ -1474,8 +1467,8 @@ function fillDrawer(a) {
   dCompanyInput.value   = a.company   || '';
   dDomainInput.value    = a.domain    || '';
   dLogoUrlInput.value   = a.company_logo_url || '';
-  if (a.company_logo_url) {
-    dLogoPreview.src          = a.company_logo_url;
+  if (safeHref(a.company_logo_url)) {
+    dLogoPreview.src          = safeHref(a.company_logo_url);
     dLogoPreview.style.display = 'block';
   }
   _selectedCompany = { name: a.company, domain: a.domain, logo_url: a.company_logo_url };
@@ -1605,7 +1598,7 @@ function renderLinkedRuns(runs) {
       <span class="run-chip-type ${typeClass}">${typeLabel}</span>
       <span class="run-chip-name" title="${esc(r.folder_name)}">${esc(r.folder_name)}</span>
       <span class="run-chip-date">${dateStr}</span>
-      ${r.folder_url ? `<a class="run-chip-link" href="${esc(r.folder_url)}" target="_blank" rel="noopener">Drive ↗</a>` : ''}
+      ${safeHref(r.folder_url) ? `<a class="run-chip-link" href="${esc(safeHref(r.folder_url))}" target="_blank" rel="noopener">Drive ↗</a>` : ''}
       <button class="run-chip-unlink" data-link-id="${r.id}" title="Unlink">✕</button>`;
     chip.querySelector('.run-chip-unlink').addEventListener('click', () => unlinkRun(r.id, chip));
     listEl.appendChild(chip);
@@ -1741,6 +1734,13 @@ deleteConfirm.addEventListener('click', async () => {
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────
+function safeHref(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(String(url), location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : null;
+  } catch (_) { return null; }
+}
 function esc(s) {
   if (!s) return '';
   return String(s)

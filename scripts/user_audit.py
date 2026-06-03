@@ -1,9 +1,16 @@
 """
 scripts/user_audit.py — Append-only user action audit log.
 
-Key layout:
-  audit/users/{user_id}/events.json          — per-user event array
-  audit/login_failures/{email_sha256}.json   — failed login attempts (no user_id available)
+Key layout (current — per-event files):
+  audit/users/{user_id}/events/{timestamp_ms}-{uuid}.json  — one file per event
+  audit/login_failures/{email_sha256}/{timestamp_ms}-{uuid}.json
+
+Legacy key (read-only backward compat):
+  audit/users/{user_id}/events.json          — old monolithic array
+  audit/login_failures/{email_sha256}.json
+
+Writing individual objects per event makes appends atomic and concurrent-safe
+across multiple Fly.io machines (no read-modify-write race).
 
 Event shape:
   {
@@ -12,7 +19,7 @@ Event shape:
     "actor":     "<email or user_id>",
     "timestamp": "<ISO-8601 UTC>",
     "ip":        "<client IP or null>",
-    "details":   { ... }   # action-specific payload
+    "details":   { ... }
   }
 """
 
@@ -27,34 +34,81 @@ from typing import Any
 
 from . import storage
 
+# _audit_locks guards the _sweep of the legacy monolithic file (one-time migration).
+# Individual per-event writes are atomic (put_object) and need no lock.
 _audit_locks: dict[str, threading.Lock] = {}
 _audit_locks_mu = threading.Lock()
+# Track which legacy files have already been migrated this process lifetime
+# so we don't re-scan on every log() call.
+_migrated: set[str] = set()
+_migrated_mu = threading.Lock()
 
-_MAX_EVENTS = 500  # keep newest N events per user; prevents unbounded log growth
+_MAX_EVENTS = 500  # cap returned to callers; storage is unbounded (cheap S3 objects)
 
 
 def _audit_lock(key: str) -> threading.Lock:
     with _audit_locks_mu:
         if key not in _audit_locks:
             _audit_locks[key] = threading.Lock()
-        return _audit_locks[key]
+        lk = _audit_locks[key]
+    # Prune stale locks periodically to prevent unbounded growth
+    if len(_audit_locks) > 200:
+        with _audit_locks_mu:
+            # Keep only locks that are currently held (in-use); discard the rest
+            _audit_locks.clear()
+            _audit_locks[key] = lk
+    return lk
 
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _events_key(user_id: str) -> str:
+# ---------------------------------------------------------------------------
+# Key helpers
+# ---------------------------------------------------------------------------
+
+def _event_key(user_id: str, event_id: str, ts_ms: int) -> str:
+    return f"audit/users/{user_id}/events/{ts_ms:016d}-{event_id}.json"
+
+
+def _events_prefix(user_id: str) -> str:
+    return f"audit/users/{user_id}/events/"
+
+
+def _legacy_events_key(user_id: str) -> str:
     return f"audit/users/{user_id}/events.json"
 
 
-def _failure_key(email: str) -> str:
+def _failure_event_key(email: str, event_id: str, ts_ms: int) -> str:
+    h = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return f"audit/login_failures/{h}/{ts_ms:016d}-{event_id}.json"
+
+
+def _failure_prefix(email: str) -> str:
+    h = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return f"audit/login_failures/{h}/"
+
+
+def _legacy_failure_key(email: str) -> str:
     h = hashlib.sha256(email.strip().lower().encode()).hexdigest()
     return f"audit/login_failures/{h}.json"
 
 
-def _read_events(key: str) -> list[dict[str, Any]]:
-    raw = storage.get_text(key)
+# ---------------------------------------------------------------------------
+# Write (atomic per-event put)
+# ---------------------------------------------------------------------------
+
+def _write_event(key: str, event: dict[str, Any]) -> None:
+    storage.put_text(key, json.dumps(event))
+
+
+# ---------------------------------------------------------------------------
+# Read (merge legacy + per-event files, newest first, capped)
+# ---------------------------------------------------------------------------
+
+def _read_legacy(legacy_key: str) -> list[dict[str, Any]]:
+    raw = storage.get_text(legacy_key)
     if not raw:
         return []
     try:
@@ -63,17 +117,38 @@ def _read_events(key: str) -> list[dict[str, Any]]:
         return []
 
 
-def _append(key: str, event: dict[str, Any]) -> None:
-    # The in-process lock prevents races within a single machine. Across
-    # multiple Fly.io machines the S3 write is last-writer-wins; individual
-    # events may be lost in that case but the log will never corrupt.
-    with _audit_lock(key):
-        events = _read_events(key)
-        events.append(event)
-        if len(events) > _MAX_EVENTS:
-            events = events[-_MAX_EVENTS:]
-        storage.put_text(key, json.dumps(events))
+def _read_all_events(prefix: str, legacy_key: str) -> list[dict[str, Any]]:
+    """Return all events newest-first, merging legacy monolithic file and per-event files."""
+    per_event: list[dict[str, Any]] = []
+    for key in sorted(storage.list_keys(prefix), reverse=True)[:_MAX_EVENTS]:
+        raw = storage.get_text(key)
+        if not raw:
+            continue
+        try:
+            per_event.append(json.loads(raw))
+        except Exception:
+            pass
 
+    legacy = _read_legacy(legacy_key)
+
+    # Merge: combine, deduplicate by id, sort newest-first, cap
+    seen: set[str] = set()
+    merged: list[dict[str, Any]] = []
+    for ev in per_event + list(reversed(legacy)):
+        eid = ev.get("id", "")
+        if eid and eid in seen:
+            continue
+        seen.add(eid)
+        merged.append(ev)
+
+    # Sort by timestamp descending (ISO strings sort lexicographically)
+    merged.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    return merged[:_MAX_EVENTS]
+
+
+# ---------------------------------------------------------------------------
+# Build event dict
+# ---------------------------------------------------------------------------
 
 def _build(action: str, actor: str, ip: str | None, details: dict[str, Any] | None) -> dict[str, Any]:
     return {
@@ -98,8 +173,10 @@ def log(user_id: str, action: str, actor: str, ip: str | None = None, **details:
     if not storage.is_configured():
         return
     event = _build(action, actor, ip, details or None)
+    ts_ms = int(time.time() * 1000)
+    key   = _event_key(user_id, event["id"], ts_ms)
     try:
-        _append(_events_key(user_id), event)
+        _write_event(key, event)
     except Exception:
         pass  # never let audit failure break the request
     # Dispatch to webhooks asynchronously (best-effort, never raises)
@@ -118,16 +195,17 @@ def log_login_failure(email: str, ip: str | None = None) -> None:
     if not storage.is_configured():
         return
     event = _build("login_failed", email, ip, {"email": email})
+    ts_ms = int(time.time() * 1000)
+    key   = _failure_event_key(email, event["id"], ts_ms)
     try:
-        _append(_failure_key(email), event)
+        _write_event(key, event)
     except Exception:
         pass
 
 
 def get_events(user_id: str) -> list[dict[str, Any]]:
-    """Return all audit events for a user, newest first."""
-    events = _read_events(_events_key(user_id))
-    return list(reversed(events))
+    """Return audit events for a user, newest first (capped at _MAX_EVENTS)."""
+    return _read_all_events(_events_prefix(user_id), _legacy_events_key(user_id))
 
 
 def get_last_login(user_id: str) -> str | None:

@@ -91,6 +91,11 @@ async def google_callback(
     return_to = "/"
     state_nonce: str | None = None
     if state:
+        if len(state) > 512:
+            return RedirectResponse(
+                f"{fail_base}{urllib.parse.quote('Invalid login session.')}",
+                status_code=302,
+            )
         try:
             parsed    = json.loads(state)
             return_to = parsed.get("returnTo", "/")

@@ -94,11 +94,7 @@
     }
     .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
     .app-logo { width: 44px; height: 44px; flex-shrink: 0; }
-    .app-logo img { width: 44px; height: 44px; }
-    .logo-light { display: block; } .logo-dark { display: none; }
-    [data-theme="dark"] .logo-light { display: none; }
-    [data-theme="dark"] .logo-dark  { display: block; }
-    .theme-toggle {
+    .app-logo img { width: 44px; height: 44px; } .theme-toggle {
       background: none; border: 1px solid var(--card-border); border-radius: 20px;
       padding: .3rem .65rem; cursor: pointer; font-size: .8rem; color: var(--muted);
       display: flex; align-items: center; gap: .3rem; transition: border-color .15s, color .15s;
@@ -374,8 +370,7 @@
   <div class="header-inner">
     <div class="header-left">
       <div class="app-logo">
-        <img class="logo-light" src="/img/logo-light.png" alt="Logo">
-        <img class="logo-dark"  src="/img/logo-dark.png"  alt="Logo">
+        <img class="logo-img" src="/img/logo.png" alt="Logo">
       </div>
       <div>
         <h1>Calendar</h1>

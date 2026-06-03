@@ -110,12 +110,13 @@ class WorkflowConfig:
 @dataclass
 class WorkflowResult:
     """Paths and metadata produced by a completed workflow run."""
-    run_dir:           Path
-    resume_path:       Path
-    ats_path:          Path
-    cover_letter_path: Path
-    framing_angle:     str
-    folder_url:        str | None = None
+    run_dir:              Path
+    resume_path:          Path
+    ats_path:             Path
+    cover_letter_path:    Path
+    framing_angle:        str
+    folder_url:           str | None = None
+    replacements_warning: str | None = None
 
 
 @dataclass
@@ -656,11 +657,11 @@ Return ONLY valid JSON array.
     write_document_xml(xml)
     config.progress(f"\n  Result: {total_success}/{total_attempted} replacements succeeded")
 
-    if total_success < total_attempted * 0.7:
+    if total_attempted > 0 and total_success < total_attempted * 0.7:
         config.progress(f"\n⚠️  Warning: fewer than 70% of replacements succeeded.")
         config.progress(f"   Check the XML manually or re-run with --debug flag.")
 
-    return total_success
+    return total_success, total_attempted
 
 
 def step5_pack(resume_out: Path, config: WorkflowConfig):
@@ -820,7 +821,8 @@ Packer.toBuffer(doc).then(buffer => {{
 }});
 """
 
-    js_path = Path("ats_resume_gen.js")
+    # Write alongside the output file (not CWD) to avoid concurrent-run collisions
+    js_path = output_path.parent / f"ats_resume_gen_{os.urandom(4).hex()}.js"
     write_file(js_path, js)
     result = run(["node", str(js_path)], check=False, config=config)
     js_path.unlink(missing_ok=True)
@@ -955,7 +957,7 @@ def step6_cover_letter(
         sign_off_contact=sign_off_contact,
     )
 
-    js_path = Path("cover_letter_gen.js")
+    js_path = output_path.parent / f"cover_letter_gen_{os.urandom(4).hex()}.js"
     write_file(js_path, js)
     result = run(["node", str(js_path)], check=False, config=config)
     js_path.unlink(missing_ok=True)  # always clean up, even on failure
@@ -1037,9 +1039,11 @@ def _gdrive_get_or_create_folder(service, name: str, parent_id: str) -> tuple[st
 
     created=True when the folder was just made; False when it already existed.
     """
+    # Escape single quotes in name to prevent Drive query injection
+    safe_name = name.replace("\\", "\\\\").replace("'", "\\'")
     existing = service.files().list(
         q=(
-            f"name='{name}' and '{parent_id}' in parents and "
+            f"name='{safe_name}' and '{parent_id}' in parents and "
             "mimeType='application/vnd.google-apps.folder' and trashed=false"
         ),
         fields="files(id, webViewLink)",
@@ -1292,9 +1296,10 @@ def list_gdrive_run_folders(user_label: str, config: WorkflowConfig) -> list[dic
 
     try:
         # ── 1. User's personal subfolder ──────────────────────────────
+        safe_user_label = user_label.replace("\\", "\\\\").replace("'", "\\'")
         user_roots = service.files().list(
             q=(
-                f"name='{user_label}' and '{GDRIVE_PARENT_FOLDER_ID}' in parents and "
+                f"name='{safe_user_label}' and '{GDRIVE_PARENT_FOLDER_ID}' in parents and "
                 f"mimeType='{_FOLDER_MIME}' and trashed=false"
             ),
             fields="files(id)",
@@ -1440,7 +1445,11 @@ def run_workflow(
 
     # Steps 3–5: styled resume
     step3_unpack(config)
-    step4_apply_edits(analysis, resume_text, colors, config)
+    edits_ok, edits_total = step4_apply_edits(analysis, resume_text, colors, config)
+    replacements_warning = (
+        f"Only {edits_ok}/{edits_total} XML replacements succeeded — "
+        "some resume sections may not be fully tailored."
+    ) if edits_total > 0 and edits_ok < edits_total * 0.7 else None
     step5_pack(resume_out, config)
 
     # Step 5b: ATS resume
@@ -1462,6 +1471,7 @@ def run_workflow(
         cover_letter_path=cover_out,
         framing_angle=analysis.get("framing_angle", ""),
         folder_url=folder_url,
+        replacements_warning=replacements_warning,
     )
 
 # ---------------------------------------------------------------------------
@@ -1580,7 +1590,8 @@ def _build_prep_docx_js(
     CONTENT  = 10512
     COL_L    = 5160
     COL_R    = 5352  # slightly wider right column
-    assert COL_L + COL_R == CONTENT
+    if COL_L + COL_R != CONTENT:
+        raise WorkflowError(f"Column widths {COL_L}+{COL_R} do not sum to content width {CONTENT}")
 
     # =========================================================================
     # HEADER BAND — full-width title row
@@ -2028,7 +2039,7 @@ Return ONLY valid JSON. No preamble, no markdown fences.
         data, company, role, config.round_type, config.focus,
         config.interviewer, prep_out, colors
     )
-    js_path = Path(f"interview_prep_gen_{os.urandom(4).hex()}.js")
+    js_path = run_dir / f"interview_prep_gen_{os.urandom(4).hex()}.js"
     write_file(js_path, js)
     result  = run(["node", str(js_path)], check=False, config=wfc)
     js_path.unlink(missing_ok=True)

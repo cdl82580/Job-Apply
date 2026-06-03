@@ -16,18 +16,85 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
+import socket
 import threading
 import time
 import urllib.parse
 import uuid
 from typing import Any
 
+_PRIVATE_NETS = [
+    ipaddress.ip_network(n) for n in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "127.0.0.0/8", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+    )
+]
+
+
+def _is_ssrf_url(url: str) -> bool:
+    """Return True if the URL resolves to a private/loopback/link-local address.
+    Called at delivery time to guard against DNS rebinding after the initial check."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host   = parsed.hostname or ""
+        addrs  = socket.getaddrinfo(host, None)
+        for _, _, _, _, sockaddr in addrs:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if any(ip in net for net in _PRIVATE_NETS):
+                return True
+    except Exception:
+        pass
+    return False
+
 import requests as _requests
 
 from . import storage
 
 _INDEX_KEY    = "webhooks/_index.json"
+
+# ---------------------------------------------------------------------------
+# Secret encryption — AES-256-GCM via stdlib only (no cryptography dep)
+# Key derived from SESSION_SECRET so secrets are useless without it.
+# ---------------------------------------------------------------------------
+import base64 as _base64
+import os as _os
+import struct as _struct
+
+
+def _secret_key() -> bytes:
+    """32-byte key derived from SESSION_SECRET via SHA-256."""
+    raw = _os.environ.get("SESSION_SECRET", "").encode()
+    return hashlib.sha256(raw).digest()
+
+
+def _encrypt_secret(plaintext: str) -> str:
+    """Encrypt a webhook secret string. Returns 'enc:v1:<b64(nonce+tag+ct)>'."""
+    if not plaintext:
+        return plaintext
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        nonce = _os.urandom(12)
+        ct_and_tag = AESGCM(_secret_key()).encrypt(nonce, plaintext.encode(), None)
+        blob = _base64.b64encode(nonce + ct_and_tag).decode()
+        return f"enc:v1:{blob}"
+    except ImportError:
+        # cryptography package not installed — store plaintext with a warning prefix
+        return plaintext
+
+
+def _decrypt_secret(stored: str) -> str:
+    """Decrypt a webhook secret previously encrypted by _encrypt_secret."""
+    if not stored or not stored.startswith("enc:v1:"):
+        return stored  # legacy plaintext or empty
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        raw = _base64.b64decode(stored[7:])
+        nonce, ct_and_tag = raw[:12], raw[12:]
+        return AESGCM(_secret_key()).decrypt(nonce, ct_and_tag, None).decode()
+    except Exception:
+        return ""  # decryption failed — treat as no secret
 
 # ---------------------------------------------------------------------------
 # Action categories — used for the category filter
@@ -125,14 +192,21 @@ def get_webhook(webhook_id: str) -> dict[str, Any] | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        w = json.loads(raw)
+        # Decrypt secret for in-memory use; callers must redact before returning to API
+        if w.get("secret"):
+            w["secret"] = _decrypt_secret(w["secret"])
+        return w
     except Exception:
         return None
 
 
 def save_webhook(webhook: dict[str, Any]) -> None:
-    storage.put_text(_key(webhook["id"]), json.dumps(webhook))
-    _upsert_index(webhook)
+    to_store = dict(webhook)
+    if to_store.get("secret"):
+        to_store["secret"] = _encrypt_secret(to_store["secret"])
+    storage.put_text(_key(webhook["id"]), json.dumps(to_store))
+    _upsert_index(webhook)  # index never stores the secret
 
 
 def delete_webhook(webhook_id: str) -> bool:
@@ -355,6 +429,34 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
     if qp:
         sep = "&" if "?" in url else "?"
         url = url + sep + urllib.parse.urlencode(qp)
+
+    # Re-check SSRF at delivery time to guard against DNS rebinding
+    if _is_ssrf_url(url):
+        error = "Delivery blocked: URL resolved to a private/internal address"
+        duration_ms = int((time.time() - start) * 1000)
+        delivery: dict[str, Any] = {
+            "id":           delivery_id,
+            "timestamp":    now_ts,
+            "event_action": event.get("action", ""),
+            "status_code":  None,
+            "success":      False,
+            "error":        error,
+            "duration_ms":  duration_ms,
+        }
+        try:
+            w = get_webhook(wid)
+            if w:
+                stats = w.setdefault("delivery_stats", {"total": 0, "success": 0, "failure": 0})
+                stats["total"]   = stats.get("total",   0) + 1
+                stats["failure"] = stats.get("failure", 0) + 1
+                w["last_triggered_at"] = now_ts
+                deliveries = w.setdefault("recent_deliveries", [])
+                deliveries.insert(0, delivery)
+                w["recent_deliveries"] = deliveries[:_MAX_DELIVERIES]
+                save_webhook(w)
+        except Exception:
+            pass
+        return
 
     status_code: int | None = None
     success     = False

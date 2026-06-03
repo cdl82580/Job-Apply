@@ -186,6 +186,13 @@ async def update_user(user_id: str, body: UserUpdate, request: Request):
         user["active"] = body.active
 
     storage.save_user(user)
+    # Invalidate cached user record so role/active changes take effect immediately
+    if changes:
+        try:
+            from api import _invalidate_user_cache
+            _invalidate_user_cache(user_id)
+        except Exception:
+            pass
     user_audit.log(user_id, "admin_user_updated", admin["email"],
                    changes=changes, changed_by=admin["email"])
 
