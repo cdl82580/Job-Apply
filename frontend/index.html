@@ -702,6 +702,7 @@
             <button type="button" class="md-btn" data-jdmd="ol"        title="Numbered list">1. List</button>
             <div class="md-sep"></div>
             <button type="button" class="md-btn" data-jdmd="code"      title="Code block">&lt;/&gt;</button>
+            <button type="button" class="md-btn" data-jdmd="link"      title="Hyperlink">🔗</button>
             <button type="button" class="md-btn" data-jdmd="hr"        title="Divider">—</button>
           </div>
           <!-- Textarea -->
@@ -938,6 +939,15 @@
         case 'code':   insert = sel.includes('\n')
                          ? `\`\`\`\n${sel || 'code'}\n\`\`\``
                          : `\`${sel || 'code'}\``; break;
+        case 'link': {
+          const linkText = sel || 'link text';
+          insert = `[${linkText}](url)`;
+          ta.value = before + insert + after;
+          const urlStart = before.length + linkText.length + 3;
+          ta.setSelectionRange(urlStart, urlStart + 3);
+          ta.focus();
+          return;
+        }
         case 'hr':     insert = `\n\n---\n\n`; break;
         default: return;
       }
