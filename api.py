@@ -454,21 +454,42 @@ _SLACK_NOTIFY_USER_ID   = os.environ.get("SLACK_NOTIFY_USER_ID", "")  # Slack us
 
 
 def _send_slack_dm(text: str) -> None:
-    """Post a Slack DM to SLACK_NOTIFY_USER_ID if configured."""
+    """Post a Slack DM to SLACK_NOTIFY_USER_ID if configured.
+
+    Uses conversations.open to resolve the DM channel ID first — posting
+    directly to a user ID via chat.postMessage is unreliable without it.
+    """
     bot_token = os.environ.get("SLACK_BOT_TOKEN", "")
     user_id   = _SLACK_NOTIFY_USER_ID
     if not bot_token or not user_id:
         return
     try:
         import requests as _requests
-        _requests.post(
-            "https://slack.com/api/chat.postMessage",
-            headers={"Authorization": f"Bearer {bot_token}"},
-            json={"channel": user_id, "text": text},
+        headers = {"Authorization": f"Bearer {bot_token}"}
+        # Open (or retrieve) the DM channel with this user
+        open_resp = _requests.post(
+            "https://slack.com/api/conversations.open",
+            headers=headers,
+            json={"users": user_id},
             timeout=10,
         )
+        open_data = open_resp.json()
+        if not open_data.get("ok"):
+            logger.warning("Slack conversations.open failed: %s", open_data.get("error"))
+            return
+        channel_id = open_data["channel"]["id"]
+        # Post the message to the resolved DM channel
+        post_resp = _requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers=headers,
+            json={"channel": channel_id, "text": text},
+            timeout=10,
+        )
+        post_data = post_resp.json()
+        if not post_data.get("ok"):
+            logger.warning("Slack chat.postMessage failed: %s", post_data.get("error"))
     except Exception:
-        pass
+        logger.exception("_send_slack_dm failed")
 
 
 def _fire_reminder(user_id: str, reminder: dict, event: dict) -> None:
