@@ -2,7 +2,7 @@
 
 A Claude-powered web app (and Slack bot) that takes a job posting and produces a
 tailored resume, ATS resume, and cover letter in under 2 minutes. Includes a
-full-featured application tracker, admin dashboard, webhook system, and audit logging.
+full-featured application tracker, calendar, admin dashboard, webhook system, and audit logging.
 
 **Live app:** https://job-apply-corey.fly.dev/
 
@@ -14,9 +14,9 @@ full-featured application tracker, admin dashboard, webhook system, and audit lo
 - **Tailored resume** — styled DOCX with brand colors, targeted bullets, competency grid
 - **ATS resume** — plain single-column DOCX, no tables or text boxes, parser-safe
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
-- **Google Drive sync** — all output files uploaded automatically to your Drive folder
+- **Google Drive sync** — all output files uploaded automatically to your Drive folder; PDF version generated via Drive conversion
 - **Interview Prep** — two-column 9-section reference card (role fit map, gap bridges, anchor stories, likely questions, differentiating edge) tailored to the interviewer and round type
-- **SSE progress streaming** — live log output while the agent runs
+- **SSE progress streaming** — live log output while the agent runs; `done` event includes `replacements_warning` if XML edits partially failed
 
 ### Application Tracker
 - Full CRUD for job applications — company (via BrandFetch lookup), role, status, priority, recruiter, salary, DUA tracking
@@ -25,12 +25,30 @@ full-featured application tracker, admin dashboard, webhook system, and audit lo
 - Sorting, filtering, pagination, search by ID
 - CSV and formatted Excel export with frozen headers and alternating rows
 
+### Calendar
+- Create, view, update, and delete calendar events (interviews, deadlines, follow-ups, custom)
+- Reminders via email (Resend) and/or Slack DM — configurable offset in minutes, multi-channel
+- Per-user event cap (1,000); per-event reminder cap (10)
+- Events linkable to application tracker records and run IDs
+- Accessible from the web UI (`/calendar.html`) and all `/cal-*` Slack commands
+
 ### Auth & Accounts
-- Email/password auth with scrypt hashing and HMAC-signed stateless session cookies
+- Email/password auth with scrypt hashing and HMAC-signed stateless session cookies (30-day TTL)
 - **Google OAuth** — sign in with Google; auto-links to existing email/password accounts
 - **Email verification** via Resend — verification banner shown until confirmed
+- **Email change** — requires current password; triggers re-verification; invalidates existing session
 - Role-based access: `user` and `admin` roles
 - Admin accounts restricted to the admin dashboard only
+- Per-request session validation checks `active` flag and password-change fingerprint (`pwv`)
+
+### Security
+- `Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, `Content-Security-Policy`, `Referrer-Policy` on every response
+- Rate limiting on login (10/min), register (5/hr), resend-verification (3/hr), change-password (5/hr), change-email (5/hr), resume-upload (10/hr)
+- SSRF guard on webhook URLs (DNS resolution + private-net check), re-applied at delivery time
+- Webhook HMAC secrets encrypted at rest with AES-256-GCM (key derived from `SESSION_SECRET`)
+- `safeHref()` scheme validation on all user-supplied URLs rendered as `href`/`src` in the frontend
+- Audit log stored as individual S3 objects (atomic writes, no cross-machine race condition)
+- Per-user record cache (30s TTL) avoids S3 round-trips on every authenticated request
 
 ### Admin Dashboard
 - **Users** — manage all accounts, email verification, role, active/deactivated status; view runs count, last login, joined date; search, filter, sort, paginate
@@ -43,8 +61,9 @@ full-featured application tracker, admin dashboard, webhook system, and audit lo
 - Event-driven delivery for every audit action
 - Payload formats: Generic JSON, Slack Block Kit, MS Teams MessageCard, Grafana Loki
 - Delivery filters: actor (email/user ID), source, action category, application ID
-- HMAC-SHA256 signing (`X-Hub-Signature-256`) for receiver verification
+- HMAC-SHA256 signing (`X-Hub-Signature-256`) for receiver verification; secret encrypted at rest
 - Per-webhook delivery history (last 25), stats, test button
+- SSRF guard re-applied at delivery time (DNS rebinding protection)
 
 ### Slack Bot
 See [Slack Commands](#slack-commands) section below.
@@ -65,26 +84,31 @@ job-apply/
 ├── frontend/
 │   ├── index.html             ← Agent SPA (form, progress, results, prep)
 │   ├── tracking.html          ← Application tracker
+│   ├── calendar.html          ← Calendar view
 │   ├── admin.html             ← Admin dashboard
 │   ├── login.html             ← Login + Google OAuth
 │   ├── register.html
-│   └── profile.html           ← Profile settings (Markdown editor)
+│   ├── profile.html           ← Profile settings (Markdown editor)
+│   └── img/logo.png           ← Single transparent-background logo (light + dark compatible)
 ├── routers/
 │   ├── applications.py        ← Tracker CRUD + comments + linked runs
+│   ├── calendar.py            ← Calendar event + reminder CRUD
 │   ├── companies.py           ← BrandFetch proxy
 │   ├── auth_google.py         ← Google OAuth flow
 │   └── admin.py               ← Admin-only endpoints + webhooks + audit
 ├── scripts/
 │   ├── storage.py             ← Tigris S3 adapter
 │   ├── applications.py        ← Application storage layer
+│   ├── calendar.py            ← Calendar + reminder storage layer
 │   ├── session.py             ← Shared HMAC session token helpers
-│   ├── user_audit.py          ← Per-user audit event log
+│   ├── user_audit.py          ← Per-user audit event log (per-event S3 objects)
 │   ├── webhooks.py            ← Webhook storage + delivery engine
 │   ├── email_verification.py  ← One-time verification tokens
 │   └── office/                ← DOCX unpack / pack / validate
 ├── resumes/
 │   └── master.docx            ← Source-of-truth resume (never use an output file)
 ├── output/                    ← Generated files (gitignored)
+├── requirements.txt
 ├── Dockerfile
 └── fly.toml
 ```
@@ -97,8 +121,9 @@ job-apply/
 2. Register (email/password or Google) and upload `master.docx` + paste your `profile.md`
 3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**
 4. **Tracker tab** — track applications, add notes, link to agent runs
-5. **Profile** — update display name, profile guide (Markdown editor), resume
-6. Admins are redirected to `/admin.html` automatically
+5. **Calendar tab** — view and manage interview events and deadlines with Slack/email reminders
+6. **Profile** — update display name, email, password, profile guide (Markdown editor), and resume
+7. Admins are redirected to `/admin.html` automatically
 
 ---
 
@@ -109,6 +134,11 @@ job-apply/
 | 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter |
 | 🤖 Agent | `/prep` | Generate interview prep document |
 | 🤖 Agent | `/runs` | List recent Drive run folders |
+| 📅 Calendar | `/cal-today` | Show today's events |
+| 📅 Calendar | `/cal-week` | Show next 7 days |
+| 📅 Calendar | `/cal-add` | Add a calendar event (modal — type, date, time, timezone, reminders, linked app) |
+| 📅 Calendar | `/cal-view` | View full details of an event |
+| 📅 Calendar | `/cal-delete` | Delete an event (two-step confirm) |
 | 📋 Tracker | `/tracker` | Pipeline summary by status |
 | 📋 Tracker | `/track-list [status]` | List applications (optional status filter) |
 | 📋 Tracker | `/track-view` | View full details of an application |
@@ -119,11 +149,15 @@ job-apply/
 | 🔍 Lookup | `/company [name]` | Search company info via BrandFetch |
 | 🔍 Lookup | `/whoami` | Show your account details |
 | 🔍 Lookup | `/activity` | Show your 10 most recent audit events |
+| 👤 Profile | `/profile-name` | Update display name (modal) |
+| 👤 Profile | `/profile-email` | Change email address — requires current password, triggers re-verification |
+| 👤 Profile | `/profile-password` | Change password (modal) |
+| 👤 Profile | `/profile-resume` | Instructions for uploading a new master resume via DM |
+| 👤 Profile | `/profile-guide` | Edit your profile & voice guide (modal, pre-filled) |
 | 🛠️ System | `/jobstatus` | Check API health |
-| 🛠️ System | `/resend-verify` | Resend email verification |
 | 🛠️ System | `/help` | Full command reference |
 
-The bot also publishes a dynamic **App Home tab** showing live pipeline stats and a quick command reference — opens when you click the app's Home tab in Slack.
+The bot also publishes a dynamic **App Home tab** showing live pipeline stats, upcoming calendar events, and a quick command reference — opens when you click the app's Home tab in Slack.
 
 ---
 
@@ -136,6 +170,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 python apply.py --job jobs/job.txt --company "Acme" --role "Solutions Engineer"
 python apply.py --job jobs/job.txt --company "Acme" --role "SE" --contact "Jane Smith"
 python apply.py --job jobs/job.txt --company "Acme" --role "SE" --debug
+python apply.py --job jobs/job.txt --company "Acme" --role "SE" --dry-run
 ```
 
 Output files land in `output/[Company]_[Role]/`:
@@ -207,13 +242,15 @@ Both share the same Docker image and all Fly secrets.
 | Secret | Description |
 |--------|-------------|
 | `ANTHROPIC_API_KEY` | Claude API key |
-| `SESSION_SECRET` | HMAC signing key for session tokens (persistent across restarts) |
+| `SESSION_SECRET` | HMAC signing key for session tokens (also used to derive webhook secret encryption key) |
 | `AWS_ACCESS_KEY_ID` | Tigris key |
 | `AWS_SECRET_ACCESS_KEY` | Tigris secret |
 | `AWS_ENDPOINT_URL_S3` | `https://fly.storage.tigris.dev` |
 | `BUCKET_NAME` | Tigris bucket name |
-| `RESEND_API_KEY` | Resend — email verification + password-change emails |
+| `RESEND_API_KEY` | Resend — email verification, password-change, and calendar reminder emails |
 | `RESEND_FROM` | Sender address (default: `Job Apply <onboarding@resend.dev>`) |
+| `APP_URL` | Public app URL (default: `https://job-apply-corey.fly.dev`) |
+| `APP_USER_EMAIL` | Primary user email — used by the Slack bot to resolve its API identity |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `BRANDFETCH_API_KEY` | BrandFetch API key for company search |
@@ -221,6 +258,7 @@ Both share the same Docker image and all Fly secrets.
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack signing secret |
 | `SLACK_APP_TOKEN` | App-level token (`xapp-...`) — **required** for Socket Mode |
+| `SLACK_NOTIFY_USER_ID` | Slack user ID to DM for calendar reminders |
 | `GDRIVE_TOKEN_JSON` | Google Drive OAuth token JSON |
 | `GDRIVE_PARENT_FOLDER_ID` | Drive folder ID for run output (`Job Applications`) |
 
@@ -245,20 +283,27 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/health` | — | Liveness check |
+| GET | `/api/health` | — | Liveness check (full details only for authenticated users) |
 | POST | `/api/auth/register` | — | Create account + upload resume |
 | POST | `/api/auth/login` | — | Get session cookie |
 | POST | `/api/auth/logout` | cookie | Clear session |
-| GET | `/api/auth/me` | cookie | Current user info + role + email_verified |
+| GET | `/api/auth/me` | cookie | Current user info + role + email_verified + active model |
 | GET | `/api/auth/google` | — | Start Google OAuth flow |
 | GET | `/api/auth/google/callback` | — | Google OAuth callback |
 | GET | `/api/auth/verify-email?token=` | — | Consume email verification token |
 | POST | `/api/auth/resend-verification` | cookie | Resend verification email |
 | GET | `/api/profile` | cookie | Profile + resume metadata |
 | PUT | `/api/profile` | cookie | Update display name or profile text |
-| POST | `/api/profile/resume` | cookie | Replace master resume |
-| POST | `/api/profile/password` | cookie | Change password |
+| POST | `/api/profile/resume` | cookie | Replace master resume (rate-limited: 10/hr) |
+| POST | `/api/profile/password` | cookie | Change password (rate-limited: 5/hr) |
+| POST | `/api/profile/email` | cookie | Change email — requires current password, sends re-verification, invalidates session (rate-limited: 5/hr) |
 | GET | `/api/audit/me` | cookie | Current user's audit event log |
+| GET | `/api/calendar` | cookie | List events (optional `?from=&to=` ISO range filter) |
+| POST | `/api/calendar` | cookie | Create event with optional reminders |
+| GET | `/api/calendar/upcoming` | cookie | Next 7 days (used by Slack home tab) |
+| GET | `/api/calendar/{id}` | cookie | Get single event |
+| PUT | `/api/calendar/{id}` | cookie | Update event (reminders recalculated if datetime changes) |
+| DELETE | `/api/calendar/{id}` | cookie | Delete event + all its reminders |
 | GET | `/api/applications` | cookie | List applications (paginated) |
 | POST | `/api/applications` | cookie | Create application |
 | GET | `/api/applications/{id}` | cookie | Get full application record |
@@ -272,7 +317,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | DELETE | `/api/applications/{id}/runs/{lid}` | cookie | Unlink a run |
 | GET | `/api/companies/search?q=` | — | BrandFetch company search |
 | POST | `/api/run` | cookie | Start resume generation run |
-| GET | `/api/run/{id}/stream` | cookie | SSE progress stream |
+| GET | `/api/run/{id}/stream` | cookie | SSE progress stream (`done` event includes `replacements_warning` if < 70% XML edits succeeded) |
 | GET | `/api/run/{id}/status` | cookie | Poll run status |
 | GET | `/api/run/{id}/files/{name}` | cookie | Download output file |
 | POST | `/api/prep` | cookie | Start interview prep run |
@@ -280,12 +325,15 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
-| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive |
-| GET | `/api/runs` | cookie | List local run folders by user (legacy) |
+| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive (ownership verified) |
+| GET | `/api/runs` | cookie | List local run folders by user |
 | GET | `/api/runs/{folder}/job_posting` | cookie | Fetch saved JD from local run folder |
+| GET | `/api/config/model` | cookie | Get active Claude model |
+| PUT | `/api/config/model` | admin | Set active Claude model |
+| GET | `/api/config/models` | admin | List allowed models |
 | GET | `/api/admin/users` | admin | List all users |
-| PUT | `/api/admin/users/{id}` | admin | Edit user (name, email, role, active, verified) |
-| PUT | `/api/admin/users/{id}/role` | admin | Set user role only (Slack bot compat endpoint) |
+| PUT | `/api/admin/users/{id}` | admin | Edit user (name, email, role, active, verified) — invalidates user cache |
+| PUT | `/api/admin/users/{id}/role` | admin | Set user role only (Slack bot compat) |
 | POST | `/api/admin/users/{id}/resend-verification` | admin | Resend verification as admin |
 | GET | `/api/admin/applications` | admin | All applications across all users |
 | GET | `/api/admin/applications/{uid}/{aid}` | admin | Full application record |
@@ -298,8 +346,8 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/admin/audit/action-types` | admin | Known audit action type list |
 | POST | `/api/admin/log-activity` | admin | Log a custom admin activity event |
 | GET | `/api/admin/webhooks` | admin | List webhooks |
-| POST | `/api/admin/webhooks` | admin | Create webhook |
-| GET | `/api/admin/webhooks/{id}` | admin | Get webhook details |
+| POST | `/api/admin/webhooks` | admin | Create webhook (secret encrypted at rest) |
+| GET | `/api/admin/webhooks/{id}` | admin | Get webhook details (secret redacted) |
 | PUT | `/api/admin/webhooks/{id}` | admin | Update webhook |
 | DELETE | `/api/admin/webhooks/{id}` | admin | Delete webhook |
 | POST | `/api/admin/webhooks/{id}/test` | admin | Send test delivery |
@@ -311,7 +359,9 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 
 ### If XML replacements start failing
 Run with `--debug` to inspect `unpacked/word/document.xml`. Section text drifts
-when `master.docx` is edited in Word — update known strings in `profile.md`.
+when `master.docx` is edited in Word — update known strings in `profile.md`. The
+SSE `done` event now includes a `replacements_warning` field if < 70% of edits
+succeeded, so the web UI can surface it without requiring a log review.
 
 ### If cover letter voice drifts
 Edit `profile.md` → "Voice & Tone Rules" and "DO NOT" sections.
@@ -325,3 +375,14 @@ rm ~/.config/job-apply/gdrive_token.json
 python3 setup_gdrive.py
 fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
 ```
+
+### If webhook deliveries are being blocked
+The SSRF guard runs at both write time and delivery time. A `Delivery blocked` error
+in the delivery log means the URL resolved to a private/internal IP at delivery time
+(possible DNS rebinding). Update the webhook URL to a public endpoint.
+
+### Webhook secret rotation
+Webhook secrets are encrypted with AES-256-GCM using a key derived from `SESSION_SECRET`.
+If you rotate `SESSION_SECRET`, existing webhook secrets will fail to decrypt (delivery
+will silently send unsigned requests). Re-save each webhook via `PUT /api/admin/webhooks/{id}`
+with the secret to re-encrypt under the new key.
