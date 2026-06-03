@@ -353,6 +353,19 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .hidden { display: none !important; }
+
+    @keyframes sparkle-pulse {
+      0%, 100% { opacity: .5; transform: scale(1);   }
+      50%       { opacity: 1;  transform: scale(1.2); }
+    }
+    .model-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      margin-left: .5rem; font-size: .72rem; font-weight: 500;
+      color: var(--muted); background: var(--fill);
+      border: 1px solid var(--card-border); border-radius: 4px;
+      padding: .1rem .45rem .1rem .3rem; vertical-align: middle; letter-spacing: .01em;
+    }
+    .model-badge-icon { display: inline-block; animation: sparkle-pulse 2.4s ease-in-out infinite; line-height: 1; font-size: .8rem; }
   </style>
 </head>
 <body>
@@ -366,7 +379,7 @@
       </div>
       <div>
         <h1>Calendar</h1>
-        <p>Interview schedule, deadlines, and follow-ups — linked to your applications.</p>
+        <p>Interview schedule, deadlines, and follow-ups — linked to your applications.<span class="model-badge hidden" id="modelBadge"><span class="model-badge-icon">✦</span><span id="modelBadgeText"></span></span></p>
       </div>
     </div>
     <div class="header-actions">
@@ -1140,6 +1153,10 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const meRes = await apiFetch('/api/auth/me');
   const me = await meRes.json();
   document.getElementById('headerUser').textContent = me.display_name || me.email;
+  if (me.model) {
+    document.getElementById('modelBadgeText').textContent = me.model;
+    document.getElementById('modelBadge').classList.remove('hidden');
+  }
 
   await Promise.all([loadApps(), loadEvents()]);
   updateLabel();
