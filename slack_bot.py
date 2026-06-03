@@ -2128,12 +2128,22 @@ def _cal_add_blocks(user_tz: str = "UTC") -> list:
 
 
 def _get_user_tz(client, user_id: str) -> str:
-    """Return the user's Slack profile timezone string, defaulting to UTC."""
-    try:
-        info = client.users_info(user=user_id)
-        return info["user"].get("tz") or "UTC"
-    except Exception:
-        return "UTC"
+    """Return the user's Slack profile timezone, with a hard 1.5s timeout.
+
+    views_open must fire before the trigger_id expires (3s window). Running
+    users_info with a thread+join ensures we never block long enough to miss it.
+    """
+    result = ["UTC"]
+    def _fetch():
+        try:
+            info = client.users_info(user=user_id)
+            result[0] = info["user"].get("tz") or "UTC"
+        except Exception:
+            pass
+    t = threading.Thread(target=_fetch, daemon=True)
+    t.start()
+    t.join(timeout=1.5)
+    return result[0]
 
 
 @app.command("/cal-add")
