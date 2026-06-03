@@ -2024,7 +2024,7 @@ def cal_week_command(ack, respond):
 # /cal-add — create a calendar event (modal)
 # ---------------------------------------------------------------------------
 
-def _cal_add_blocks() -> list:
+def _cal_add_blocks(user_tz: str = "UTC") -> list:
     def _sel_opt(val, label):
         return {"text": {"type": "plain_text", "text": label}, "value": val}
 
@@ -2067,8 +2067,8 @@ def _cal_add_blocks() -> list:
         },
         {
             "type": "input", "block_id": "event_time",
-            "label": {"type": "plain_text", "text": "Time (HH:MM, 24h UTC)"},
-            "hint":  {"type": "plain_text", "text": "Enter in UTC. e.g. 14:00 for 2:00 PM UTC."},
+            "label": {"type": "plain_text", "text": "Time (HH:MM, 24h)"},
+            "hint":  {"type": "plain_text", "text": f"Your timezone: {user_tz}. e.g. 14:00 for 2:00 PM."},
             "element": {"type": "plain_text_input", "action_id": "value",
                         "placeholder": {"type": "plain_text", "text": "14:00"},
                         "initial_value": "09:00"},
@@ -2127,9 +2127,19 @@ def _cal_add_blocks() -> list:
     ]
 
 
+def _get_user_tz(client, user_id: str) -> str:
+    """Return the user's Slack profile timezone string, defaulting to UTC."""
+    try:
+        info = client.users_info(user=user_id)
+        return info["user"].get("tz") or "UTC"
+    except Exception:
+        return "UTC"
+
+
 @app.command("/cal-add")
 def cal_add_command(ack, body, client):
     ack()
+    user_tz = _get_user_tz(client, body["user"]["id"])
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
@@ -2138,16 +2148,36 @@ def cal_add_command(ack, body, client):
             "title": {"type": "plain_text", "text": "Add Calendar Event"},
             "submit": {"type": "plain_text", "text": "Add"},
             "close":  {"type": "plain_text", "text": "Cancel"},
-            "blocks": _cal_add_blocks(),
+            "private_metadata": user_tz,
+            "blocks": _cal_add_blocks(user_tz=user_tz),
         },
     )
+
+
+def _local_to_utc_iso(date_str: str, time_str: str, tz: str) -> str:
+    """Convert a naive date+time in the given IANA timezone to a UTC ISO string."""
+    import datetime as _dt
+    import zoneinfo as _zi
+    try:
+        zone = _zi.ZoneInfo(tz)
+    except Exception:
+        zone = _zi.ZoneInfo("UTC")
+    h, m = (time_str.split(":") + ["0"])[:2]
+    naive = _dt.datetime(
+        int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
+        int(h), int(m), 0,
+    )
+    local_dt = naive.replace(tzinfo=zone)
+    utc_dt   = local_dt.astimezone(_dt.timezone.utc)
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @app.view("cal_add_submit")
 def cal_add_view_submit(ack, body, client, view):
     ack()
-    vals    = view["state"]["values"]
-    channel = body["user"]["id"]
+    vals     = view["state"]["values"]
+    channel  = body["user"]["id"]
+    user_tz  = view.get("private_metadata") or "UTC"
 
     def _txt(block):
         return ((vals.get(block, {}).get("value", {}) or {}).get("value") or "").strip()
@@ -2177,11 +2207,10 @@ def cal_add_view_submit(ack, body, client, view):
         client.chat_postMessage(channel=channel, text=":x: Title and date are required.")
         return
 
-    # Build ISO datetime (treat as UTC)
+    # Convert entered local time to UTC using the user's Slack timezone
     time_clean = time_str.replace(".", ":").strip()
     try:
-        h, m = (time_clean.split(":") + ["0"])[:2]
-        dt_iso = f"{date_str}T{int(h):02d}:{int(m):02d}:00Z"
+        dt_iso = _local_to_utc_iso(date_str, time_clean, user_tz)
     except Exception:
         client.chat_postMessage(channel=channel, text=":x: Invalid time format. Use HH:MM (e.g. 14:00).")
         return
@@ -2198,7 +2227,7 @@ def cal_add_view_submit(ack, body, client, view):
         "title":            title,
         "event_type":       event_type,
         "datetime":         dt_iso,
-        "timezone":         "UTC",
+        "timezone":         user_tz,
         "duration_minutes": max(0, min(1440, int(duration) if duration.isdigit() else 60)),
         "notes":            notes,
         "app_id":           app_id if app_id != "none" else None,

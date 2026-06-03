@@ -1008,12 +1008,22 @@ async function saveEvent() {
   if (!title) { showToast('Title is required', true); return; }
   if (!dateStr) { showToast('Date is required', true); return; }
 
-  // Build ISO datetime — interpret as local in given timezone via Intl
+  // Convert the entered date+time (in the selected timezone) to UTC.
+  // Strategy: parse naively as UTC, format that UTC instant in the target
+  // timezone to find the display offset, then apply the inverse.
   let datetimeISO;
   try {
-    const localDt = new Date(`${dateStr}T${timeStr}:00`);
-    if (isNaN(localDt.getTime())) throw new Error('invalid');
-    datetimeISO = localDt.toISOString().replace('.000Z', 'Z');
+    const ref = new Date(`${dateStr}T${timeStr}:00Z`);
+    if (isNaN(ref.getTime())) throw new Error('invalid');
+    // What does this UTC instant look like in the target timezone?
+    const displayed = new Date(
+      ref.toLocaleString('sv-SE', { timeZone: tz }) + 'Z'
+    );
+    // offset = how far UTC is ahead of the tz display at this moment
+    const offsetMs = ref.getTime() - displayed.getTime();
+    // The actual UTC instant for the entered local time
+    const utcDt = new Date(ref.getTime() + offsetMs);
+    datetimeISO = utcDt.toISOString().replace('.000Z', 'Z');
   } catch {
     showToast('Invalid date/time', true); return;
   }
