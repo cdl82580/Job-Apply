@@ -328,6 +328,175 @@ def track_list_command(ack, respond, body):
 # /track-add — add a new application
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# BrandFetch external_select handler (used by /track-add)
+# ---------------------------------------------------------------------------
+
+@app.options("company_search")
+def handle_company_search(ack, payload):
+    """Return BrandFetch results for the company external_select."""
+    query = (payload.get("value") or "").strip()
+    if len(query) < 2:
+        ack(options=[])
+        return
+    try:
+        r = _api("get", "/api/companies/search", params={"q": query})
+        r.raise_for_status()
+        results = r.json()
+        options = []
+        for c in results[:5]:
+            name   = c.get("name", "?")
+            domain = c.get("domain", "")
+            label  = f"{name}  ({domain})" if domain else name
+            value  = f"{name}|||{domain}"
+            options.append({
+                "text":  {"type": "plain_text", "text": label[:75]},
+                "value": value[:75],
+            })
+        ack(options=options)
+    except Exception:
+        ack(options=[])
+
+
+def _track_add_blocks(prefill: dict | None = None) -> list:
+    """Return blocks for the Add Application modal. prefill not used for add."""
+    def _sel_opt(val):
+        return {"text": {"type": "plain_text", "text": val}, "value": val}
+
+    return [
+        # ── Company ──────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "company_search",
+            "label": {"type": "plain_text", "text": "Company"},
+            "hint":  {"type": "plain_text", "text": "Start typing to search — name and domain will auto-fill."},
+            "element": {
+                "type": "external_select",
+                "action_id": "value",
+                "placeholder": {"type": "plain_text", "text": "Search company name…"},
+                "min_query_length": 2,
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "domain",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Domain (optional — auto-filled if found above)"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "e.g. salesforce.com"}},
+        },
+        # ── Role ─────────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "role_title",
+            "label": {"type": "plain_text", "text": "Role Title"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
+        },
+        # ── Status / Priority ────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "status",
+            "label": {"type": "plain_text", "text": "Status"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                "initial_option": _sel_opt("Researching"),
+                "options": [_sel_opt(s) for s in VALID_STATUSES],
+            },
+        },
+        {
+            "type": "input",
+            "block_id": "priority",
+            "label": {"type": "plain_text", "text": "Priority"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                "initial_option": _sel_opt("Medium"),
+                "options": [_sel_opt(p) for p in VALID_PRIORITIES],
+            },
+        },
+        # ── Details ──────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "date_applied",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Date Applied"},
+            "element": {"type": "datepicker", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Select date"}},
+        },
+        {
+            "type": "input",
+            "block_id": "job_source",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Job Source"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "LinkedIn, Indeed, Referral…"}},
+        },
+        {
+            "type": "input",
+            "block_id": "location",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Location / Remote"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Remote, Boston, Hybrid…"}},
+        },
+        {
+            "type": "input",
+            "block_id": "salary_range",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Salary Range"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "e.g. $130k – $160k"}},
+        },
+        {
+            "type": "input",
+            "block_id": "url",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Job Posting URL"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "https://…"}},
+        },
+        # ── DUA ──────────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "dua",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Unemployment (DUA)"},
+            "element": {
+                "type": "checkboxes", "action_id": "value",
+                "options": [{"text": {"type": "plain_text", "text": "Reported this application to DUA"},
+                             "value": "yes"}],
+            },
+        },
+        # ── Recruiter ────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "recruiter_name",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Recruiter Name"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Jane Smith"}},
+        },
+        {
+            "type": "input",
+            "block_id": "recruiter_email",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Recruiter Email"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "jane@company.com"}},
+        },
+        # ── Note ─────────────────────────────────────────────────────
+        {
+            "type": "input",
+            "block_id": "note",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Initial Note"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "Any notes about this role…"}},
+        },
+    ]
+
+
 @app.command("/track-add")
 def track_add_command(ack, body, client):
     ack()
@@ -339,69 +508,7 @@ def track_add_command(ack, body, client):
             "title": {"type": "plain_text", "text": "Add Application"},
             "submit": {"type": "plain_text", "text": "Add"},
             "close":  {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "company",
-                    "label": {"type": "plain_text", "text": "Company"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "role_title",
-                    "label": {"type": "plain_text", "text": "Role Title"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "status",
-                    "label": {"type": "plain_text", "text": "Status"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "initial_option": {"text": {"type": "plain_text", "text": "Researching"}, "value": "Researching"},
-                        "options": [{"text": {"type": "plain_text", "text": s}, "value": s} for s in VALID_STATUSES],
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "priority",
-                    "label": {"type": "plain_text", "text": "Priority"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "initial_option": {"text": {"type": "plain_text", "text": "Medium"}, "value": "Medium"},
-                        "options": [{"text": {"type": "plain_text", "text": p}, "value": p} for p in VALID_PRIORITIES],
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "url",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Job Posting URL (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "https://…"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "job_source",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Job Source (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "LinkedIn, Indeed, Referral…"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "note",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Initial Note (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "Any notes about this role…"}},
-                },
-            ],
+            "blocks": _track_add_blocks(),
         },
     )
 
@@ -409,32 +516,70 @@ def track_add_command(ack, body, client):
 @app.view("track_add_submit")
 def track_add_view_submit(ack, body, client, view):
     ack()
-    vals      = view["state"]["values"]
-    channel   = body["user"]["id"]
+    vals    = view["state"]["values"]
+    channel = body["user"]["id"]
 
-    def _v(block, fallback=""):
-        el = vals.get(block, {}).get("value", {})
-        if not el:
-            return fallback
-        return (el.get("value") or el.get("selected_option", {}).get("value") or fallback).strip()
+    # Company — decode "name|||domain" from external_select
+    company_raw = (
+        (vals.get("company_search", {}).get("value", {}) or {})
+        .get("selected_option", {})
+        .get("value", "") or ""
+    )
+    if "|||" in company_raw:
+        company, domain = company_raw.split("|||", 1)
+    else:
+        company = company_raw.strip()
+        domain  = ""
+    # Domain override / fallback
+    domain_override = ((vals.get("domain", {}).get("value", {}) or {}).get("value") or "").strip()
+    if domain_override:
+        domain = domain_override
 
-    company    = _v("company")
-    role_title = _v("role_title")
-    status     = _v("status", "Researching")
-    priority   = _v("priority", "Medium")
-    url        = _v("url")
-    job_source = _v("job_source")
-    note       = _v("note")
+    def _txt(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("value") or "").strip()
+
+    def _sel(block, fallback=""):
+        opt = (vals.get(block, {}).get("value", {}) or {}).get("selected_option", {})
+        return (opt.get("value") or fallback)
+
+    def _date(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("selected_date") or None)
+
+    def _dua(block):
+        opts = ((vals.get(block, {}).get("value", {}) or {}).get("selected_options") or [])
+        return any(o.get("value") == "yes" for o in opts)
+
+    role_title     = _txt("role_title")
+    status         = _sel("status", "Researching")
+    priority       = _sel("priority", "Medium")
+    date_applied   = _date("date_applied")
+    job_source     = _txt("job_source")
+    location       = _txt("location")
+    salary_range   = _txt("salary_range")
+    url            = _txt("url")
+    dua            = _dua("dua")
+    recruiter_name = _txt("recruiter_name")
+    recruiter_email= _txt("recruiter_email")
+    note           = _txt("note")
+
+    if date_applied:
+        date_applied = f"{date_applied}T00:00:00Z"
 
     try:
         record = _create_app({
-            "company":    company,
-            "domain":     "",
-            "role_title": role_title,
-            "status":     status,
-            "priority":   priority,
-            "url":        url,
-            "job_source": job_source,
+            "company":         company,
+            "domain":          domain,
+            "role_title":      role_title,
+            "status":          status,
+            "priority":        priority,
+            "date_applied":    date_applied,
+            "job_source":      job_source,
+            "location":        location,
+            "salary_range":    salary_range,
+            "url":             url,
+            "dua":             dua,
+            "recruiter_name":  recruiter_name,
+            "recruiter_email": recruiter_email,
         })
         if note:
             _add_comment(record["id"], note)
@@ -462,75 +607,234 @@ def track_update_command(ack, body, client, respond):
     except Exception as exc:
         respond(f":x: Could not load applications: {exc}")
         return
-
     if not options:
         respond("No applications found. Use `/track-add` to create one.")
         return
-
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
             "type": "modal",
-            "callback_id": "track_update_submit",
+            "callback_id": "track_update_select",
             "title": {"type": "plain_text", "text": "Update Application"},
-            "submit": {"type": "plain_text", "text": "Update"},
+            "submit": {"type": "plain_text", "text": "Continue →"},
             "close":  {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "app_id",
-                    "label": {"type": "plain_text", "text": "Application"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "Select an application…"},
-                        "options": options,
-                    },
+            "blocks": [{
+                "type": "input",
+                "block_id": "app_id",
+                "label": {"type": "plain_text", "text": "Select application to edit"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "Select an application…"},
+                    "options": options,
                 },
-                {
-                    "type": "input",
-                    "block_id": "status",
-                    "label": {"type": "plain_text", "text": "New Status"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "Select new status…"},
-                        "options": [{"text": {"type": "plain_text", "text": s}, "value": s} for s in VALID_STATUSES],
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "note",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Add a Note (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "e.g. Got a callback from recruiter"}},
-                },
-            ],
+            }],
         },
     )
 
 
-@app.view("track_update_submit")
-def track_update_view_submit(ack, body, client, view):
-    ack()
-    vals    = view["state"]["values"]
+@app.view("track_update_select")
+def track_update_select_submit(ack, body, client, view):
+    """Step 1 → push the full edit form pre-filled with current values."""
+    app_id = view["state"]["values"]["app_id"]["value"]["selected_option"]["value"]
     channel = body["user"]["id"]
 
-    app_id = vals["app_id"]["value"]["selected_option"]["value"]
-    status = vals["status"]["value"]["selected_option"]["value"]
-    note   = (vals.get("note", {}).get("value", {}) or {}).get("value", "").strip()
+    try:
+        a = _get_app(app_id)
+    except Exception as exc:
+        ack()
+        client.chat_postMessage(channel=channel, text=f":x: Could not load application: {exc}")
+        return
+
+    def _sel_opt(val):
+        return {"text": {"type": "plain_text", "text": val}, "value": val}
+
+    def _init_opt(val, options_list):
+        if val in options_list:
+            return _sel_opt(val)
+        return None
+
+    # Build blocks pre-filled from the current record
+    blocks = [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn",
+                     "text": f":pencil2: *{a.get('role_title', '?')}* at *{a.get('company', '?')}*"},
+        },
+        # Status
+        {
+            "type": "input", "block_id": "status",
+            "label": {"type": "plain_text", "text": "Status"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                **( {"initial_option": _sel_opt(a["status"])} if a.get("status") in VALID_STATUSES else {} ),
+                "options": [_sel_opt(s) for s in VALID_STATUSES],
+            },
+        },
+        # Priority
+        {
+            "type": "input", "block_id": "priority",
+            "label": {"type": "plain_text", "text": "Priority"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                **( {"initial_option": _sel_opt(a["priority"])} if a.get("priority") in VALID_PRIORITIES else {} ),
+                "options": [_sel_opt(p) for p in VALID_PRIORITIES],
+            },
+        },
+        # Date Applied
+        {
+            "type": "input", "block_id": "date_applied", "optional": True,
+            "label": {"type": "plain_text", "text": "Date Applied"},
+            "element": {
+                "type": "datepicker", "action_id": "value",
+                **( {"initial_date": a["date_applied"][:10]} if a.get("date_applied") else {} ),
+                "placeholder": {"type": "plain_text", "text": "Select date"},
+            },
+        },
+        # Job Source
+        {
+            "type": "input", "block_id": "job_source", "optional": True,
+            "label": {"type": "plain_text", "text": "Job Source"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["job_source"]} if a.get("job_source") else {} ),
+                "placeholder": {"type": "plain_text", "text": "LinkedIn, Indeed, Referral…"},
+            },
+        },
+        # Location
+        {
+            "type": "input", "block_id": "location", "optional": True,
+            "label": {"type": "plain_text", "text": "Location / Remote"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["location"]} if a.get("location") else {} ),
+                "placeholder": {"type": "plain_text", "text": "Remote, Boston, Hybrid…"},
+            },
+        },
+        # Salary
+        {
+            "type": "input", "block_id": "salary_range", "optional": True,
+            "label": {"type": "plain_text", "text": "Salary Range"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["salary_range"]} if a.get("salary_range") else {} ),
+                "placeholder": {"type": "plain_text", "text": "e.g. $130k – $160k"},
+            },
+        },
+        # URL
+        {
+            "type": "input", "block_id": "url", "optional": True,
+            "label": {"type": "plain_text", "text": "Job Posting URL"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["url"]} if a.get("url") else {} ),
+                "placeholder": {"type": "plain_text", "text": "https://…"},
+            },
+        },
+        # DUA
+        {
+            "type": "input", "block_id": "dua", "optional": True,
+            "label": {"type": "plain_text", "text": "Unemployment (DUA)"},
+            "element": {
+                "type": "checkboxes", "action_id": "value",
+                "options": [{"text": {"type": "plain_text", "text": "Reported to DUA"}, "value": "yes"}],
+                **( {"initial_options": [{"text": {"type": "plain_text", "text": "Reported to DUA"}, "value": "yes"}]}
+                    if a.get("dua") else {} ),
+            },
+        },
+        # Recruiter Name
+        {
+            "type": "input", "block_id": "recruiter_name", "optional": True,
+            "label": {"type": "plain_text", "text": "Recruiter Name"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["recruiter_name"]} if a.get("recruiter_name") else {} ),
+                "placeholder": {"type": "plain_text", "text": "Jane Smith"},
+            },
+        },
+        # Recruiter Email
+        {
+            "type": "input", "block_id": "recruiter_email", "optional": True,
+            "label": {"type": "plain_text", "text": "Recruiter Email"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                **( {"initial_value": a["recruiter_email"]} if a.get("recruiter_email") else {} ),
+                "placeholder": {"type": "plain_text", "text": "jane@company.com"},
+            },
+        },
+        # Note
+        {
+            "type": "input", "block_id": "note", "optional": True,
+            "label": {"type": "plain_text", "text": "Add a Note (optional)"},
+            "element": {
+                "type": "plain_text_input", "action_id": "value",
+                "multiline": True,
+                "placeholder": {"type": "plain_text", "text": "e.g. Got a callback from recruiter"},
+            },
+        },
+    ]
+
+    ack(response_action="push", view={
+        "type": "modal",
+        "callback_id": "track_update_edit",
+        "title": {"type": "plain_text", "text": "Edit Application"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close":  {"type": "plain_text", "text": "Cancel"},
+        "private_metadata": app_id,
+        "blocks": blocks,
+    })
+
+
+@app.view("track_update_edit")
+def track_update_edit_submit(ack, body, client, view):
+    ack()
+    app_id  = view["private_metadata"]
+    channel = body["user"]["id"]
+    vals    = view["state"]["values"]
+
+    def _txt(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("value") or "").strip()
+
+    def _sel(block, fallback=""):
+        opt = (vals.get(block, {}).get("value", {}) or {}).get("selected_option", {})
+        return (opt.get("value") or fallback)
+
+    def _date(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("selected_date") or None)
+
+    def _dua(block):
+        opts = ((vals.get(block, {}).get("value", {}) or {}).get("selected_options") or [])
+        return any(o.get("value") == "yes" for o in opts)
+
+    date_applied = _date("date_applied")
+    if date_applied:
+        date_applied = f"{date_applied}T00:00:00Z"
+
+    updates = {
+        "status":          _sel("status"),
+        "priority":        _sel("priority"),
+        "date_applied":    date_applied,
+        "job_source":      _txt("job_source") or None,
+        "location":        _txt("location") or None,
+        "salary_range":    _txt("salary_range") or None,
+        "url":             _txt("url") or None,
+        "dua":             _dua("dua"),
+        "recruiter_name":  _txt("recruiter_name") or None,
+        "recruiter_email": _txt("recruiter_email") or None,
+    }
+    # Strip None values so we don't overwrite fields with null
+    updates = {k: v for k, v in updates.items() if v is not None or k in ("dua",)}
+    note = _txt("note")
 
     try:
-        record = _update_app(app_id, {"status": status})
+        record = _update_app(app_id, updates)
         if note:
             _add_comment(app_id, note)
         client.chat_postMessage(
             channel=channel,
             text=(
                 f":pencil2: Updated *{record.get('role_title')}* at *{record.get('company')}* "
-                f"→ *{status}*"
+                f"→ *{updates.get('status', record.get('status'))}*"
                 + (f"\n> {note}" if note else "")
                 + f"\n<{TRACKER_URL}?app={app_id}|View in Tracker →>"
             ),
