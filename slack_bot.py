@@ -2024,7 +2024,7 @@ def cal_week_command(ack, respond):
 # /cal-add — create a calendar event (modal)
 # ---------------------------------------------------------------------------
 
-def _cal_add_blocks(user_tz: str = "UTC") -> list:
+def _cal_add_blocks() -> list:
     def _sel_opt(val, label):
         return {"text": {"type": "plain_text", "text": label}, "value": val}
 
@@ -2068,10 +2068,18 @@ def _cal_add_blocks(user_tz: str = "UTC") -> list:
         {
             "type": "input", "block_id": "event_time",
             "label": {"type": "plain_text", "text": "Time (HH:MM, 24h)"},
-            "hint":  {"type": "plain_text", "text": f"Your timezone: {user_tz}. e.g. 14:00 for 2:00 PM."},
+            "hint":  {"type": "plain_text", "text": "e.g. 14:00 for 2:00 PM in the timezone below"},
             "element": {"type": "plain_text_input", "action_id": "value",
                         "placeholder": {"type": "plain_text", "text": "14:00"},
                         "initial_value": "09:00"},
+        },
+        {
+            "type": "input", "block_id": "event_tz",
+            "label": {"type": "plain_text", "text": "Timezone"},
+            "hint":  {"type": "plain_text", "text": "IANA timezone name, e.g. America/New_York, America/Los_Angeles, Europe/London"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "initial_value": "America/New_York",
+                        "placeholder": {"type": "plain_text", "text": "America/New_York"}},
         },
         {
             "type": "input", "block_id": "duration",
@@ -2127,29 +2135,9 @@ def _cal_add_blocks(user_tz: str = "UTC") -> list:
     ]
 
 
-def _get_user_tz(client, user_id: str) -> str:
-    """Return the user's Slack profile timezone, with a hard 1.5s timeout.
-
-    views_open must fire before the trigger_id expires (3s window). Running
-    users_info with a thread+join ensures we never block long enough to miss it.
-    """
-    result = ["UTC"]
-    def _fetch():
-        try:
-            info = client.users_info(user=user_id)
-            result[0] = info["user"].get("tz") or "UTC"
-        except Exception:
-            pass
-    t = threading.Thread(target=_fetch, daemon=True)
-    t.start()
-    t.join(timeout=1.5)
-    return result[0]
-
-
 @app.command("/cal-add")
 def cal_add_command(ack, body, client):
     ack()
-    user_tz = _get_user_tz(client, body["user"]["id"])
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
@@ -2158,8 +2146,7 @@ def cal_add_command(ack, body, client):
             "title": {"type": "plain_text", "text": "Add Calendar Event"},
             "submit": {"type": "plain_text", "text": "Add"},
             "close":  {"type": "plain_text", "text": "Cancel"},
-            "private_metadata": user_tz,
-            "blocks": _cal_add_blocks(user_tz=user_tz),
+            "blocks": _cal_add_blocks(),
         },
     )
 
@@ -2187,7 +2174,6 @@ def cal_add_view_submit(ack, body, client, view):
     ack()
     vals     = view["state"]["values"]
     channel  = body["user"]["id"]
-    user_tz  = view.get("private_metadata") or "UTC"
 
     def _txt(block):
         return ((vals.get(block, {}).get("value", {}) or {}).get("value") or "").strip()
@@ -2207,6 +2193,7 @@ def cal_add_view_submit(ack, body, client, view):
     event_type = _sel("event_type", "custom")
     date_str   = _date("event_date")
     time_str   = _txt("event_time") or "09:00"
+    user_tz    = _txt("event_tz") or "America/New_York"
     duration   = _txt("duration") or "60"
     app_id     = _sel("app_link", "none")
     offset_str = _txt("reminder_offset")
