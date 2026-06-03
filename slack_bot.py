@@ -1881,6 +1881,506 @@ def _model_check_loop():
 
 
 # ---------------------------------------------------------------------------
+# Calendar helpers
+# ---------------------------------------------------------------------------
+
+CALENDAR_URL = f"{API_BASE}/calendar.html"
+
+EVENT_TYPE_LABELS = {
+    "interview":      "Interview",
+    "phone_screen":   "Phone Screen",
+    "deadline":       "Deadline",
+    "follow_up":      "Follow-Up",
+    "offer_deadline": "Offer Deadline",
+    "prep":           "Prep",
+    "custom":         "Custom",
+}
+EVENT_TYPE_EMOJI = {
+    "interview":      "🎯",
+    "phone_screen":   "📞",
+    "deadline":       "⏰",
+    "follow_up":      "📬",
+    "offer_deadline": "🟣",
+    "prep":           "📚",
+    "custom":         "📅",
+}
+VALID_EVENT_TYPES = list(EVENT_TYPE_LABELS.keys())
+
+
+def _get_events(from_dt: str | None = None, to_dt: str | None = None) -> list[dict]:
+    params = {}
+    if from_dt:
+        params["from"] = from_dt
+    if to_dt:
+        params["to"] = to_dt
+    r = _api("get", "/api/calendar", params=params)
+    r.raise_for_status()
+    return r.json().get("events", [])
+
+
+def _get_upcoming_events() -> list[dict]:
+    r = _api("get", "/api/calendar/upcoming")
+    r.raise_for_status()
+    return r.json().get("events", [])
+
+
+def _create_cal_event(payload: dict) -> dict:
+    r = _api("post", "/api/calendar", json=payload)
+    r.raise_for_status()
+    return r.json()
+
+
+def _delete_cal_event(event_id: str) -> None:
+    r = _api("delete", f"/api/calendar/{event_id}")
+    r.raise_for_status()
+
+
+def _fmt_event_dt(iso: str) -> str:
+    if not iso:
+        return "—"
+    try:
+        import datetime as _dt
+        d = _dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        # %-d / %-I are Linux-only; strip the leading zero manually for portability
+        day  = str(d.day)
+        hour = d.hour % 12 or 12
+        minute = f"{d.minute:02d}"
+        ampm = "AM" if d.hour < 12 else "PM"
+        return f"{d.strftime('%a %b')}{day}, {hour}:{minute} {ampm} UTC"
+    except Exception:
+        return iso[:16].replace("T", " ") + " UTC"
+
+
+def _event_line(ev: dict) -> str:
+    emoji  = EVENT_TYPE_EMOJI.get(ev.get("event_type", ""), "📅")
+    title  = ev.get("title", "?")
+    dt     = _fmt_event_dt(ev.get("datetime", ""))
+    return f"{emoji} *{title}*  ·  {dt}"
+
+
+def _cal_event_options(events: list[dict] | None = None) -> list[dict]:
+    if events is None:
+        events = _get_events()
+    events = sorted(events, key=lambda e: e.get("datetime", ""))
+    options = []
+    for ev in events[:100]:
+        label = f"{ev.get('title','?')} — {_fmt_event_dt(ev.get('datetime',''))}"
+        if len(label) > 75:
+            label = label[:72] + "…"
+        options.append({
+            "text":  {"type": "plain_text", "text": label},
+            "value": ev["id"],
+        })
+    return options
+
+
+# ---------------------------------------------------------------------------
+# /cal-today — events today
+# ---------------------------------------------------------------------------
+
+@app.command("/cal-today")
+def cal_today_command(ack, respond):
+    ack()
+    import datetime as _dt
+    today = _dt.date.today()
+    from_dt = f"{today}T00:00:00Z"
+    to_dt   = f"{today}T23:59:59Z"
+    try:
+        events = _get_events(from_dt=from_dt, to_dt=to_dt)
+    except Exception as exc:
+        respond(f":x: Could not load calendar: {exc}")
+        return
+
+    if not events:
+        respond(f":calendar: No events today. <{CALENDAR_URL}|Open Calendar →>")
+        return
+
+    header = f":calendar: *Today — {today.strftime('%A, %B %-d')}* ({len(events)} event{'s' if len(events) != 1 else ''})"
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
+    for ev in events:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _event_line(ev)}})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"<{CALENDAR_URL}|Open Calendar →>"}]})
+    respond(blocks=blocks, text=header)
+
+
+# ---------------------------------------------------------------------------
+# /cal-week — next 7 days
+# ---------------------------------------------------------------------------
+
+@app.command("/cal-week")
+def cal_week_command(ack, respond):
+    ack()
+    try:
+        events = _get_upcoming_events()
+    except Exception as exc:
+        respond(f":x: Could not load calendar: {exc}")
+        return
+
+    if not events:
+        respond(f":calendar: No events in the next 7 days. <{CALENDAR_URL}|Open Calendar →>")
+        return
+
+    header = f":calendar: *Upcoming — Next 7 Days* ({len(events)} event{'s' if len(events) != 1 else ''})"
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
+    for ev in events[:20]:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _event_line(ev)}})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"<{CALENDAR_URL}|Open Calendar →>"}]})
+    respond(blocks=blocks, text=header)
+
+
+# ---------------------------------------------------------------------------
+# /cal-add — create a calendar event (modal)
+# ---------------------------------------------------------------------------
+
+def _cal_add_blocks() -> list:
+    def _sel_opt(val, label):
+        return {"text": {"type": "plain_text", "text": label}, "value": val}
+
+    # Linked application options
+    app_opts = [{"text": {"type": "plain_text", "text": "— None —"}, "value": "none"}]
+    try:
+        apps = _get_apps()
+        for a in apps[:99]:
+            label = f"{a.get('company','?')} — {a.get('role_title','?')}"
+            if len(label) > 75:
+                label = label[:72] + "…"
+            app_opts.append({
+                "text":  {"type": "plain_text", "text": label},
+                "value": a["id"],
+            })
+    except Exception:
+        pass
+
+    return [
+        {
+            "type": "input", "block_id": "title",
+            "label": {"type": "plain_text", "text": "Event Title"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "e.g. HM Interview — Salesforce"}},
+        },
+        {
+            "type": "input", "block_id": "event_type",
+            "label": {"type": "plain_text", "text": "Event Type"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                "initial_option": _sel_opt("interview", "Interview"),
+                "options": [_sel_opt(k, v) for k, v in EVENT_TYPE_LABELS.items()],
+            },
+        },
+        {
+            "type": "input", "block_id": "event_date",
+            "label": {"type": "plain_text", "text": "Date"},
+            "element": {"type": "datepicker", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Select date"}},
+        },
+        {
+            "type": "input", "block_id": "event_time",
+            "label": {"type": "plain_text", "text": "Time (HH:MM, 24h UTC)"},
+            "hint":  {"type": "plain_text", "text": "Enter in UTC. e.g. 14:00 for 2:00 PM UTC."},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "14:00"},
+                        "initial_value": "09:00"},
+        },
+        {
+            "type": "input", "block_id": "duration",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Duration (minutes)"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "initial_value": "60",
+                        "placeholder": {"type": "plain_text", "text": "60"}},
+        },
+        {
+            "type": "input", "block_id": "app_link",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Linked Application"},
+            "element": {
+                "type": "static_select", "action_id": "value",
+                "initial_option": {"text": {"type": "plain_text", "text": "— None —"}, "value": "none"},
+                "options": app_opts,
+            },
+        },
+        {
+            "type": "input", "block_id": "reminder_offset",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Remind me (minutes before)"},
+            "hint":  {"type": "plain_text", "text": "0 = at event time. 60 = 1h before. 1440 = 1 day before."},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "initial_value": "1440",
+                        "placeholder": {"type": "plain_text", "text": "1440"}},
+        },
+        {
+            "type": "input", "block_id": "reminder_channels",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Reminder Channels"},
+            "element": {
+                "type": "checkboxes", "action_id": "value",
+                "initial_options": [
+                    {"text": {"type": "plain_text", "text": "Email"}, "value": "email"},
+                    {"text": {"type": "plain_text", "text": "Slack"}, "value": "slack"},
+                ],
+                "options": [
+                    {"text": {"type": "plain_text", "text": "Email"}, "value": "email"},
+                    {"text": {"type": "plain_text", "text": "Slack"}, "value": "slack"},
+                ],
+            },
+        },
+        {
+            "type": "input", "block_id": "notes",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Notes"},
+            "element": {"type": "plain_text_input", "action_id": "value",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "Interviewer name, focus areas, prep notes…"}},
+        },
+    ]
+
+
+@app.command("/cal-add")
+def cal_add_command(ack, body, client):
+    ack()
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "cal_add_submit",
+            "title": {"type": "plain_text", "text": "Add Calendar Event"},
+            "submit": {"type": "plain_text", "text": "Add"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": _cal_add_blocks(),
+        },
+    )
+
+
+@app.view("cal_add_submit")
+def cal_add_view_submit(ack, body, client, view):
+    ack()
+    vals    = view["state"]["values"]
+    channel = body["user"]["id"]
+
+    def _txt(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("value") or "").strip()
+
+    def _sel(block, fallback=""):
+        opt = (vals.get(block, {}).get("value", {}) or {}).get("selected_option", {}) or {}
+        return opt.get("value") or fallback
+
+    def _date(block):
+        return ((vals.get(block, {}).get("value", {}) or {}).get("selected_date") or None)
+
+    def _checks(block):
+        opts = ((vals.get(block, {}).get("value", {}) or {}).get("selected_options") or [])
+        return [o["value"] for o in opts]
+
+    title      = _txt("title")
+    event_type = _sel("event_type", "custom")
+    date_str   = _date("event_date")
+    time_str   = _txt("event_time") or "09:00"
+    duration   = _txt("duration") or "60"
+    app_id     = _sel("app_link", "none")
+    offset_str = _txt("reminder_offset")
+    channels   = _checks("reminder_channels")
+    notes      = _txt("notes")
+
+    if not title or not date_str:
+        client.chat_postMessage(channel=channel, text=":x: Title and date are required.")
+        return
+
+    # Build ISO datetime (treat as UTC)
+    time_clean = time_str.replace(".", ":").strip()
+    try:
+        h, m = (time_clean.split(":") + ["0"])[:2]
+        dt_iso = f"{date_str}T{int(h):02d}:{int(m):02d}:00Z"
+    except Exception:
+        client.chat_postMessage(channel=channel, text=":x: Invalid time format. Use HH:MM (e.g. 14:00).")
+        return
+
+    reminders = []
+    if offset_str and channels:
+        try:
+            offset_minutes = max(0, int(offset_str))
+            reminders = [{"offset_minutes": offset_minutes, "channels": channels}]
+        except ValueError:
+            pass
+
+    payload = {
+        "title":            title,
+        "event_type":       event_type,
+        "datetime":         dt_iso,
+        "timezone":         "UTC",
+        "duration_minutes": max(0, min(1440, int(duration) if duration.isdigit() else 60)),
+        "notes":            notes,
+        "app_id":           app_id if app_id != "none" else None,
+        "reminders":        reminders,
+    }
+
+    try:
+        ev = _create_cal_event(payload)
+        type_label = EVENT_TYPE_LABELS.get(event_type, event_type)
+        client.chat_postMessage(
+            channel=channel,
+            text=(
+                f":white_check_mark: *{title}* added to calendar\n"
+                f"• {type_label}  ·  {_fmt_event_dt(ev.get('datetime',''))}\n"
+                f"<{CALENDAR_URL}|Open Calendar →>"
+            ),
+        )
+    except Exception as exc:
+        client.chat_postMessage(channel=channel, text=f":x: Failed to create event: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# /cal-view — view event details
+# ---------------------------------------------------------------------------
+
+@app.command("/cal-view")
+def cal_view_command(ack, body, client, respond):
+    ack()
+    try:
+        options = _cal_event_options()
+    except Exception as exc:
+        respond(f":x: Could not load calendar: {exc}")
+        return
+
+    if not options:
+        respond(f"No events found. Use `/cal-add` to create one or <{CALENDAR_URL}|open the calendar>.")
+        return
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "cal_view_submit",
+            "title": {"type": "plain_text", "text": "View Event"},
+            "submit": {"type": "plain_text", "text": "View"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [{
+                "type": "input", "block_id": "event_id",
+                "label": {"type": "plain_text", "text": "Select event"},
+                "element": {
+                    "type": "static_select", "action_id": "value",
+                    "placeholder": {"type": "plain_text", "text": "Select an event…"},
+                    "options": options,
+                },
+            }],
+        },
+    )
+
+
+@app.view("cal_view_submit")
+def cal_view_view_submit(ack, body, client, view):
+    ack()
+    event_id = view["state"]["values"]["event_id"]["value"]["selected_option"]["value"]
+    channel  = body["user"]["id"]
+    try:
+        r = _api("get", f"/api/calendar/{event_id}")
+        r.raise_for_status()
+        ev = r.json()
+    except Exception as exc:
+        client.chat_postMessage(channel=channel, text=f":x: Could not load event: {exc}")
+        return
+
+    type_label = EVENT_TYPE_LABELS.get(ev.get("event_type", ""), ev.get("event_type", "?"))
+    emoji      = EVENT_TYPE_EMOJI.get(ev.get("event_type", ""), "📅")
+    lines = [
+        f"{emoji} *{ev.get('title')}*",
+        f"• Type: {type_label}",
+        f"• Time: {_fmt_event_dt(ev.get('datetime',''))} ({ev.get('timezone','UTC')})",
+    ]
+    if ev.get("duration_minutes"):
+        lines.append(f"• Duration: {ev['duration_minutes']} min")
+    if ev.get("notes"):
+        lines.append(f"• Notes: {ev['notes'][:200]}")
+    if ev.get("reminders"):
+        for r in ev["reminders"]:
+            offset = r.get("offset_minutes", 0)
+            label  = f"{offset}m" if offset < 60 else (f"{offset//60}h" if offset < 1440 else f"{offset//1440}d")
+            lines.append(f"• 🔔 {label} before via {', '.join(r.get('channels',[]))}")
+
+    lines.append(f"<{CALENDAR_URL}|Open Calendar →>")
+    client.chat_postMessage(channel=channel, text="\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# /cal-delete — delete a calendar event
+# ---------------------------------------------------------------------------
+
+@app.command("/cal-delete")
+def cal_delete_command(ack, body, client, respond):
+    ack()
+    try:
+        options = _cal_event_options()
+    except Exception as exc:
+        respond(f":x: Could not load calendar: {exc}")
+        return
+
+    if not options:
+        respond("No events found.")
+        return
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "cal_delete_select",
+            "title": {"type": "plain_text", "text": "Delete Event"},
+            "submit": {"type": "plain_text", "text": "Continue →"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": ":warning: *This will permanently delete the event and all its reminders.*"},
+                },
+                {
+                    "type": "input", "block_id": "event_id",
+                    "label": {"type": "plain_text", "text": "Select event to delete"},
+                    "element": {
+                        "type": "static_select", "action_id": "value",
+                        "placeholder": {"type": "plain_text", "text": "Select an event…"},
+                        "options": options,
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("cal_delete_select")
+def cal_delete_select_submit(ack, body, client, view):
+    event_id = view["state"]["values"]["event_id"]["value"]["selected_option"]["value"]
+    label    = view["state"]["values"]["event_id"]["value"]["selected_option"]["text"]["text"]
+    ack({
+        "response_action": "push",
+        "view": {
+            "type": "modal",
+            "callback_id": "cal_delete_confirm",
+            "title": {"type": "plain_text", "text": "Confirm Delete"},
+            "submit": {"type": "plain_text", "text": "Delete"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "private_metadata": event_id,
+            "blocks": [{
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":warning: Are you sure you want to delete:\n\n*{label}*\n\nThis cannot be undone.",
+                },
+            }],
+        },
+    })
+
+
+@app.view("cal_delete_confirm")
+def cal_delete_confirm_submit(ack, body, client, view):
+    ack()
+    event_id = view["private_metadata"]
+    channel  = body["user"]["id"]
+    try:
+        _delete_cal_event(event_id)
+        client.chat_postMessage(channel=channel, text=":wastebasket: Calendar event deleted.")
+    except Exception as exc:
+        client.chat_postMessage(channel=channel, text=f":x: Failed to delete: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # /help — command reference
 # ---------------------------------------------------------------------------
 
@@ -1909,6 +2409,17 @@ def help_command(ack, respond):
             "*/apply* — Generate resume, ATS resume & cover letter for a job\n"
             "*/prep* — Generate an interview prep document\n"
             "*/runs* — List your recent agent run folders from Drive"
+        )}},
+        {"type": "divider"},
+
+        # Calendar
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*📅  Calendar*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/cal-today* — Show today's events\n"
+            "*/cal-week* — Show the next 7 days\n"
+            "*/cal-add* — Add a calendar event (with reminders)\n"
+            "*/cal-view* — View full details of an event\n"
+            "*/cal-delete* — Delete an event (two-step confirm)"
         )}},
         {"type": "divider"},
 
@@ -1973,11 +2484,16 @@ def handle_app_home_opened(client, event, logger):
     """Render a dynamic home tab with pipeline stats and command reference."""
     user_id = event["user"]
 
-    # Fetch pipeline data (best-effort — fall back to empty on error)
+    # Fetch pipeline data and upcoming calendar events (best-effort)
     try:
         apps = _get_apps()
     except Exception:
         apps = []
+
+    try:
+        upcoming = _get_upcoming_events()[:5]
+    except Exception:
+        upcoming = []
 
     STATUS_ORDER = [
         "Interviewing", "Phone Screen", "Applied", "On Hold",
@@ -2015,7 +2531,7 @@ def handle_app_home_opened(client, event, logger):
                 "text": (
                     "AI-powered job application agent — tailored resumes, "
                     "cover letters, interview prep, and application tracking.\n"
-                    f"<{API_BASE}|Open web app>  ·  <{API_BASE}/tracking.html|Application Tracker>"
+                    f"<{API_BASE}|Open web app>  ·  <{API_BASE}/tracking.html|Tracker>  ·  <{API_BASE}/calendar.html|Calendar>"
                 ),
             },
         },
@@ -2035,6 +2551,21 @@ def handle_app_home_opened(client, event, logger):
         },
         {"type": "divider"},
 
+        # Upcoming calendar events
+        *([
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*📅 Upcoming ({len(upcoming)})*\n\n"
+                        + "\n".join(_event_line(ev) for ev in upcoming)
+                    ),
+                },
+            },
+        ] if upcoming else []),
+
         # Quick commands
         {"type": "section", "text": {"type": "mrkdwn", "text": "*⚡ Quick Commands*"}},
         {
@@ -2044,10 +2575,10 @@ def handle_app_home_opened(client, event, logger):
                 "text": (
                     "*/apply* — Generate resume + cover letter\n"
                     "*/prep* — Generate interview prep doc\n"
+                    "*/cal-today* — Today's events\n"
+                    "*/cal-add* — Add calendar event\n"
                     "*/tracker* — Pipeline summary\n"
-                    "*/track-add* — Add application\n"
-                    "*/track-update* — Update status\n"
-                    "*/track-note* — Add a note"
+                    "*/track-add* — Add application"
                 ),
             },
         },
@@ -2056,10 +2587,10 @@ def handle_app_home_opened(client, event, logger):
             "text": {
                 "type": "mrkdwn",
                 "text": (
+                    "*/track-update* — Update status\n"
+                    "*/track-note* — Add a note\n"
                     "*/runs* — Recent Drive run folders\n"
                     "*/whoami* — Account details\n"
-                    "*/activity* — Recent audit events\n"
-                    "*/company [name]* — Company lookup\n"
                     "*/jobstatus* — API health\n"
                     "*/help* — Full command reference"
                 ),

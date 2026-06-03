@@ -51,12 +51,14 @@ from pydantic import BaseModel
 from scripts import storage
 from scripts import user_audit
 from scripts import email_verification as ev
+from scripts import calendar as cal_store
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
 from scripts.session import create_session_token, verify_session_token
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
 from routers.admin import router as admin_router
+from routers.calendar import router as calendar_router
 try:
     from apply import (
         DEFAULT_MODEL,
@@ -359,6 +361,12 @@ app.include_router(applications_router)
 app.include_router(companies_router)
 app.include_router(auth_google_router)
 app.include_router(admin_router)
+app.include_router(calendar_router)
+
+
+@app.on_event("startup")
+async def _on_startup():
+    _start_reminder_scheduler()
 
 
 @app.middleware("http")
@@ -436,6 +444,104 @@ def _check_rate_limit(request: Request, bucket: str, max_hits: int, window_secs:
     ip = _client_ip(request) or "unknown"
     if not _rate_limit(f"{bucket}:{ip}", max_hits, window_secs):
         raise HTTPException(429, f"Too many requests. Try again in {window_secs} seconds.")
+
+# ---------------------------------------------------------------------------
+# Reminder scheduler — fires calendar reminders via email and/or Slack DM
+# ---------------------------------------------------------------------------
+
+_REMINDER_POLL_INTERVAL = 60  # seconds
+_SLACK_NOTIFY_USER_ID   = os.environ.get("SLACK_NOTIFY_USER_ID", "")  # Slack user DM ID
+
+
+def _send_slack_dm(text: str) -> None:
+    """Post a Slack DM to SLACK_NOTIFY_USER_ID if configured."""
+    bot_token = os.environ.get("SLACK_BOT_TOKEN", "")
+    user_id   = _SLACK_NOTIFY_USER_ID
+    if not bot_token or not user_id:
+        return
+    try:
+        import requests as _requests
+        _requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": f"Bearer {bot_token}"},
+            json={"channel": user_id, "text": text},
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+def _fire_reminder(user_id: str, reminder: dict, event: dict) -> None:
+    title    = event.get("title", "Event")
+    dt_iso   = event.get("datetime", "")
+    tz_label = event.get("timezone", "UTC")
+    dt_label = dt_iso[:16].replace("T", " ") + " UTC" if dt_iso else "—"
+    channels = reminder.get("channels", [])
+    offset   = reminder.get("offset_minutes", 0)
+
+    if offset == 0:
+        time_label = "now"
+    elif offset < 60:
+        time_label = f"in {offset} minutes"
+    elif offset < 1440:
+        h = offset // 60
+        time_label = f"in {h} hour{'s' if h > 1 else ''}"
+    else:
+        d = offset // 1440
+        time_label = f"in {d} day{'s' if d > 1 else ''}"
+
+    subject = f"Reminder: {title} ({time_label})"
+    body    = f"You have an upcoming event: {title}\nTime: {dt_label} ({tz_label})\n\nView your calendar: {_APP_URL}/calendar.html"
+
+    if "email" in channels and _NOTIFY_EMAIL:
+        body_html = f"""
+        <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.25rem">
+          &#128197; {title}
+        </h2>
+        <p style="margin:0 0 .5rem;color:#374151">
+          <strong>Time:</strong> {dt_label} ({tz_label})
+        </p>
+        <p style="margin:0 0 1.5rem;color:#374151">
+          This event is {time_label}.
+        </p>
+        <a href="{_APP_URL}/calendar.html"
+           style="display:inline-block;background:#1A3C5E;color:#FFFFFF;text-decoration:none;
+                  padding:.75rem 1.5rem;border-radius:6px;font-weight:600;font-size:.95rem">
+          Open Calendar &rarr;
+        </a>"""
+        _send_email(_NOTIFY_EMAIL, subject, body, html=_email_html(body_html))
+
+    if "slack" in channels:
+        slack_text = f":calendar: *Reminder: {title}*\n{dt_label} ({tz_label})  —  {time_label}\n<{_APP_URL}/calendar.html|Open Calendar →>"
+        _send_slack_dm(slack_text)
+
+
+def _reminder_scheduler_loop() -> None:
+    """Background thread: poll every 60s and fire due reminders."""
+    time.sleep(15)  # brief startup delay
+    while True:
+        try:
+            user_ids = cal_store.list_all_user_ids_with_reminders()
+            for uid in user_ids:
+                try:
+                    due = cal_store.list_due_reminders(uid)
+                    for reminder in due:
+                        event_id = reminder.get("event_id", "")
+                        event    = cal_store.get_event(uid, event_id) if event_id else None
+                        if event:
+                            _fire_reminder(uid, reminder, event)
+                        cal_store.mark_reminder_sent(uid, reminder["id"])
+                except Exception:
+                    logger.exception("Reminder scheduler error for user %s", uid)
+        except Exception:
+            logger.exception("Reminder scheduler top-level error")
+        time.sleep(_REMINDER_POLL_INTERVAL)
+
+
+def _start_reminder_scheduler() -> None:
+    t = threading.Thread(target=_reminder_scheduler_loop, daemon=True, name="reminder-scheduler")
+    t.start()
+
 
 # ---------------------------------------------------------------------------
 # In-memory stores

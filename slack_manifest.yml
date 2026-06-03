@@ -14,6 +14,13 @@ display_information:
       /prep         — Generate an interview prep reference card
       /runs         — List your recent Drive run folders
 
+    📅 Calendar
+      /cal-today    — Show today's events
+      /cal-week     — Show the next 7 days
+      /cal-add      — Add a calendar event with reminders
+      /cal-view     — View full details of an event
+      /cal-delete   — Delete a calendar event (with confirmation)
+
     📋 Application Tracker
       /tracker      — Pipeline summary grouped by status
       /track-list   — List applications (optional: filter by status)
@@ -57,6 +64,27 @@ features:
     - command: /runs
       description: List your recent agent run folders from Google Drive
       usage_hint: (no arguments)
+      should_escape: false
+    # Calendar
+    - command: /cal-today
+      description: Show today's calendar events
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /cal-week
+      description: Show calendar events in the next 7 days
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /cal-add
+      description: Add a calendar event with optional reminders and application link
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /cal-view
+      description: View full details of a calendar event
+      usage_hint: (opens a selector)
+      should_escape: false
+    - command: /cal-delete
+      description: Delete a calendar event (requires confirmation)
+      usage_hint: (opens a selector)
       should_escape: false
     # Tracker
     - command: /tracker

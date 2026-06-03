@@ -74,6 +74,24 @@ def put_text(key: str, text: str) -> None:
     put_bytes(key, text.encode("utf-8"), "text/plain; charset=utf-8")
 
 
+def delete_text(key: str) -> None:
+    delete_bytes(key)
+
+
+def list_keys(prefix: str) -> list[str]:
+    """Return all object keys under prefix (paginates automatically)."""
+    try:
+        paginator = _client().get_paginator("list_objects_v2")
+        keys = []
+        for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                keys.append(obj["Key"])
+        return keys
+    except Exception:
+        logger.exception("list_keys failed for prefix %r", prefix)
+        return []
+
+
 def get_bytes(key: str) -> bytes | None:
     try:
         resp = _client().get_object(Bucket=BUCKET, Key=key)
