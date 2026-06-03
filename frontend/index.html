@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Application Agent</title>
   <link rel="icon" href="/favicon.png" type="image/png">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Anti-FOUC: apply saved theme before CSS renders -->
   <script>
     (function(){
@@ -199,6 +200,59 @@
       box-shadow: 0 0 0 3px rgba(99,102,241,.15);
     }
     textarea { resize: vertical; min-height: 180px; line-height: 1.5; }
+
+    /* ── Markdown editor (JD field) ──────────────────────────────── */
+    .md-editor-wrap { border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
+    .md-editor-wrap:focus-within { border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .md-tabs {
+      display: flex; align-items: center;
+      background: var(--bg-card); border-bottom: 1px solid var(--input-border);
+      padding: 0 .5rem; gap: 0;
+    }
+    .md-tab {
+      padding: .35rem .75rem; font-size: .8rem; font-weight: 600;
+      color: var(--muted); background: none; border: none;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      cursor: pointer; transition: color .15s, border-color .15s;
+    }
+    .md-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .md-tab:hover:not(.active) { color: var(--text); }
+    .md-toolbar {
+      display: flex; align-items: center; gap: .2rem;
+      padding: .35rem .5rem; background: var(--bg-card);
+      border-bottom: 1px solid var(--input-border); flex-wrap: wrap;
+    }
+    .md-sep { width: 1px; height: 16px; background: var(--card-border); margin: 0 .15rem; }
+    .md-btn {
+      background: none; border: 1px solid transparent; border-radius: 4px;
+      padding: .15rem .45rem; font-size: .78rem; cursor: pointer;
+      color: var(--muted); font-family: inherit; line-height: 1.4;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .md-btn:hover { background: var(--fill); border-color: var(--border); color: var(--primary); }
+    .md-editor-wrap textarea {
+      border: none; border-radius: 0; box-shadow: none;
+      min-height: 220px; width: 100%; resize: vertical;
+    }
+    .md-editor-wrap textarea:focus { outline: none; box-shadow: none; border: none; }
+    .md-preview {
+      min-height: 220px; padding: .75rem 1rem;
+      font-size: .9rem; line-height: 1.6; color: var(--text);
+      background: var(--input-bg); overflow-y: auto;
+    }
+    .md-preview p  { margin: 0 0 .65rem; }
+    .md-preview h1, .md-preview h2, .md-preview h3 { font-weight: 700; margin: .75rem 0 .35rem; color: var(--primary); }
+    .md-preview h1 { font-size: 1.15rem; } .md-preview h2 { font-size: 1rem; } .md-preview h3 { font-size: .92rem; }
+    .md-preview ul, .md-preview ol { margin: 0 0 .65rem 1.25rem; padding: 0; }
+    .md-preview li { margin-bottom: .2rem; }
+    .md-preview strong { font-weight: 700; }
+    .md-preview em { font-style: italic; }
+    .md-preview code { font-family: monospace; font-size: .85em; background: var(--fill); padding: .1em .35em; border-radius: 3px; }
+    .md-preview pre  { background: var(--fill); border-radius: 6px; padding: .75rem; overflow-x: auto; margin: 0 0 .65rem; }
+    .md-preview pre code { background: none; padding: 0; }
+    .md-preview blockquote { border-left: 3px solid var(--border); margin: 0 0 .65rem; padding: .25rem .75rem; color: var(--muted); }
+    .md-preview hr { border: none; border-top: 1px solid var(--card-border); margin: .75rem 0; }
+    .md-preview a { color: var(--border); }
 
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
     @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
@@ -630,8 +684,32 @@
 
       <div class="field">
         <label for="job_posting">Job Posting</label>
-        <textarea id="job_posting" name="job_posting" rows="10"
-          placeholder="Paste the full job description here…" required></textarea>
+        <div class="md-editor-wrap" id="jdEditorWrap">
+          <!-- Tab bar -->
+          <div class="md-tabs">
+            <button type="button" class="md-tab active" id="jdTabWrite">Write</button>
+            <button type="button" class="md-tab"        id="jdTabPreview">Preview</button>
+          </div>
+          <!-- Toolbar (write mode only) -->
+          <div class="md-toolbar" id="jdToolbar">
+            <button type="button" class="md-btn" data-jdmd="bold"      title="Bold"><strong>B</strong></button>
+            <button type="button" class="md-btn" data-jdmd="italic"    title="Italic"><em>I</em></button>
+            <div class="md-sep"></div>
+            <button type="button" class="md-btn" data-jdmd="h2"        title="Heading 2">H2</button>
+            <button type="button" class="md-btn" data-jdmd="h3"        title="Heading 3">H3</button>
+            <div class="md-sep"></div>
+            <button type="button" class="md-btn" data-jdmd="ul"        title="Bullet list">• List</button>
+            <button type="button" class="md-btn" data-jdmd="ol"        title="Numbered list">1. List</button>
+            <div class="md-sep"></div>
+            <button type="button" class="md-btn" data-jdmd="code"      title="Code block">&lt;/&gt;</button>
+            <button type="button" class="md-btn" data-jdmd="hr"        title="Divider">—</button>
+          </div>
+          <!-- Textarea -->
+          <textarea id="job_posting" name="job_posting" rows="10"
+            placeholder="Paste the full job description here…" required></textarea>
+          <!-- Preview pane (hidden by default) -->
+          <div class="md-preview hidden" id="jdPreview" aria-live="polite"></div>
+        </div>
       </div>
       <div class="row">
         <div class="field">
@@ -806,6 +884,70 @@
 </div><!-- /container -->
 
 <script>
+  // ── Markdown editor — Job Description field ───────────────────────
+  (function () {
+    if (typeof marked === 'undefined') return;
+    marked.use({ breaks: true, gfm: true });
+
+    const ta        = document.getElementById('job_posting');
+    const preview   = document.getElementById('jdPreview');
+    const toolbar   = document.getElementById('jdToolbar');
+    const tabWrite  = document.getElementById('jdTabWrite');
+    const tabPrev   = document.getElementById('jdTabPreview');
+
+    function showWrite() {
+      ta.classList.remove('hidden');
+      toolbar.classList.remove('hidden');
+      preview.classList.add('hidden');
+      tabWrite.classList.add('active');
+      tabPrev.classList.remove('active');
+      ta.focus();
+    }
+
+    function showPreview() {
+      const html = marked.parse(ta.value || '*Nothing to preview yet.*');
+      preview.innerHTML = html;
+      ta.classList.add('hidden');
+      toolbar.classList.add('hidden');
+      preview.classList.remove('hidden');
+      tabWrite.classList.remove('active');
+      tabPrev.classList.add('active');
+    }
+
+    tabWrite.addEventListener('click', showWrite);
+    tabPrev.addEventListener('click', showPreview);
+
+    // Toolbar button actions
+    toolbar.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-jdmd]');
+      if (!btn) return;
+      const start  = ta.selectionStart;
+      const end    = ta.selectionEnd;
+      const sel    = ta.value.slice(start, end);
+      const before = ta.value.slice(0, start);
+      const after  = ta.value.slice(end);
+      let insert   = '';
+
+      switch (btn.dataset.jdmd) {
+        case 'bold':   insert = `**${sel || 'bold text'}**`; break;
+        case 'italic': insert = `*${sel || 'italic text'}*`; break;
+        case 'h2':     insert = `\n## ${sel || 'Heading'}\n`; break;
+        case 'h3':     insert = `\n### ${sel || 'Heading'}\n`; break;
+        case 'ul':     insert = `\n- ${sel || 'item'}\n`; break;
+        case 'ol':     insert = `\n1. ${sel || 'item'}\n`; break;
+        case 'code':   insert = sel.includes('\n')
+                         ? `\`\`\`\n${sel || 'code'}\n\`\`\``
+                         : `\`${sel || 'code'}\``; break;
+        case 'hr':     insert = `\n\n---\n\n`; break;
+        default: return;
+      }
+      ta.value = before + insert + after;
+      const cursor = before.length + insert.length;
+      ta.setSelectionRange(cursor, cursor);
+      ta.focus();
+    });
+  })();
+
   // ── Theme ─────────────────────────────────────────────────────────
   const ICONS = { light: '☀', dark: '🌙' };
   function applyTheme(t) {
@@ -1101,8 +1243,19 @@
     e.preventDefault();
 
     const raw = Object.fromEntries(new FormData(e.target));
-    const body = { job_posting: raw.job_posting, company: raw.company, role: raw.role };
-    if (raw.contact.trim()) body.contact = raw.contact.trim();
+    // job_posting textarea may be display:none in preview mode, so read it directly
+    const jobPosting = document.getElementById('job_posting').value;
+    if (!jobPosting.trim()) {
+      document.getElementById('job_posting').classList.remove('hidden');
+      document.getElementById('jdToolbar').classList.remove('hidden');
+      document.getElementById('jdPreview').classList.add('hidden');
+      document.getElementById('jdTabWrite').classList.add('active');
+      document.getElementById('jdTabPreview').classList.remove('active');
+      document.getElementById('job_posting').focus();
+      return;
+    }
+    const body = { job_posting: jobPosting, company: raw.company, role: raw.role };
+    if (raw.contact && raw.contact.trim()) body.contact = raw.contact.trim();
     if (_runAppId) body.app_id = _runAppId;
     _company = raw.company;
     _role    = raw.role;
