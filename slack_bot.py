@@ -372,7 +372,7 @@ def _track_add_blocks(prefill: dict | None = None) -> list:
             "hint":  {"type": "plain_text", "text": "Start typing to search — name and domain will auto-fill."},
             "element": {
                 "type": "external_select",
-                "action_id": "value",
+                "action_id": "company_search",
                 "placeholder": {"type": "plain_text", "text": "Search company name…"},
                 "min_query_length": 2,
             },
@@ -520,8 +520,9 @@ def track_add_view_submit(ack, body, client, view):
     channel = body["user"]["id"]
 
     # Company — decode "name|||domain" from external_select
+    # block_id="company_search", action_id="company_search"
     company_raw = (
-        (vals.get("company_search", {}).get("value", {}) or {})
+        (vals.get("company_search", {}).get("company_search", {}) or {})
         .get("selected_option", {})
         .get("value", "") or ""
     )
