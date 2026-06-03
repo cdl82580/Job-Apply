@@ -16,24 +16,39 @@ In production, run behind a reverse proxy or expose directly via Fly.io.
 Environment variables (optional):
   ANTHROPIC_API_KEY     — enables model auto-upgrade checks (every 6 h)
   SLACK_NOTIFY_CHANNEL  — channel/DM user ID for model upgrade notifications
+  SLACK_NOTIFY_USER_ID  — Slack user ID for calendar reminder DMs
 
 Slash commands handled:
   /apply           — generate resume + cover letter for a job
   /prep            — generate interview prep doc
+  /runs            — list recent Drive run folders
   /jobstatus       — check API health
+
+  /cal-today       — show today's calendar events
+  /cal-week        — show events in the next 7 days
+  /cal-add         — add a calendar event with reminders (modal)
+  /cal-view        — view full event details (modal)
+  /cal-delete      — delete a calendar event (modal + confirm)
 
   /tracker         — pipeline summary (counts by status)
   /track-list      — list active applications
+  /track-view      — view full application details (modal)
   /track-add       — add a new application record (modal)
   /track-update    — update an application's status (modal)
   /track-note      — add a comment to an application (modal)
   /track-delete    — delete an application (modal + confirm)
+
+  /company         — search company info via BrandFetch
+  /whoami          — show account details
+  /activity        — show 10 most recent audit events
 
   /profile-name    — update display name (modal)
   /profile-email   — change email address with re-verification (modal)
   /profile-password — change password (modal)
   /profile-resume  — upload a new master resume (.docx via DM file upload)
   /profile-guide   — edit profile & voice guide (modal)
+
+  /help            — full command reference
 """
 
 from __future__ import annotations
@@ -1444,29 +1459,6 @@ def company_command(ack, respond, body):
 
 
 # ---------------------------------------------------------------------------
-# /resend-verify — resend email verification
-# ---------------------------------------------------------------------------
-
-@app.command("/resend-verify")
-def resend_verify_command(ack, respond):
-    ack()
-    try:
-        r = _api("post", "/api/auth/resend-verification")
-        r.raise_for_status()
-        data = r.json()
-    except Exception as exc:
-        respond(f":x: Failed: {exc}")
-        return
-
-    if data.get("already_verified"):
-        respond(":white_check_mark: Your email is already verified — nothing to do.")
-    elif data.get("sent"):
-        respond(":email: Verification email sent! Check your inbox.")
-    else:
-        respond(":warning: Could not send — check that RESEND_API_KEY is configured.")
-
-
-# ---------------------------------------------------------------------------
 # /track-view — view full application details
 # ---------------------------------------------------------------------------
 
@@ -2460,7 +2452,6 @@ def help_command(ack, respond):
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🛠️  System*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             "*/jobstatus* — Check API health and storage status\n"
-            "*/resend-verify* — Resend your email verification\n"
             "*/help* — Show this command reference"
         )}},
         {"type": "divider"},

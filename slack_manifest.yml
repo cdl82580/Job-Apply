@@ -44,7 +44,6 @@ display_information:
 
     🛠️ System
       /jobstatus    — Check API health
-      /resend-verify — Resend email verification
       /help         — Full command reference
 
 features:
@@ -152,10 +151,6 @@ features:
     # System
     - command: /jobstatus
       description: Check service health — storage, email, Drive, Anthropic key, active model, API latency
-      usage_hint: (no arguments)
-      should_escape: false
-    - command: /resend-verify
-      description: Resend your email verification link
       usage_hint: (no arguments)
       should_escape: false
     - command: /help
