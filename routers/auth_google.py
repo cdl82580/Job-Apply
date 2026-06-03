@@ -55,7 +55,7 @@ async def google_login(request: Request, returnTo: str = "/"):
             status_code=302,
         )
 
-    if not returnTo.startswith("/"):
+    if not returnTo.startswith("/") or returnTo.startswith("//"):
         returnTo = "/"
 
     nonce  = secrets.token_urlsafe(16)
@@ -97,7 +97,7 @@ async def google_callback(
             state_nonce = parsed.get("nonce")
         except Exception:
             pass
-    if not return_to.startswith("/"):
+    if not return_to.startswith("/") or return_to.startswith("//"):
         return_to = "/"
 
     if error or not code:

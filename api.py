@@ -376,6 +376,7 @@ async def auth_middleware(request: Request, call_next):
 
 _runs:  dict[str, dict[str, Any]] = {}
 _preps: dict[str, dict[str, Any]] = {}
+_MAX_ACTIVE_RUNS_PER_USER = 5  # cap in-flight + queued entries per user
 
 # Per-user locks so concurrent runs from different users don't block each other.
 _user_locks: dict[str, threading.Lock] = {}
@@ -502,6 +503,8 @@ async def register(
     resume_data = await resume.read()
     if len(resume_data) < 1000:
         raise HTTPException(400, "Resume file appears to be empty or invalid.")
+    if len(resume_data) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Resume file must be under 10 MB.")
 
     user_id = str(uuid.uuid4())
     user = {
@@ -690,6 +693,8 @@ async def upload_resume(request: Request, resume: UploadFile = File(...)):
     data = await resume.read()
     if len(data) < 1000:
         raise HTTPException(400, "File appears empty or invalid.")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Resume file must be under 10 MB.")
     record = storage.get_user_by_id(user_data["user_id"])
     if record:
         record["resume_filename"] = resume.filename
@@ -787,7 +792,7 @@ async def get_model(request: Request):
 
 @app.put("/api/config/model")
 async def set_model(request: Request):
-    _require_user(request)
+    _require_admin(request)
     body = await request.json()
     model = body.get("model", "").strip()
     if not model:
@@ -817,6 +822,11 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         raise HTTPException(400, "No profile guide saved. Add one in your profile.")
 
     _evict_stale()
+
+    active_count = sum(1 for r in _runs.values()
+                       if r.get("user_id") == user_id and r.get("status") not in ("done", "error"))
+    if active_count >= _MAX_ACTIVE_RUNS_PER_USER:
+        raise HTTPException(429, "Too many active runs. Wait for an existing run to finish.")
 
     run_id = str(uuid.uuid4())
     q: Queue[dict | None] = Queue()
@@ -1068,6 +1078,11 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     profile_text = storage.get_profile(user_id)
     if not profile_text:
         raise HTTPException(400, "No profile guide saved. Add one in your profile.")
+
+    active_prep_count = sum(1 for p in _preps.values()
+                            if p.get("user_id") == user_id and p.get("status") not in ("done", "error"))
+    if active_prep_count >= _MAX_ACTIVE_RUNS_PER_USER:
+        raise HTTPException(429, "Too many active prep runs. Wait for an existing run to finish.")
 
     prep_id = str(uuid.uuid4())
     q: Queue[dict | None] = Queue()
