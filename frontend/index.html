@@ -87,8 +87,14 @@
     .header-left   { display: flex; align-items: flex-start; gap: .875rem; }
     header h1      { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
     header p       { color: var(--muted); margin: 0; font-size: .9rem; }
+    @keyframes sparkle-pulse {
+      0%, 100% { opacity: .5; transform: scale(1);   }
+      50%       { opacity: 1;  transform: scale(1.2); }
+    }
     .model-badge {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
       margin-left: .5rem;
       font-size: .72rem;
       font-weight: 500;
@@ -96,9 +102,15 @@
       background: var(--fill);
       border: 1px solid var(--card-border);
       border-radius: 4px;
-      padding: .1rem .4rem;
+      padding: .1rem .45rem .1rem .3rem;
       vertical-align: middle;
       letter-spacing: .01em;
+    }
+    .model-badge-icon {
+      display: inline-block;
+      animation: sparkle-pulse 2.4s ease-in-out infinite;
+      line-height: 1;
+      font-size: .8rem;
     }
     .header-actions {
       display: flex; align-items: center; gap: .25rem; flex-shrink: 0; margin-top: .125rem;
@@ -565,7 +577,7 @@
       </div>
       <div>
         <h1>Job Application Agent</h1>
-        <p style="white-space: nowrap;">Generate a tailored resume, ATS resume, and cover letter.<span class="model-badge hidden" id="modelBadge"></span></p>
+        <p style="white-space: nowrap;">Generate a tailored resume, ATS resume, and cover letter.<span class="model-badge hidden" id="modelBadge"><span class="model-badge-icon">✦</span><span id="modelBadgeText"></span></span></p>
       </div>
     </div>
     <div class="header-actions">
@@ -828,9 +840,8 @@
       if (u.role === 'admin') { window.location.replace('/admin.html'); return; }
       document.getElementById('headerUser').textContent = u.display_name || u.email;
       if (u.model) {
-        const badge = document.getElementById('modelBadge');
-        badge.textContent = u.model;
-        badge.classList.remove('hidden');
+        document.getElementById('modelBadgeText').textContent = u.model;
+        document.getElementById('modelBadge').classList.remove('hidden');
       }
       if (u.email_verified === false) document.getElementById('verifyBanner').classList.remove('hidden');
     } catch (_) {}

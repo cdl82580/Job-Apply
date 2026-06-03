@@ -65,6 +65,19 @@
     [data-theme="dark"] .logo-light { display: none;  }
     [data-theme="dark"] .logo-dark  { display: block; }
     .logo { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
+    .logo-subtitle { font-size: .85rem; color: var(--muted); margin: .15rem 0 0; }
+    @keyframes sparkle-pulse {
+      0%, 100% { opacity: .5; transform: scale(1);   }
+      50%       { opacity: 1;  transform: scale(1.2); }
+    }
+    .model-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      margin-left: .5rem; font-size: .72rem; font-weight: 500;
+      color: var(--muted); background: var(--fill);
+      border: 1px solid var(--card-border); border-radius: 4px;
+      padding: .1rem .45rem .1rem .3rem; vertical-align: middle; letter-spacing: .01em;
+    }
+    .model-badge-icon { display: inline-block; animation: sparkle-pulse 2.4s ease-in-out infinite; line-height: 1; font-size: .8rem; }
 
     .header-right { display: flex; align-items: center; gap: .25rem; }
     .header-user { font-size: .825rem; color: var(--muted); margin-right: .375rem; }
@@ -300,7 +313,10 @@
     <div class="header-left">
       <img class="logo-img logo-light" src="/img/logo-light.png" alt="Logo">
       <img class="logo-img logo-dark"  src="/img/logo-dark.png"  alt="Logo">
-      <div class="logo">Profile Settings</div>
+      <div>
+        <div class="logo">Profile Settings</div>
+        <p class="logo-subtitle">Manage your account, resume, and voice guide.<span class="model-badge hidden" id="modelBadge"><span class="model-badge-icon">✦</span><span id="modelBadgeText"></span></span></p>
+      </div>
     </div>
     <div class="header-right">
       <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
@@ -460,6 +476,7 @@
       const me = await (await apiFetch('/api/auth/me')).json();
       if (me.role === 'admin') { window.location.replace('/admin.html'); return; }
       document.getElementById('headerUser').textContent = me.display_name || me.email;
+      if (me.model) { document.getElementById('modelBadgeText').textContent = me.model; document.getElementById('modelBadge').classList.remove('hidden'); }
     } catch (_) {}
     const res = await apiFetch('/api/profile');
     const d   = await res.json();
