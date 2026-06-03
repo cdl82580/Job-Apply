@@ -65,11 +65,11 @@ features:
       usage_hint: (opens a selector)
       should_escape: false
     - command: /track-add
-      description: Add a new job application record to your tracker
+      description: Add a new application — BrandFetch company search, all fields
       usage_hint: (opens a form)
       should_escape: false
     - command: /track-update
-      description: Update an application's status and optionally add a note
+      description: Two-step: select app then edit all fields pre-filled from current record
       usage_hint: (opens a selector)
       should_escape: false
     - command: /track-note

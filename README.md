@@ -112,8 +112,8 @@ job-apply/
 | 📋 Tracker | `/tracker` | Pipeline summary by status |
 | 📋 Tracker | `/track-list [status]` | List applications (optional status filter) |
 | 📋 Tracker | `/track-view` | View full details of an application |
-| 📋 Tracker | `/track-add` | Add a new application record |
-| 📋 Tracker | `/track-update` | Update application status + optional note |
+| 📋 Tracker | `/track-add` | Add a new application (BrandFetch company search, all fields) |
+| 📋 Tracker | `/track-update` | Two-step: pick app → edit all fields pre-filled |
 | 📋 Tracker | `/track-note` | Add a comment to an application |
 | 📋 Tracker | `/track-delete` | Delete an application (two-step confirm) |
 | 🔍 Lookup | `/company [name]` | Search company info via BrandFetch |
@@ -122,6 +122,8 @@ job-apply/
 | 🛠️ System | `/jobstatus` | Check API health |
 | 🛠️ System | `/resend-verify` | Resend email verification |
 | 🛠️ System | `/help` | Full command reference |
+
+The bot also publishes a dynamic **App Home tab** showing live pipeline stats and a quick command reference — opens when you click the app's Home tab in Slack.
 
 ---
 
@@ -191,6 +193,17 @@ fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
 fly deploy --app job-apply-corey
 ```
 
+The app runs as **two process groups** on Fly.io (defined in `fly.toml`):
+
+| Process | Command | Machine | Notes |
+|---|---|---|---|
+| `web` | `uvicorn api:app …` | 1 GB, auto-stop | FastAPI web server |
+| `bot` | `python slack_bot.py` | 256 MB, always-on | Slack Socket Mode bot |
+
+Both share the same Docker image and all Fly secrets.
+
+**Required secrets:**
+
 | Secret | Description |
 |--------|-------------|
 | `ANTHROPIC_API_KEY` | Claude API key |
@@ -203,12 +216,11 @@ fly deploy --app job-apply-corey
 | `RESEND_FROM` | Sender address (default: `Job Apply <onboarding@resend.dev>`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `BRANDFETCH_API_KEY` | BrandFetch API key for company search |
-| `BOT_API_KEY` | Slack bot authentication key |
+| `BOT_API_KEY` | Shared secret between Slack bot and web API |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack signing secret |
-| `SLACK_APP_TOKEN` | Slack app-level token (`xapp-...`) for Socket Mode (optional) |
+| `SLACK_APP_TOKEN` | App-level token (`xapp-...`) — **required** for Socket Mode |
 | `GDRIVE_TOKEN_JSON` | Google Drive OAuth token JSON |
 | `GDRIVE_PARENT_FOLDER_ID` | Drive folder ID for run output (`Job Applications`) |
 
