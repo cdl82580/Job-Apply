@@ -16,12 +16,38 @@ Endpoints:
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 import time
+import urllib.parse
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
+
+
+_PRIVATE_NETS = [
+    ipaddress.ip_network(n) for n in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "127.0.0.0/8", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+    )
+]
+
+
+def _is_ssrf_url(url: str) -> bool:
+    """Return True if the URL resolves to a private/loopback/link-local address."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host   = parsed.hostname or ""
+        addrs  = socket.getaddrinfo(host, None)
+        for _, _, _, _, sockaddr in addrs:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if any(ip in net for net in _PRIVATE_NETS):
+                return True
+    except Exception:
+        pass
+    return False
 
 from scripts import storage
 from scripts import applications as app_store
@@ -789,6 +815,8 @@ async def create_webhook(body: WebhookCreate, request: Request):
     admin = _admin(request)
     if not body.url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must start with http:// or https://")
+    if _is_ssrf_url(body.url):
+        raise HTTPException(400, "url must not point to a private or internal network address")
     if body.payload_format not in VALID_PAYLOAD_FORMATS:
         raise HTTPException(400, f"payload_format must be one of: {', '.join(sorted(VALID_PAYLOAD_FORMATS))}")
     webhook = {
@@ -845,6 +873,8 @@ async def update_webhook(webhook_id: str, body: WebhookUpdate, request: Request)
         raise HTTPException(404, "Webhook not found")
     if body.url is not None and not body.url.startswith(("http://", "https://")):
         raise HTTPException(400, "url must start with http:// or https://")
+    if body.url is not None and _is_ssrf_url(body.url):
+        raise HTTPException(400, "url must not point to a private or internal network address")
     for field, val in body.model_dump(exclude_unset=True).items():
         w[field] = val
     wh_store.save_webhook(w)

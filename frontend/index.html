@@ -854,7 +854,6 @@
   let _allApps   = [];
   let _runAppId  = null;   // selected app_id for the run form
   let _prepAppId = null;   // selected app_id for the prep form
-  const BF_KEY   = '1idZFX8Ll28d4x2IVye';
   const APP_STATUS_ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
 
   const STATUS_SC = {
@@ -885,9 +884,8 @@
   }
 
   function appLogoHtml(a, cls = 'app-sugg-logo') {
-    const BF_KEY = '1idZFX8Ll28d4x2IVye';
     if (a.domain) {
-      return `<img class="${cls}" src="https://cdn.brandfetch.io/domain/${esc(a.domain)}?c=${BF_KEY}" alt="${esc(a.company)}" onerror="this.outerHTML='<div class=\\'app-sugg-logo-ph\\'>${esc(a.company).slice(0,2).toUpperCase()}</div>'">`;
+      return `<img class="${cls}" src="/api/companies/logo?domain=${encodeURIComponent(a.domain)}" alt="${esc(a.company)}" onerror="this.outerHTML='<div class=\\'app-sugg-logo-ph\\'>${esc(a.company).slice(0,2).toUpperCase()}</div>'">`;
     }
     return `<div class="app-sugg-logo-ph">${esc(a.company).slice(0,2).toUpperCase()}</div>`;
   }
@@ -968,7 +966,7 @@
 
     // Show selected chip
     if (app.domain) {
-      selLogoEl.src = `https://cdn.brandfetch.io/domain/${app.domain}?c=${BF_KEY}`;
+      selLogoEl.src = `/api/companies/logo?domain=${encodeURIComponent(app.domain)}`;
       selLogoEl.style.display = 'block';
     } else {
       selLogoEl.style.display = 'none';

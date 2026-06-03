@@ -63,12 +63,6 @@ def consume_token(token: str) -> dict | None:
     return {"user_id": data["user_id"], "email": data["email"]}
 
 
-def has_pending_token(user_id: str) -> bool:
-    """Always returns False — tokens are keyed by hash, not user_id, so a
-    scan is not feasible. Callers should not rely on this for access control."""
-    return False
-
-
 def _delete(token_hash: str) -> None:
     try:
         storage.delete_bytes(_key(token_hash))

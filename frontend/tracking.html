@@ -1030,8 +1030,7 @@ function priorityBadge(p) {
 
 function logoEl(domain, company) {
   if (domain) {
-    const key = '1idZFX8Ll28d4x2IVye';
-    return `<img class="co-logo" src="https://cdn.brandfetch.io/domain/${esc(domain)}?c=${key}" alt="${esc(company)}" data-company="${esc(company)}" onerror="this.replaceWith(makePlaceholder(this.dataset.company))">`;
+    return `<img class="co-logo" src="/api/companies/logo?domain=${encodeURIComponent(domain)}" alt="${esc(company)}" data-company="${esc(company)}" onerror="this.replaceWith(makePlaceholder(this.dataset.company))">`;
   }
   return makePlaceholderHtml(company);
 }
@@ -1328,10 +1327,9 @@ function selectCompany(item) {
   dCompanyInput.value = item.name;
   dDomainInput.value  = item.domain;
 
-  // Saved logo URL: prefer the CDN domain pattern (stable, works in list view)
-  const BF_KEY = '1idZFX8Ll28d4x2IVye';
+  // Saved logo URL: prefer the server-side proxy (keeps CDN key off the client)
   const savedLogo = item.domain
-    ? `https://cdn.brandfetch.io/domain/${item.domain}?c=${BF_KEY}`
+    ? `/api/companies/logo?domain=${encodeURIComponent(item.domain)}`
     : (item.logo_url || '');
   dLogoUrlInput.value = savedLogo;
 

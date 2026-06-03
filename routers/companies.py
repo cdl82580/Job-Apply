@@ -14,8 +14,9 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
-_BRANDFETCH_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
-_BRANDFETCH_URL = "https://api.brandfetch.io/v2/search/{query}"
+_BRANDFETCH_KEY     = os.environ.get("BRANDFETCH_API_KEY", "")
+_BRANDFETCH_CDN_KEY = os.environ.get("BRANDFETCH_CDN_KEY", "")
+_BRANDFETCH_URL     = "https://api.brandfetch.io/v2/search/{query}"
 
 
 @router.get("/search")
@@ -52,3 +53,31 @@ async def search_companies(q: str = Query(..., min_length=1)):
         })
 
     return results
+
+
+@router.get("/logo")
+async def company_logo(domain: str = Query(..., min_length=1)):
+    """Proxy BrandFetch CDN logo requests so the CDN key stays server-side."""
+    if not _BRANDFETCH_CDN_KEY:
+        raise HTTPException(503, "Logo service not configured")
+    # Validate domain is a simple hostname with no path traversal
+    if "/" in domain or "\\" in domain or domain.startswith("."):
+        raise HTTPException(400, "Invalid domain")
+    import requests as _req
+    try:
+        resp = _req.get(
+            f"https://cdn.brandfetch.io/domain/{domain}",
+            params={"c": _BRANDFETCH_CDN_KEY},
+            timeout=8,
+            stream=True,
+        )
+        if resp.status_code == 404:
+            raise HTTPException(404, "Logo not found")
+        resp.raise_for_status()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502, "Logo fetch failed")
+    from fastapi.responses import Response
+    ct = resp.headers.get("Content-Type", "image/png")
+    return Response(content=resp.content, media_type=ct)

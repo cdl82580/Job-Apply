@@ -90,6 +90,9 @@ def _build(action: str, actor: str, ip: str | None, details: dict[str, Any] | No
 # Public helpers
 # ---------------------------------------------------------------------------
 
+_UNVERIFIED_ACTIONS = frozenset({"user_registered", "user_registered_google"})
+
+
 def log(user_id: str, action: str, actor: str, ip: str | None = None, **details: Any) -> None:
     """Append an event to a user's audit log and dispatch to any matching webhooks."""
     if not storage.is_configured():
@@ -102,7 +105,10 @@ def log(user_id: str, action: str, actor: str, ip: str | None = None, **details:
     # Dispatch to webhooks asynchronously (best-effort, never raises)
     try:
         from . import webhooks  # noqa: PLC0415 — lazy to avoid circular import
-        webhooks.dispatch_async({"user_id": user_id, "user_email": actor, **event})
+        payload = {"user_id": user_id, "user_email": actor, **event}
+        if action in _UNVERIFIED_ACTIONS:
+            payload["email_verified"] = False
+        webhooks.dispatch_async(payload)
     except Exception:
         pass
 

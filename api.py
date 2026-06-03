@@ -177,8 +177,12 @@ def _require_user(request: Request) -> dict:
 
 def _require_admin(request: Request) -> dict:
     user = _require_user(request)
-    if user.get("role") != "admin":
+    # Re-read role from the live DB record (already fetched inside _require_user)
+    # so a downgraded admin can't keep using their old token.
+    record = storage.get_user_by_id(user["user_id"])
+    if not record or record.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
+    user["role"] = record["role"]  # keep the returned dict consistent
     return user
 
 
@@ -483,6 +487,9 @@ class EmailChangeRequest(BaseModel):
     new_email: str
     current_password: str
 
+_MAX_DISPLAY_NAME_LEN = 100
+_MAX_PROFILE_TEXT_LEN = 50_000
+
 class ProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     profile_text: str | None = None
@@ -561,6 +568,10 @@ async def register(
 
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(400, "Invalid email address.")
+    if len(display_name.strip()) > _MAX_DISPLAY_NAME_LEN:
+        raise HTTPException(400, f"Display name must be {_MAX_DISPLAY_NAME_LEN} characters or fewer.")
+    if len(profile_text) > _MAX_PROFILE_TEXT_LEN:
+        raise HTTPException(400, f"Profile text must be {_MAX_PROFILE_TEXT_LEN} characters or fewer.")
     if storage.get_user_by_email(email):
         raise HTTPException(400, "An account with that email already exists.")
     if len(password) < 8:
@@ -740,6 +751,8 @@ async def update_profile(req: ProfileUpdateRequest, request: Request):
 
     changes = {}
     if req.display_name is not None:
+        if len(req.display_name.strip()) > _MAX_DISPLAY_NAME_LEN:
+            raise HTTPException(400, f"Display name must be {_MAX_DISPLAY_NAME_LEN} characters or fewer.")
         old_name = record.get("display_name", "")
         record["display_name"] = req.display_name.strip()
         storage.save_user(record)
@@ -747,6 +760,8 @@ async def update_profile(req: ProfileUpdateRequest, request: Request):
             changes["display_name"] = {"from": old_name, "to": record["display_name"]}
 
     if req.profile_text is not None:
+        if len(req.profile_text) > _MAX_PROFILE_TEXT_LEN:
+            raise HTTPException(400, f"Profile text must be {_MAX_PROFILE_TEXT_LEN} characters or fewer.")
         storage.save_profile(user_data["user_id"], req.profile_text)
         changes["profile_text"] = "updated"
 
@@ -1108,8 +1123,19 @@ async def gdrive_list_runs(request: Request):
 @app.get("/api/gdrive/runs/{folder_id}/job_posting")
 async def gdrive_get_job_posting(folder_id: str, request: Request):
     """Fetch job_posting.txt from a specific Drive folder (by Drive folder ID)."""
-    _require_user(request)
-    config = WorkflowConfig(progress=lambda _: None)
+    user_data  = _require_user(request)
+    user_label = user_data["email"]
+    # Verify the folder belongs to this user before fetching its contents.
+    try:
+        user_folders = list_gdrive_run_folders(user_label, WorkflowConfig(progress=lambda _: None, user_label=user_label))
+        allowed_ids  = {f.get("id") for f in user_folders if f.get("id")}
+        if allowed_ids and folder_id not in allowed_ids:
+            raise HTTPException(403, "Access denied to this Drive folder")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # if listing fails, fall through and let get_gdrive_job_posting handle it
+    config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
     text = get_gdrive_job_posting(folder_id, config)
     if text is None:
         raise HTTPException(404, "No job posting found in this Drive folder")
