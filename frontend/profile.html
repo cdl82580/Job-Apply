@@ -50,16 +50,14 @@
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg-page); color: var(--text);
-      margin: 0; padding: 2rem 1rem;
+      margin: 0; padding: 0;
       transition: background .2s, color .2s;
     }
-    .container { max-width: 680px; margin: 0 auto; }
+    .container { max-width: 680px; margin: 0 auto; padding: 0 1rem 2rem; }
 
-    header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 2rem; padding-bottom: 1rem;
-      border-bottom: 2px solid var(--primary);
-    }
+    header { border-bottom: 2px solid var(--primary); margin-bottom: 2rem; padding: 0 1rem; }
+    .header-inner { max-width: 680px; margin: 0 auto; padding: 1.1rem 0 .9rem;
+                    display: flex; align-items: center; justify-content: space-between; }
     .header-left { display: flex; align-items: center; gap: .75rem; }
     .logo-img  { width: 36px; height: 36px; }
     .logo-light { display: block; }
@@ -68,18 +66,19 @@
     [data-theme="dark"] .logo-dark  { display: block; }
     .logo { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
 
-    .header-right { display: flex; align-items: center; gap: .75rem; }
-    .back { font-size: .875rem; color: var(--border); text-decoration: none; font-weight: 600; }
-    .back:hover { text-decoration: underline; }
-    .back-icon { display: none; }
+    .header-right { display: flex; align-items: center; gap: .25rem; }
+    .header-icon-btn { display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; background: none; border: none; cursor: pointer; padding: 0;
+      color: var(--muted); border-radius: 6px; text-decoration: none;
+      transition: color .15s, background .15s; }
+    .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
 
     @media (max-width: 620px) {
-      body { padding: 1.25rem .75rem; }
-      header { margin-bottom: 1.5rem; }
+      header { padding: 0 .75rem; margin-bottom: 1.5rem; }
+      .header-inner { padding: .9rem 0 .75rem; }
       .logo-img { width: 30px; height: 30px; }
       .logo { font-size: 1rem; }
-      .back-full { display: none; }
-      .back-icon { display: flex; align-items: center; color: var(--border); }
+      .container { padding: 0 .75rem; }
     }
 
     .theme-toggle {
@@ -294,8 +293,9 @@
   </style>
 </head>
 <body>
-<div class="container">
+
   <header>
+    <div class="header-inner">
     <div class="header-left">
       <img class="logo-img logo-light" src="/img/logo-light.png" alt="Logo">
       <img class="logo-img logo-dark"  src="/img/logo-dark.png"  alt="Logo">
@@ -303,14 +303,14 @@
     </div>
     <div class="header-right">
       <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
-      <a class="back" href="/" title="Back to App">
-        <span class="back-full">← Back to App</span>
-        <span class="back-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </span>
+      <a class="header-icon-btn" href="/" title="Back to App" aria-label="Back to App">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       </a>
     </div>
+    </div><!-- /.header-inner -->
   </header>
+
+<div class="container">
 
   <!-- Account -->
   <div class="card view-mode" id="accountCard">
