@@ -98,7 +98,9 @@ _SESSION_DAYS    = _SESSION_DAYS_SHARED
 # Requests carrying this token skip cookie auth and run as the primary user account.
 _BOT_API_KEY     = os.environ.get("BOT_API_KEY", "")
 
-_NOTIFY_EMAIL = os.environ.get("APP_USER_EMAIL", "cdl825@gmail.com")
+_NOTIFY_EMAIL = os.environ.get("APP_USER_EMAIL", "")
+if not _NOTIFY_EMAIL:
+    logger.warning("APP_USER_EMAIL is not set. Bot API key auth will not resolve a primary user.")
 
 _MODEL_CONFIG_KEY = "config/active_model.txt"
 
@@ -186,6 +188,11 @@ def _hash_password(password: str) -> str:
     return f"scrypt:{salt.hex()}:{dk.hex()}"
 
 
+# Pre-computed dummy hash used in login to keep miss-path timing consistent
+# with a real scrypt verification. Generated once at startup.
+_DUMMY_HASH = _hash_password("dummy-constant-time-sentinel")
+
+
 def _link_run_to_app(
     user_id: str,
     app_id: str,
@@ -233,6 +240,50 @@ def _verify_password(password: str, stored: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
+_APP_URL = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+_LOGO_URL = f"{_APP_URL}/img/logo-light.png"
+
+
+def _email_html(body_html: str) -> str:
+    """Wrap body_html in the branded email shell."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:system-ui,-apple-system,sans-serif">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+         style="background:#F9FAFB;padding:2rem 1rem">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+             style="max-width:520px;background:#FFFFFF;border-radius:10px;
+                    border:1px solid #E5E7EB;overflow:hidden">
+        <!-- Header -->
+        <tr>
+          <td style="background:#1A3C5E;padding:1.25rem 1.75rem">
+            <img src="{_LOGO_URL}" alt="Job Apply" height="32"
+                 style="display:block;border:0">
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:2rem 1.75rem;color:#111827">
+            {body_html}
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F3F4F6;padding:.875rem 1.75rem;
+                     border-top:1px solid #E5E7EB">
+            <p style="margin:0;font-size:.75rem;color:#6B7280">
+              You're receiving this because you have an account at
+              <a href="{_APP_URL}" style="color:#1A3C5E;text-decoration:none">Job Apply</a>.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
 
 
 def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bool:
@@ -262,27 +313,27 @@ def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bo
 
 def _send_verification_email(to: str, display_name: str, token: str) -> bool:
     """Send the email-verification email via Resend."""
-    verify_url = f"{os.environ.get('APP_URL', 'https://job-apply-corey.fly.dev')}/api/auth/verify-email?token={token}"
+    verify_url = f"{_APP_URL}/api/auth/verify-email?token={token}"
     text = (
         f"Hi {display_name},\n\n"
         f"Please verify your email address by visiting:\n{verify_url}\n\n"
         f"This link expires in 72 hours.\n\n"
         f"If you didn't create this account, you can ignore this email."
     )
-    html = f"""
-<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:2rem 1rem;color:#111827">
-  <h2 style="color:#1A3C5E;margin:0 0 1rem">Verify your email</h2>
-  <p style="margin:0 0 1.5rem;color:#374151">Hi {display_name}, click the button below to verify your email address.</p>
-  <a href="{verify_url}"
-     style="display:inline-block;background:#1A3C5E;color:white;text-decoration:none;
-            padding:.75rem 1.5rem;border-radius:6px;font-weight:600;font-size:.95rem">
-    Verify Email →
-  </a>
-  <p style="margin:1.5rem 0 0;font-size:.8rem;color:#6B7280">
-    This link expires in 72 hours. If you didn't create an account, you can ignore this email.
-  </p>
-</div>"""
-    return _send_email(to, "Verify your email — Job Apply", text, html=html)
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.25rem">Verify your email</h2>
+    <p style="margin:0 0 1.5rem;color:#374151">
+      Hi {display_name}, click the button below to verify your email address.
+    </p>
+    <a href="{verify_url}"
+       style="display:inline-block;background:#1A3C5E;color:#FFFFFF;text-decoration:none;
+              padding:.75rem 1.5rem;border-radius:6px;font-weight:600;font-size:.95rem">
+      Verify Email &rarr;
+    </a>
+    <p style="margin:1.5rem 0 0;font-size:.8rem;color:#6B7280">
+      This link expires in 72 hours. If you didn't create an account, you can ignore this email.
+    </p>"""
+    return _send_email(to, "Verify your email — Job Apply", text, html=_email_html(body_html))
 
 # ---------------------------------------------------------------------------
 # App + auth middleware
@@ -325,7 +376,17 @@ async def auth_middleware(request: Request, call_next):
 
 _runs:  dict[str, dict[str, Any]] = {}
 _preps: dict[str, dict[str, Any]] = {}
-_workflow_lock = threading.Lock()
+
+# Per-user locks so concurrent runs from different users don't block each other.
+_user_locks: dict[str, threading.Lock] = {}
+_user_locks_mu = threading.Lock()
+
+
+def _get_user_lock(user_id: str) -> threading.Lock:
+    with _user_locks_mu:
+        if user_id not in _user_locks:
+            _user_locks[user_id] = threading.Lock()
+        return _user_locks[user_id]
 
 _RUN_TTL = 3600 * 4  # evict terminal runs/preps after 4 hours
 
@@ -479,8 +540,7 @@ async def login(req: LoginRequest, request: Request):
     user  = storage.get_user_by_email(email)
 
     # Constant-time check even on miss to prevent user enumeration timing
-    dummy_hash = "scrypt:00000000000000000000000000000000:00000000000000000000000000000000"
-    stored = user["password_hash"] if user else dummy_hash
+    stored = user["password_hash"] if user else _DUMMY_HASH
     ok = _verify_password(req.password, stored) and user is not None
 
     if not ok:
@@ -655,13 +715,30 @@ async def change_password(req: PasswordChangeRequest, request: Request):
     storage.save_user(record)
     user_audit.log(user_data["user_id"], "password_changed", user_data["email"], _client_ip(request))
 
+    _pw_text = (
+        f"Your Job Apply password was just changed.\n\n"
+        f"If this was you, no action is needed.\n"
+        f"If you didn't do this, reset your password at {_APP_URL}/"
+    )
+    _pw_html = _email_html(f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.25rem">Password changed</h2>
+    <p style="margin:0 0 1rem;color:#374151">
+      Your Job Apply password was just changed.
+    </p>
+    <p style="margin:0 0 1.5rem;color:#374151">
+      If this was you, no action is needed. If you didn't make this change,
+      reset your password immediately.
+    </p>
+    <a href="{_APP_URL}/"
+       style="display:inline-block;background:#1A3C5E;color:#FFFFFF;text-decoration:none;
+              padding:.75rem 1.5rem;border-radius:6px;font-weight:600;font-size:.95rem">
+      Go to Job Apply &rarr;
+    </a>""")
     emailed = _send_email(
         to=user_data["email"],
         subject="Job Apply — Password Changed",
-        body=(
-            f"Your password was just changed.\n\n"
-            f"Log in at https://{FLY_APP_NAME}.fly.dev/"
-        ),
+        body=_pw_text,
+        html=_pw_html,
     )
     return {"ok": True, "emailed": emailed}
 
@@ -760,7 +837,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         resume_path = Path(tmp.name)
 
         try:
-            with _workflow_lock:
+            with _get_user_lock(user_id):
                 _runs[run_id]["status"] = "running"
 
                 def progress(msg: str):
@@ -1010,7 +1087,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
         resume_path = Path(tmp.name)
 
         try:
-            with _workflow_lock:
+            with _get_user_lock(user_id):
                 _preps[prep_id]["status"] = "running"
 
                 def progress(msg: str):
