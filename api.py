@@ -386,6 +386,33 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 # ---------------------------------------------------------------------------
+# Rate limiter (in-memory, per-IP sliding window — no external deps)
+# ---------------------------------------------------------------------------
+
+_rl_mu: threading.Lock = threading.Lock()
+_rl_buckets: dict[str, list[float]] = {}   # key → list of hit timestamps
+
+def _rate_limit(key: str, max_hits: int, window_secs: int) -> bool:
+    """Return True if the key is within limits, False if the limit is exceeded.
+    Uses a sliding window. Thread-safe."""
+    now = time.time()
+    with _rl_mu:
+        hits = _rl_buckets.get(key, [])
+        hits = [t for t in hits if now - t < window_secs]
+        if len(hits) >= max_hits:
+            _rl_buckets[key] = hits
+            return False
+        hits.append(now)
+        _rl_buckets[key] = hits
+        return True
+
+def _check_rate_limit(request: Request, bucket: str, max_hits: int, window_secs: int) -> None:
+    """Raise 429 if the per-IP rate limit for bucket is exceeded."""
+    ip = _client_ip(request) or "unknown"
+    if not _rate_limit(f"{bucket}:{ip}", max_hits, window_secs):
+        raise HTTPException(429, f"Too many requests. Try again in {window_secs} seconds.")
+
+# ---------------------------------------------------------------------------
 # In-memory stores
 # ---------------------------------------------------------------------------
 
@@ -508,6 +535,7 @@ async def register(
     profile_text: str      = Form(...),
     resume:       UploadFile = File(...),
 ):
+    _check_rate_limit(request, "register", max_hits=5, window_secs=3600)
     email = email.strip().lower()
 
     if "@" not in email or "." not in email.split("@")[-1]:
@@ -559,6 +587,7 @@ async def register(
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest, request: Request):
+    _check_rate_limit(request, "login", max_hits=10, window_secs=60)
     email = req.email.strip().lower()
     user  = storage.get_user_by_email(email)
 
@@ -623,6 +652,7 @@ async def verify_email(token: str = ""):
 @app.post("/api/auth/resend-verification")
 async def resend_verification(request: Request):
     """Protected — resend verification email to the current user."""
+    _check_rate_limit(request, "resend_verification", max_hits=3, window_secs=3600)
     user_data = _require_user(request)
     user = storage.get_user_by_id(user_data["user_id"])
     if not user:
@@ -811,6 +841,16 @@ async def get_model(request: Request):
     return {"model": _get_active_model(), "default": DEFAULT_MODEL}
 
 
+_ALLOWED_MODELS: frozenset[str] = frozenset({
+    "claude-opus-4-8",
+    "claude-opus-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5-20251001",
+    "claude-haiku-4-5",
+})
+
+
 @app.put("/api/config/model")
 async def set_model(request: Request):
     _require_admin(request)
@@ -818,8 +858,16 @@ async def set_model(request: Request):
     model = body.get("model", "").strip()
     if not model:
         raise HTTPException(400, "model is required.")
+    if model not in _ALLOWED_MODELS:
+        raise HTTPException(400, f"Unknown model. Allowed: {', '.join(sorted(_ALLOWED_MODELS))}")
     _set_active_model(model)
     return {"ok": True, "model": model}
+
+
+@app.get("/api/config/models")
+async def list_models(request: Request):
+    _require_admin(request)
+    return {"models": sorted(_ALLOWED_MODELS), "active": _get_active_model()}
 
 
 # ---------------------------------------------------------------------------
