@@ -3,19 +3,37 @@ primary_region = "ewr"
 
 [build]
 
+# ── Process groups ────────────────────────────────────────────────────
+# "web" serves the FastAPI app; "bot" runs the Slack Socket Mode bot.
+# Each gets its own machine so the bot stays alive independently.
+[processes]
+  web = "uvicorn api:app --host 0.0.0.0 --port 8080"
+  bot = "python slack_bot.py"
+
+# ── Web process — HTTP service ────────────────────────────────────────
 [http_service]
   internal_port        = 8080
   force_https          = true
   auto_stop_machines   = true
   auto_start_machines  = true
   min_machines_running = 0
+  processes            = ["web"]
 
   [http_service.concurrency]
     type       = "requests"
     hard_limit = 5
     soft_limit = 2
 
+# ── Web VM ────────────────────────────────────────────────────────────
 [[vm]]
-  memory   = "1gb"
-  cpu_kind = "shared"
-  cpus     = 1
+  memory    = "1gb"
+  cpu_kind  = "shared"
+  cpus      = 1
+  processes = ["web"]
+
+# ── Bot VM — lightweight, must stay running for Socket Mode ──────────
+[[vm]]
+  memory    = "256mb"
+  cpu_kind  = "shared"
+  cpus      = 1
+  processes = ["bot"]
