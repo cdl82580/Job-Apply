@@ -819,6 +819,10 @@ async def create_webhook(body: WebhookCreate, request: Request):
         raise HTTPException(400, "url must not point to a private or internal network address")
     if body.payload_format not in VALID_PAYLOAD_FORMATS:
         raise HTTPException(400, f"payload_format must be one of: {', '.join(sorted(VALID_PAYLOAD_FORMATS))}")
+    if body.filter_categories:
+        bad = [c for c in body.filter_categories if c not in VALID_FILTER_CATEGORIES]
+        if bad:
+            raise HTTPException(400, f"Unknown filter_categories: {bad}. Valid: {sorted(VALID_FILTER_CATEGORIES)}")
     webhook = {
         "id":               str(uuid.uuid4()),
         "name":             body.name.strip(),
@@ -875,6 +879,10 @@ async def update_webhook(webhook_id: str, body: WebhookUpdate, request: Request)
         raise HTTPException(400, "url must start with http:// or https://")
     if body.url is not None and _is_ssrf_url(body.url):
         raise HTTPException(400, "url must not point to a private or internal network address")
+    if body.filter_categories is not None:
+        bad = [c for c in body.filter_categories if c not in VALID_FILTER_CATEGORIES]
+        if bad:
+            raise HTTPException(400, f"Unknown filter_categories: {bad}. Valid: {sorted(VALID_FILTER_CATEGORIES)}")
     for field, val in body.model_dump(exclude_unset=True).items():
         w[field] = val
     wh_store.save_webhook(w)

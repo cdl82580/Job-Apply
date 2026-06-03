@@ -20,10 +20,17 @@ logger = logging.getLogger(__name__)
 
 try:
     import boto3
+    import botocore.config
     from botocore.exceptions import ClientError
     _HAS_BOTO3 = True
 except ImportError:
     _HAS_BOTO3 = False
+
+_BOTO_CONFIG = botocore.config.Config(
+    connect_timeout=5,
+    read_timeout=10,
+    max_pool_connections=20,
+) if _HAS_BOTO3 else None
 
 BUCKET    = os.environ.get("BUCKET_NAME", "job-apply-storage")
 _ENDPOINT = os.environ.get("AWS_ENDPOINT_URL_S3", "https://fly.storage.tigris.dev")
@@ -42,7 +49,8 @@ def _client():
     if not _HAS_BOTO3:
         raise RuntimeError("boto3 not installed — run: pip install boto3")
     if _s3_client is None:
-        _s3_client = boto3.client("s3", endpoint_url=_ENDPOINT, region_name=_REGION)
+        _s3_client = boto3.client("s3", endpoint_url=_ENDPOINT, region_name=_REGION,
+                                  config=_BOTO_CONFIG)
     return _s3_client
 
 

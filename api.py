@@ -517,7 +517,7 @@ class PrepRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health")
-async def health():
+async def health(request: Request):
     checks: dict = {}
 
     # Storage (Tigris S3)
@@ -548,6 +548,10 @@ async def health():
         (v in ("ok", "configured", "not_configured")) or (not str(v).startswith("error"))
         for v in checks.values()
     ) else "degraded"
+
+    # Unauthenticated callers get only the top-level status — no internal details
+    if not _current_user(request):
+        return {"status": overall}
     return {"status": overall, **checks}
 
 # ---------------------------------------------------------------------------
@@ -613,7 +617,7 @@ async def register(
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:
-        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
     return response
 
 
@@ -639,7 +643,7 @@ async def login(req: LoginRequest, request: Request):
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:
-        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
     return response
 
 
@@ -946,7 +950,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
 
     # Pin this browser session to the machine that owns this run's state
     if FLY_MACHINE_ID:
-        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
 
     def _thread():
         # Write resume to a temp file (pandoc + unpack need a real path)
@@ -966,7 +970,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     model=req.model or _get_active_model(),
                     progress=progress,
                     master_resume=resume_path,
-                    profile_text=profile_text,
+                    profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
                     user_id=user_id,
                     user_label=user_data["email"],
                 )
@@ -1214,7 +1218,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                    round_type=req.round_type)
 
     if FLY_MACHINE_ID:
-        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
 
     def _thread():
         tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
@@ -1236,7 +1240,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     model=req.model or _get_active_model(),
                     progress=progress,
                     master_resume=resume_path,
-                    profile_text=profile_text,
+                    profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
                     user_id=user_id,
                     user_label=user_data["email"],
                 )
