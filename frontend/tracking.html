@@ -1327,10 +1327,8 @@ function selectCompany(item) {
   dCompanyInput.value = item.name;
   dDomainInput.value  = item.domain;
 
-  // Saved logo URL: prefer the server-side proxy (keeps CDN key off the client)
-  const savedLogo = item.domain
-    ? `/api/companies/logo?domain=${encodeURIComponent(item.domain)}`
-    : (item.logo_url || '');
+  // Store the signed icon URL from BrandFetch directly — the CDN proxy is not reliable.
+  const savedLogo = item.logo_url || '';
   dLogoUrlInput.value = savedLogo;
 
   dSuggestionsEl.classList.add('hidden');
