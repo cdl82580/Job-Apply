@@ -193,7 +193,8 @@ async def google_callback(
     # Admins are always sent to the admin dashboard regardless of returnTo
     if role == "admin":
         return_to = "/admin.html"
-    token = create_session_token(user["user_id"], email, _session_secret, role=role)
+    token = create_session_token(user["user_id"], email, _session_secret, role=role,
+                                 password_hash=user.get("password_hash", ""))
     response = RedirectResponse(f"{_APP_URL}{return_to}", status_code=302)
     response.set_cookie(
         _SESSION_COOKIE, token,

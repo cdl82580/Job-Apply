@@ -356,6 +356,27 @@ app.include_router(companies_router)
 app.include_router(auth_google_router)
 app.include_router(admin_router)
 
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        ),
+    )
+    return response
+
 _PUBLIC_PATHS = frozenset({
     "/login.html", "/register.html",
     "/api/auth/login", "/api/auth/register",
@@ -832,7 +853,11 @@ async def change_email(req: EmailChangeRequest, request: Request):
     token = ev.create_token(record["user_id"], new_email)
     _send_verification_email(new_email, record.get("display_name", new_email), token)
 
-    return {"ok": True, "message": "Email updated. Please verify your new address."}
+    # Invalidate the current session — the email embedded in it is now stale
+    response = JSONResponse({"ok": True, "message": "Email updated. Please verify your new address and log in again."})
+    response.delete_cookie(_SESSION_COOKIE)
+    response.delete_cookie("fly-force-instance-id")
+    return response
 
 
 @app.get("/api/config/model")
@@ -977,13 +1002,14 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                    logger.exception("Unexpected error in run %s", run_id)
                     _runs[run_id]["status"]      = "error"
                     _runs[run_id]["error"]        = msg
                     _runs[run_id]["_finished_at"] = time.time()
                     user_audit.log(user_id, "run_failed", user_data["email"],
                                    run_id=run_id, company=req.company, role=req.role,
                                    error=msg)
-                    q.put({"type": "error", "message": msg})
+                    q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
                 finally:
                     q.put(None)
         finally:
@@ -1231,13 +1257,14 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                    logger.exception("Unexpected error in prep %s", prep_id)
                     _preps[prep_id]["status"]      = "error"
                     _preps[prep_id]["error"]        = msg
                     _preps[prep_id]["_finished_at"] = time.time()
                     user_audit.log(user_id, "prep_failed", user_data["email"],
                                    prep_id=prep_id, company=req.company, role=req.role,
                                    round_type=req.round_type, error=msg)
-                    q.put({"type": "error", "message": msg})
+                    q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
                 finally:
                     q.put(None)
         finally:

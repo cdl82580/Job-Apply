@@ -814,7 +814,18 @@ async def create_webhook(body: WebhookCreate, request: Request):
     wh_store.save_webhook(webhook)
     user_audit.log(admin["user_id"], "webhook_created", admin["email"],
                    webhook_id=webhook["id"], name=webhook["name"])
-    return webhook
+    return _redact_webhook_secret(webhook)
+
+
+def _redact_webhook_secret(w: dict) -> dict:
+    """Return a copy of the webhook record with the secret redacted for API responses."""
+    out = dict(w)
+    raw = out.get("secret") or ""
+    if len(raw) > 8:
+        out["secret"] = raw[:4] + "*" * (len(raw) - 8) + raw[-4:]
+    elif raw:
+        out["secret"] = "****"
+    return out
 
 
 @router.get("/webhooks/{webhook_id}")
@@ -823,7 +834,7 @@ async def get_webhook(webhook_id: str, request: Request):
     w = wh_store.get_webhook(webhook_id)
     if not w:
         raise HTTPException(404, "Webhook not found")
-    return w
+    return _redact_webhook_secret(w)
 
 
 @router.put("/webhooks/{webhook_id}")
@@ -839,7 +850,7 @@ async def update_webhook(webhook_id: str, body: WebhookUpdate, request: Request)
     wh_store.save_webhook(w)
     user_audit.log(admin["user_id"], "webhook_updated", admin["email"],
                    webhook_id=webhook_id, changes=body.model_dump(exclude_unset=True))
-    return w
+    return _redact_webhook_secret(w)
 
 
 @router.delete("/webhooks/{webhook_id}", status_code=204)
