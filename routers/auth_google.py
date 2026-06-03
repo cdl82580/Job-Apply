@@ -153,9 +153,9 @@ async def google_callback(
         )
 
     # Find or create user
-    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (
-        request.client.host if request.client else None
-    )
+    xff   = request.headers.get("X-Forwarded-For", "")
+    parts = [p.strip() for p in xff.split(",") if p.strip()]
+    ip    = parts[-1] if parts else (request.client.host if request.client else None)
     user = storage.get_user_by_google_id(google_id)
 
     if not user:
@@ -185,14 +185,15 @@ async def google_callback(
     else:
         user_audit.log(user["user_id"], "login_google", email, ip)
 
-    # Issue session cookie using the same secret as api.py
-    from api import _SESSION_SECRET, FLY_MACHINE_ID  # noqa: PLC0415
+    # Read the same env vars api.py uses — avoids a circular import.
+    _session_secret  = os.environ.get("SESSION_SECRET", "")
+    _fly_machine_id  = os.environ.get("FLY_MACHINE_ID", "")
 
     role = user.get("role", "user")
     # Admins are always sent to the admin dashboard regardless of returnTo
     if role == "admin":
         return_to = "/admin.html"
-    token = create_session_token(user["user_id"], email, _SESSION_SECRET, role=role)
+    token = create_session_token(user["user_id"], email, _session_secret, role=role)
     response = RedirectResponse(f"{_APP_URL}{return_to}", status_code=302)
     response.set_cookie(
         _SESSION_COOKIE, token,
@@ -200,6 +201,6 @@ async def google_callback(
         httponly=True, samesite="lax", secure=True,
     )
     response.delete_cookie(_NONCE_COOKIE)   # consumed — clear it
-    if FLY_MACHINE_ID:
-        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax")
+    if _fly_machine_id:
+        response.set_cookie("fly-force-instance-id", _fly_machine_id, path="/", samesite="lax")
     return response

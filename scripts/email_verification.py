@@ -64,9 +64,9 @@ def consume_token(token: str) -> dict | None:
 
 
 def has_pending_token(user_id: str) -> bool:
-    """True if there is at least one unexpired token for this user.
-    Note: this requires a full scan and is only used for informational purposes."""
-    return True  # tokens are not indexed by user_id; assume pending until verified
+    """Always returns False — tokens are keyed by hash, not user_id, so a
+    scan is not feasible. Callers should not rely on this for access control."""
+    return False
 
 
 def _delete(token_hash: str) -> None:

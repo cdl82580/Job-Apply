@@ -30,6 +30,8 @@ from . import storage
 _audit_locks: dict[str, threading.Lock] = {}
 _audit_locks_mu = threading.Lock()
 
+_MAX_EVENTS = 500  # keep newest N events per user; prevents unbounded log growth
+
 
 def _audit_lock(key: str) -> threading.Lock:
     with _audit_locks_mu:
@@ -62,9 +64,14 @@ def _read_events(key: str) -> list[dict[str, Any]]:
 
 
 def _append(key: str, event: dict[str, Any]) -> None:
+    # The in-process lock prevents races within a single machine. Across
+    # multiple Fly.io machines the S3 write is last-writer-wins; individual
+    # events may be lost in that case but the log will never corrupt.
     with _audit_lock(key):
         events = _read_events(key)
         events.append(event)
+        if len(events) > _MAX_EVENTS:
+            events = events[-_MAX_EVENTS:]
         storage.put_text(key, json.dumps(events))
 
 

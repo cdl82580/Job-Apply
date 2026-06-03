@@ -218,10 +218,13 @@ def _link_run_to_app(
 
 
 def _client_ip(request: Request) -> str | None:
-    """Best-effort client IP — respects X-Forwarded-For set by Fly.io proxy."""
+    """Best-effort client IP — uses the rightmost X-Forwarded-For entry set by
+    Fly.io's trusted proxy, which cannot be spoofed by the client."""
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
-        return xff.split(",")[0].strip()
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     if request.client:
         return request.client.host
     return None
@@ -474,8 +477,10 @@ async def health():
     checks["fly_machine"] = FLY_MACHINE_ID or "local"
     checks["fly_app"]     = FLY_APP_NAME
 
-    overall = "ok" if all(v in ("ok", "configured", "not_configured") or not str(v).startswith("error")
-                          for v in checks.values()) else "degraded"
+    overall = "ok" if all(
+        (v in ("ok", "configured", "not_configured")) or (not str(v).startswith("error"))
+        for v in checks.values()
+    ) else "degraded"
     return {"status": overall, **checks}
 
 # ---------------------------------------------------------------------------
@@ -933,7 +938,7 @@ async def stream_run(run_id: str, request: Request):
         raise HTTPException(403, "Access denied")
 
     q    = _runs[run_id]["queue"]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def generate():
         while True:
@@ -1187,7 +1192,7 @@ async def stream_prep(prep_id: str, request: Request):
         raise HTTPException(403, "Access denied")
 
     q    = _preps[prep_id]["queue"]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def generate():
         while True:
