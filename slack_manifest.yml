@@ -18,8 +18,8 @@ display_information:
       /tracker      — Pipeline summary grouped by status
       /track-list   — List applications (optional: filter by status)
       /track-view   — View full details of an application
-      /track-add    — Add a new application record
-      /track-update — Update an application's status
+      /track-add    — Add application (BrandFetch search, all fields)
+      /track-update — Two-step edit: all fields pre-filled
       /track-note   — Add a comment to an application
       /track-delete — Delete an application (with confirmation)
 
