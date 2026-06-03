@@ -82,6 +82,19 @@
     .header-left   { display: flex; align-items: flex-start; gap: .875rem; }
     header h1      { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
     header p       { color: var(--muted); margin: 0; font-size: .9rem; }
+    .model-badge {
+      display: inline-block;
+      margin-left: .5rem;
+      font-size: .72rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--fill);
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: .1rem .4rem;
+      vertical-align: middle;
+      letter-spacing: .01em;
+    }
     .header-actions {
       display: flex; align-items: center; gap: .75rem; flex-shrink: 0; margin-top: .25rem;
     }
@@ -545,7 +558,7 @@
       </div>
       <div>
         <h1>Job Application Agent</h1>
-        <p>Paste a job posting to generate a tailored resume, ATS resume, and cover letter.</p>
+        <p>Paste a job posting to generate a tailored resume, ATS resume, and cover letter.<span class="model-badge hidden" id="modelBadge"></span></p>
       </div>
     </div>
     <div class="header-actions">
@@ -813,6 +826,11 @@
       const u   = await res.json();
       if (u.role === 'admin') { window.location.replace('/admin.html'); return; }
       document.getElementById('headerUser').textContent = u.display_name || u.email;
+      if (u.model) {
+        const badge = document.getElementById('modelBadge');
+        badge.textContent = u.model;
+        badge.classList.remove('hidden');
+      }
       if (u.email_verified === false) document.getElementById('verifyBanner').classList.remove('hidden');
     } catch (_) {}
     await loadAllApps();
