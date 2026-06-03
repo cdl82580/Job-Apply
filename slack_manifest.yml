@@ -25,8 +25,15 @@ display_information:
 
     🔍 Lookup & Info
       /company      — Search company info (logo, domain, description)
-      /whoami           — Show your account details
+      /whoami       — Show your account details
       /activity     — Show your 10 most recent audit events
+
+    👤 Profile
+      /profile-name     — Update your display name
+      /profile-email    — Change your email (triggers re-verification)
+      /profile-password — Change your password
+      /profile-resume   — Upload a new master resume (.docx)
+      /profile-guide    — Edit your profile & voice guide
 
     🛠️ System
       /jobstatus    — Check API health
@@ -93,9 +100,30 @@ features:
       description: Show your 10 most recent audit log events
       usage_hint: (no arguments)
       should_escape: false
+    # Profile
+    - command: /profile-name
+      description: Update your display name
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /profile-email
+      description: Change your email address — sends a verification email to the new address
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /profile-password
+      description: Change your account password
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /profile-resume
+      description: Instructions for uploading a new master resume (.docx) via DM
+      usage_hint: (no arguments)
+      should_escape: false
+    - command: /profile-guide
+      description: View and edit your profile & voice guide
+      usage_hint: (opens a form)
+      should_escape: false
     # System
     - command: /jobstatus
-      description: Check the Job Apply API health and storage status
+      description: Check service health — storage, email, Drive, Anthropic key, active model, API latency
       usage_hint: (no arguments)
       should_escape: false
     - command: /resend-verify

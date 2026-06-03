@@ -13,29 +13,46 @@ Run locally:
 The bot listens on port 3000 (configurable via PORT env var).
 In production, run behind a reverse proxy or expose directly via Fly.io.
 
-Slash commands handled:
-  /apply         — generate resume + cover letter for a job
-  /prep          — generate interview prep doc
-  /jobstatus     — check API health
+Environment variables (optional):
+  ANTHROPIC_API_KEY     — enables model auto-upgrade checks (every 6 h)
+  SLACK_NOTIFY_CHANNEL  — channel/DM user ID for model upgrade notifications
 
-  /tracker       — pipeline summary (counts by status)
-  /track-list    — list active applications
-  /track-add     — add a new application record (modal)
-  /track-update  — update an application's status (modal)
-  /track-note    — add a comment to an application (modal)
-  /track-delete  — delete an application (modal + confirm)
+Slash commands handled:
+  /apply           — generate resume + cover letter for a job
+  /prep            — generate interview prep doc
+  /jobstatus       — check API health
+
+  /tracker         — pipeline summary (counts by status)
+  /track-list      — list active applications
+  /track-add       — add a new application record (modal)
+  /track-update    — update an application's status (modal)
+  /track-note      — add a comment to an application (modal)
+  /track-delete    — delete an application (modal + confirm)
+
+  /profile-name    — update display name (modal)
+  /profile-email   — change email address with re-verification (modal)
+  /profile-password — change password (modal)
+  /profile-resume  — upload a new master resume (.docx via DM file upload)
+  /profile-guide   — edit profile & voice guide (modal)
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 
 import requests
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+
+try:
+    import anthropic as _anthropic_sdk
+    _HAS_ANTHROPIC = True
+except ImportError:
+    _HAS_ANTHROPIC = False
 
 # ---------------------------------------------------------------------------
 # Config
@@ -1238,13 +1255,60 @@ def prep_view_submit(ack, body, client, view):
 @app.command("/jobstatus")
 def jobstatus_command(ack, respond):
     ack()
+
+    def _icon(val: str) -> str:
+        if val in ("ok", "configured"):
+            return ":white_check_mark:"
+        if val == "not_configured":
+            return ":grey_question:"
+        if str(val).startswith("error"):
+            return ":x:"
+        return ":white_check_mark:"  # model name or machine ID — just show it
+
     try:
-        r = requests.get(f"{API_BASE}/api/health", timeout=10)
+        t0 = time.time()
+        r  = requests.get(f"{API_BASE}/api/health", timeout=10)
+        latency_ms = int((time.time() - t0) * 1000)
         r.raise_for_status()
-        data = r.json()
-        respond(f":white_check_mark: API is up. Storage configured: `{data.get('storage', '?')}`")
+        d = r.json()
     except Exception as exc:
-        respond(f":x: API health check failed: {exc}")
+        respond(f":x: *Health check failed* — `{exc}`")
+        return
+
+    overall     = d.get("status", "?")
+    overall_icon = ":white_check_mark:" if overall == "ok" else ":warning:"
+
+    rows = [
+        ("Storage (Tigris)",   d.get("storage",   "?")),
+        ("Email (Resend)",     d.get("email",      "?")),
+        ("Google Drive",       d.get("gdrive",     "?")),
+        ("Anthropic API key",  d.get("anthropic",  "?")),
+        ("Active model",       d.get("model",      "?")),
+        ("Fly machine",        d.get("fly_machine","?")),
+        ("Fly app",            d.get("fly_app",    "?")),
+        ("API latency",        f"{latency_ms} ms"),
+    ]
+
+    lines = "\n".join(
+        f"{_icon(str(val))}  *{label}:*  `{val}`"
+        for label, val in rows
+    )
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{'✅' if overall == 'ok' else '⚠️'}  Job Apply — Service Health"},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": lines},
+        },
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"Overall status: *{overall}*  ·  <{API_BASE}|{API_BASE}>"}],
+        },
+    ]
+    respond(blocks=blocks, text=f"Service health: {overall}")
 
 
 # ---------------------------------------------------------------------------
@@ -1479,12 +1543,360 @@ def track_view_view_submit(ack, body, client, view):
 
 
 # ---------------------------------------------------------------------------
+# Profile edit commands
+# ---------------------------------------------------------------------------
+
+@app.command("/profile-name")
+def profile_name_command(ack, body, client):
+    ack()
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "profile_name_submit",
+            "title": {"type": "plain_text", "text": "Update Display Name"},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "name_block",
+                    "label": {"type": "plain_text", "text": "Display Name"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "name_input",
+                        "placeholder": {"type": "plain_text", "text": "Your name"},
+                    },
+                }
+            ],
+        },
+    )
+
+
+@app.view("profile_name_submit")
+def profile_name_submit(ack, body, client):
+    ack()
+    name = body["view"]["state"]["values"]["name_block"]["name_input"]["value"].strip()
+    user_id = body["user"]["id"]
+    try:
+        r = _api("put", "/api/profile", json={"display_name": name})
+        r.raise_for_status()
+        client.chat_postMessage(channel=user_id, text=f":white_check_mark: Display name updated to *{name}*.")
+    except Exception as exc:
+        client.chat_postMessage(channel=user_id, text=f":x: Failed to update name: {exc}")
+
+
+@app.command("/profile-email")
+def profile_email_command(ack, body, client):
+    ack()
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "profile_email_submit",
+            "title": {"type": "plain_text", "text": "Change Email Address"},
+            "submit": {"type": "plain_text", "text": "Change Email"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": ":warning: A verification email will be sent to the new address. Your account will be marked unverified until you click the link.",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "email_block",
+                    "label": {"type": "plain_text", "text": "New Email Address"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "email_input",
+                        "placeholder": {"type": "plain_text", "text": "you@example.com"},
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "password_block",
+                    "label": {"type": "plain_text", "text": "Current Password (to confirm)"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "password_input",
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("profile_email_submit")
+def profile_email_submit(ack, body, client):
+    ack()
+    vals = body["view"]["state"]["values"]
+    new_email = vals["email_block"]["email_input"]["value"].strip()
+    password  = vals["password_block"]["password_input"]["value"]
+    user_id   = body["user"]["id"]
+    try:
+        r = _api("post", "/api/profile/email",
+                 json={"new_email": new_email, "current_password": password})
+        r.raise_for_status()
+        client.chat_postMessage(
+            channel=user_id,
+            text=f":white_check_mark: Email changed to *{new_email}*. Check your inbox for a verification link.",
+        )
+    except Exception as exc:
+        msg = exc.response.json().get("detail", str(exc)) if hasattr(exc, "response") else str(exc)
+        client.chat_postMessage(channel=user_id, text=f":x: {msg}")
+
+
+@app.command("/profile-password")
+def profile_password_command(ack, body, client):
+    ack()
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "profile_password_submit",
+            "title": {"type": "plain_text", "text": "Change Password"},
+            "submit": {"type": "plain_text", "text": "Update Password"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "current_block",
+                    "label": {"type": "plain_text", "text": "Current Password"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "current_input",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "new_block",
+                    "label": {"type": "plain_text", "text": "New Password (min 8 characters)"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "new_input",
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("profile_password_submit")
+def profile_password_submit(ack, body, client):
+    ack()
+    vals     = body["view"]["state"]["values"]
+    current  = vals["current_block"]["current_input"]["value"]
+    new_pw   = vals["new_block"]["new_input"]["value"]
+    user_id  = body["user"]["id"]
+    try:
+        r = _api("post", "/api/profile/password",
+                 json={"current_password": current, "new_password": new_pw})
+        r.raise_for_status()
+        client.chat_postMessage(channel=user_id, text=":white_check_mark: Password updated successfully.")
+    except Exception as exc:
+        msg = exc.response.json().get("detail", str(exc)) if hasattr(exc, "response") else str(exc)
+        client.chat_postMessage(channel=user_id, text=f":x: {msg}")
+
+
+@app.command("/profile-resume")
+def profile_resume_command(ack, respond):
+    ack()
+    respond(
+        ":paperclip: *Upload your master resume*\n\n"
+        "To update your resume on file:\n"
+        "1. Upload a `.docx` file directly to this DM channel with the Slack bot\n"
+        "2. In the file caption / message, type `resume`\n\n"
+        "The bot will automatically detect and save it as your new master resume."
+    )
+
+
+@app.event("message")
+def handle_message_with_file(body, client, logger):
+    """Detect .docx file uploads in DMs and save as master resume when caption contains 'resume'."""
+    event = body.get("event", {})
+    # Only process DMs
+    if event.get("channel_type") != "im":
+        return
+    files = event.get("files", [])
+    text  = (event.get("text") or "").lower()
+    if not files or "resume" not in text:
+        return
+
+    docx_files = [f for f in files if f.get("name", "").lower().endswith(".docx")]
+    if not docx_files:
+        return
+
+    f        = docx_files[0]
+    user_id  = event["user"]
+    dl_url   = f.get("url_private_download") or f.get("url_private")
+
+    try:
+        # Download from Slack using the bot token
+        dl = requests.get(dl_url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
+        dl.raise_for_status()
+
+        # Upload to API
+        r = _api("post", "/api/profile/resume",
+                 files={"resume": (f["name"], dl.content,
+                                   "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        r.raise_for_status()
+        client.chat_postMessage(
+            channel=user_id,
+            text=f":white_check_mark: Resume *{f['name']}* saved as your master resume.",
+        )
+    except Exception as exc:
+        logger.error(f"Resume upload failed: {exc}")
+        client.chat_postMessage(channel=user_id, text=f":x: Failed to save resume: {exc}")
+
+
+@app.command("/profile-guide")
+def profile_guide_command(ack, body, client):
+    ack()
+    # Pre-fill with existing guide text
+    existing = ""
+    try:
+        r = _api("get", "/api/profile")
+        if r.ok:
+            existing = r.json().get("profile_text", "") or ""
+    except Exception:
+        pass
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "profile_guide_submit",
+            "title": {"type": "plain_text", "text": "Profile & Voice Guide"},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Your profile guide tells the AI how to write in your voice — tone, stories, phrases to avoid, and context about your background.",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "guide_block",
+                    "label": {"type": "plain_text", "text": "Profile & Voice Guide"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "guide_input",
+                        "multiline": True,
+                        "initial_value": existing[:3000],  # Slack modal limit
+                        "placeholder": {"type": "plain_text", "text": "Describe your voice, tone, key stories, phrases to avoid…"},
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("profile_guide_submit")
+def profile_guide_submit(ack, body, client):
+    ack()
+    guide   = body["view"]["state"]["values"]["guide_block"]["guide_input"]["value"]
+    user_id = body["user"]["id"]
+    try:
+        r = _api("put", "/api/profile", json={"profile_text": guide})
+        r.raise_for_status()
+        client.chat_postMessage(channel=user_id, text=":white_check_mark: Profile & voice guide saved.")
+    except Exception as exc:
+        client.chat_postMessage(channel=user_id, text=f":x: Failed to save guide: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Auto model upgrade scheduler
+# ---------------------------------------------------------------------------
+
+_MODEL_CHECK_INTERVAL = 6 * 60 * 60  # 6 hours
+_NOTIFY_CHANNEL       = os.environ.get("SLACK_NOTIFY_CHANNEL", "")  # DM user ID or channel
+_ANTHROPIC_API_KEY    = os.environ.get("ANTHROPIC_API_KEY", "")
+
+
+def _latest_claude_sonnet() -> str | None:
+    """Query Anthropic's models API and return the newest claude-sonnet model ID."""
+    if not _ANTHROPIC_API_KEY:
+        return None
+    try:
+        resp = requests.get(
+            "https://api.anthropic.com/v1/models",
+            headers={"x-api-key": _ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        models = resp.json().get("data", [])
+        sonnet_ids = [
+            m["id"] for m in models
+            if re.search(r"claude-\S*sonnet", m["id"], re.IGNORECASE)
+        ]
+        if not sonnet_ids:
+            return None
+        # Sort by model ID descending — Anthropic uses date-embedded IDs like claude-sonnet-4-6
+        sonnet_ids.sort(reverse=True)
+        return sonnet_ids[0]
+    except Exception:
+        return None
+
+
+def _model_check_loop():
+    """Background thread: periodically check for newer Claude Sonnet models and upgrade."""
+    time.sleep(60)  # delay initial check so bot finishes starting up
+    while True:
+        try:
+            latest = _latest_claude_sonnet()
+            if latest:
+                r = requests.get(
+                    f"{API_BASE}/api/config/model",
+                    headers={"Authorization": f"Bearer {BOT_API_KEY}"},
+                    timeout=10,
+                )
+                if r.ok:
+                    current = r.json().get("model", "")
+                    if latest != current:
+                        # Upgrade
+                        up = requests.put(
+                            f"{API_BASE}/api/config/model",
+                            headers={"Authorization": f"Bearer {BOT_API_KEY}"},
+                            json={"model": latest},
+                            timeout=10,
+                        )
+                        if up.ok and _NOTIFY_CHANNEL:
+                            app.client.chat_postMessage(
+                                channel=_NOTIFY_CHANNEL,
+                                text=(
+                                    f":sparkles: *Claude model auto-upgraded*\n"
+                                    f"• Previous: `{current}`\n"
+                                    f"• New: `{latest}`"
+                                ),
+                            )
+        except Exception:
+            pass
+        time.sleep(_MODEL_CHECK_INTERVAL)
+
+
+# ---------------------------------------------------------------------------
 # /help — command reference
 # ---------------------------------------------------------------------------
 
 @app.command("/help")
 def help_command(ack, respond):
     ack()
+
+    # Fetch current model from API (best-effort)
+    model_label = "unknown"
+    try:
+        r = _api("get", "/api/config/model")
+        if r.ok:
+            model_label = r.json().get("model", "unknown")
+    except Exception:
+        pass
+
     blocks = [
         {
             "type": "header",
@@ -1522,6 +1934,17 @@ def help_command(ack, respond):
         )}},
         {"type": "divider"},
 
+        # Profile
+        {"type": "section", "text": {"type": "mrkdwn", "text": "*👤  Profile*"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            "*/profile-name* — Update your display name\n"
+            "*/profile-email* — Change your email address (triggers re-verification)\n"
+            "*/profile-password* — Change your password\n"
+            "*/profile-resume* — Upload a new master resume (.docx)\n"
+            "*/profile-guide* — Edit your profile & voice guide"
+        )}},
+        {"type": "divider"},
+
         # System
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🛠️  System*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
@@ -1535,7 +1958,7 @@ def help_command(ack, respond):
         {
             "type": "context",
             "elements": [{"type": "mrkdwn",
-                          "text": f"Job Apply Agent · <{API_BASE}|Open App> · <{API_BASE}/admin.html|Admin Dashboard>"}],
+                          "text": f"Job Apply Agent · <{API_BASE}|Open App> · Model: `{model_label}`"}],
         },
     ]
     respond(blocks=blocks, text="Job Apply — Command Reference")
@@ -1662,6 +2085,10 @@ def handle_app_home_opened(client, event, logger):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Start model auto-upgrade scheduler
+    t = threading.Thread(target=_model_check_loop, daemon=True)
+    t.start()
+
     if SLACK_APP_TOKEN:
         handler = SocketModeHandler(app, SLACK_APP_TOKEN)
         print("Starting in Socket Mode")

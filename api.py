@@ -100,6 +100,25 @@ _BOT_API_KEY     = os.environ.get("BOT_API_KEY", "")
 
 _NOTIFY_EMAIL = os.environ.get("APP_USER_EMAIL", "cdl825@gmail.com")
 
+_MODEL_CONFIG_KEY = "config/active_model.txt"
+
+
+def _get_active_model() -> str:
+    """Return the active Claude model — from Tigris config if set, else DEFAULT_MODEL."""
+    try:
+        if storage.is_configured():
+            override = storage.get_text(_MODEL_CONFIG_KEY)
+            if override:
+                return override.strip()
+    except Exception:
+        pass
+    return DEFAULT_MODEL
+
+
+def _set_active_model(model: str) -> None:
+    """Persist the active model override to Tigris."""
+    storage.put_text(_MODEL_CONFIG_KEY, model)
+
 # ---------------------------------------------------------------------------
 # Session helpers (stateless HMAC — works across both Fly.io machines)
 # ---------------------------------------------------------------------------
@@ -335,6 +354,10 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
+class EmailChangeRequest(BaseModel):
+    new_email: str
+    current_password: str
+
 class ProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     profile_text: str | None = None
@@ -363,7 +386,35 @@ class PrepRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "storage": storage.is_configured()}
+    checks: dict = {}
+
+    # Storage (Tigris S3)
+    try:
+        checks["storage"] = "ok" if storage.is_configured() else "not_configured"
+        if storage.is_configured():
+            storage.get_text("config/health_probe.txt")  # lightweight read probe
+    except Exception as exc:
+        checks["storage"] = f"error: {exc}"
+
+    # Email (Resend) — just check key presence, don't send
+    checks["email"] = "configured" if os.environ.get("RESEND_API_KEY") else "not_configured"
+
+    # Google Drive credentials on disk
+    checks["gdrive"] = "configured" if os.path.exists("gdrive_credentials.json") else "not_configured"
+
+    # Active model
+    checks["model"] = _get_active_model()
+
+    # Anthropic API key presence
+    checks["anthropic"] = "configured" if os.environ.get("ANTHROPIC_API_KEY") else "not_configured"
+
+    # Fly machine info
+    checks["fly_machine"] = FLY_MACHINE_ID or "local"
+    checks["fly_app"]     = FLY_APP_NAME
+
+    overall = "ok" if all(v in ("ok", "configured", "not_configured") or not str(v).startswith("error")
+                          for v in checks.values()) else "degraded"
+    return {"status": overall, **checks}
 
 # ---------------------------------------------------------------------------
 # Auth endpoints
@@ -522,6 +573,7 @@ async def me(request: Request):
         "email_verified": record.get("email_verified", True),  # legacy accounts default to True
         "has_resume":     storage.has_resume(user_data["user_id"]),
         "has_profile":    bool(storage.get_profile(user_data["user_id"])),
+        "model":          _get_active_model(),
     }
 
 # ---------------------------------------------------------------------------
@@ -613,6 +665,62 @@ async def change_password(req: PasswordChangeRequest, request: Request):
     )
     return {"ok": True, "emailed": emailed}
 
+
+@app.post("/api/profile/email")
+async def change_email(req: EmailChangeRequest, request: Request):
+    user_data = _require_user(request)
+    record = storage.get_user_by_id(user_data["user_id"])
+    if not record:
+        raise HTTPException(404, "User not found.")
+
+    # Password auth required for email changes
+    if not _verify_password(req.current_password, record.get("password_hash", "")):
+        raise HTTPException(401, "Current password is incorrect.")
+
+    new_email = req.new_email.strip().lower()
+    if new_email == user_data["email"].lower():
+        raise HTTPException(400, "New email is the same as your current email.")
+
+    # Check if the new address is already in use
+    if storage.get_user_by_email(new_email):
+        raise HTTPException(409, "That email address is already registered.")
+
+    old_email = user_data["email"]
+
+    # Update the record and mark as unverified — save_user re-indexes by new email
+    record["email"] = new_email
+    record["email_verified"] = False
+    storage.save_user(record)
+
+    user_audit.log(record["user_id"], "email_changed", old_email,
+                   _client_ip(request), new_email=new_email)
+
+    # Send verification to the new address
+    token = ev.create_token(record["user_id"], new_email)
+    _send_verification_email(new_email, record.get("display_name", new_email), token)
+
+    return {"ok": True, "message": "Email updated. Please verify your new address."}
+
+
+@app.get("/api/config/model")
+async def get_model(request: Request):
+    _require_user(request)
+    return {"model": _get_active_model(), "default": DEFAULT_MODEL}
+
+
+@app.put("/api/config/model")
+async def set_model(request: Request):
+    user_data = _require_user(request)
+    if user_data.get("role") != "admin":
+        raise HTTPException(403, "Admin only.")
+    body = await request.json()
+    model = body.get("model", "").strip()
+    if not model:
+        raise HTTPException(400, "model is required.")
+    _set_active_model(model)
+    return {"ok": True, "model": model}
+
+
 # ---------------------------------------------------------------------------
 # Run endpoints
 # ---------------------------------------------------------------------------
@@ -661,7 +769,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                     q.put({"type": "progress", "message": msg})
 
                 config = WorkflowConfig(
-                    model=req.model or DEFAULT_MODEL,
+                    model=req.model or _get_active_model(),
                     progress=progress,
                     master_resume=resume_path,
                     profile_text=profile_text,
@@ -914,7 +1022,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                     round_type=req.round_type,
                     focus=req.focus or "",
                     interviewer=req.interviewer or "",
-                    model=req.model or DEFAULT_MODEL,
+                    model=req.model or _get_active_model(),
                     progress=progress,
                     master_resume=resume_path,
                     profile_text=profile_text,
