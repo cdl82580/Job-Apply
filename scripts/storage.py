@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import boto3
@@ -116,6 +119,7 @@ def list_all_users() -> list[dict[str, Any]]:
                     users.append(u)
         return users
     except Exception:
+        logger.exception("list_all_users failed — check S3 credentials and bucket config")
         return []
 
 

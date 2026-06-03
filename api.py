@@ -57,23 +57,27 @@ from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
 from routers.admin import router as admin_router
-from apply import (
-    DEFAULT_MODEL,
-    MASTER_RESUME,
-    OUTPUT_DIR,
-    PROFILE_FILE,
-    ROUND_TYPES,
-    InterviewPrepConfig,
-    InterviewPrepResult,
-    WorkflowConfig,
-    WorkflowError,
-    WorkflowResult,
-    generate_interview_prep,
-    get_gdrive_job_posting,
-    list_gdrive_run_folders,
-    run_workflow,
-    safe_filename,
-)
+try:
+    from apply import (
+        DEFAULT_MODEL,
+        MASTER_RESUME,
+        OUTPUT_DIR,
+        PROFILE_FILE,
+        ROUND_TYPES,
+        InterviewPrepConfig,
+        InterviewPrepResult,
+        WorkflowConfig,
+        WorkflowError,
+        WorkflowResult,
+        generate_interview_prep,
+        get_gdrive_job_posting,
+        list_gdrive_run_folders,
+        run_workflow,
+        safe_filename,
+    )
+except Exception as _apply_import_err:
+    logger.critical("Failed to import apply.py — run/prep endpoints will be unavailable: %s", _apply_import_err)
+    raise
 
 # ---------------------------------------------------------------------------
 # Config
@@ -125,8 +129,8 @@ def _set_active_model(model: str) -> None:
 # Session helpers (stateless HMAC — works across both Fly.io machines)
 # ---------------------------------------------------------------------------
 
-def _create_session(user_id: str, email: str, role: str = "user") -> str:
-    return create_session_token(user_id, email, _SESSION_SECRET, role=role)
+def _create_session(user_id: str, email: str, role: str = "user", password_hash: str = "") -> str:
+    return create_session_token(user_id, email, _SESSION_SECRET, role=role, password_hash=password_hash)
 
 
 def _verify_session(token: str) -> dict | None:
@@ -157,13 +161,17 @@ def _current_user(request: Request) -> dict | None:
 
 
 def _require_user(request: Request) -> dict:
+    from scripts.session import pw_version as _pw_version  # avoid circular at module level
     user = _current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    # Check active flag — deactivated accounts are blocked immediately
+    # Check active flag and password version — deactivated accounts and sessions
+    # issued before a password change are rejected immediately.
     record = storage.get_user_by_id(user["user_id"])
     if record and record.get("active") is False:
         raise HTTPException(status_code=401, detail="Account deactivated")
+    if record and user.get("pwv") and user["pwv"] != _pw_version(record.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Session invalidated — please log in again")
     return user
 
 
@@ -359,9 +367,13 @@ _PUBLIC_PATHS = frozenset({
 })
 
 
+_PUBLIC_PREFIXES = ("/img/", "/js/", "/css/", "/fonts/")
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if request.url.path in _PUBLIC_PATHS:
+    path = request.url.path
+    if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
         return await call_next(request)
 
     user = _current_user(request)
@@ -498,6 +510,8 @@ async def register(
 ):
     email = email.strip().lower()
 
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "Invalid email address.")
     if storage.get_user_by_email(email):
         raise HTTPException(400, "An account with that email already exists.")
     if len(password) < 8:
@@ -534,7 +548,8 @@ async def register(
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"],
                              "email_verified": False})
-    token = _create_session(user_id, email, role=user.get("role", "user"))
+    token = _create_session(user_id, email, role=user.get("role", "user"),
+                            password_hash=user["password_hash"])
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:
@@ -558,7 +573,8 @@ async def login(req: LoginRequest, request: Request):
     user_audit.log(user["user_id"], "login_success", email, _client_ip(request))
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"]})
-    token = _create_session(user["user_id"], email, role=user.get("role", "user"))
+    token = _create_session(user["user_id"], email, role=user.get("role", "user"),
+                            password_hash=user.get("password_hash", ""))
     response.set_cookie(_SESSION_COOKIE, token, max_age=86400 * _SESSION_DAYS,
                         httponly=True, samesite="lax", secure=True)
     if FLY_MACHINE_ID:

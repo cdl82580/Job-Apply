@@ -16,14 +16,30 @@ import time
 SESSION_DAYS = 30
 
 
-def create_session_token(user_id: str, email: str, secret: str, role: str = "user") -> str:
+def pw_version(password_hash: str) -> str:
+    """Return a short fingerprint of the stored password hash.
+    Embedded in session tokens so a password change immediately invalidates
+    all tokens that carry the old fingerprint."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:8]
+
+
+def create_session_token(
+    user_id: str,
+    email: str,
+    secret: str,
+    role: str = "user",
+    password_hash: str = "",
+) -> str:
     """Return a signed session token string."""
-    payload = base64.urlsafe_b64encode(json.dumps({
+    payload_data: dict = {
         "user_id": user_id,
         "email":   email,
         "role":    role,
         "exp":     int(time.time()) + 86400 * SESSION_DAYS,
-    }).encode()).rstrip(b"=").decode()
+    }
+    if password_hash:
+        payload_data["pwv"] = pw_version(password_hash)
+    payload = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).rstrip(b"=").decode()
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 

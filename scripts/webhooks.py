@@ -360,12 +360,20 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
     success     = False
     error: str | None = None
 
-    try:
-        resp = _requests.post(url, data=body, headers=headers, timeout=10)
-        status_code = resp.status_code
-        success     = 200 <= status_code < 300
-    except Exception as exc:
-        error = str(exc)
+    # Retry once on network errors or 5xx responses (transient failures).
+    for attempt in range(2):
+        try:
+            resp = _requests.post(url, data=body, headers=headers, timeout=10)
+            status_code = resp.status_code
+            success     = 200 <= status_code < 300
+            error       = None
+            if success or status_code < 500:
+                break
+            error = f"HTTP {status_code}"
+        except Exception as exc:
+            error = str(exc)
+        if attempt == 0:
+            time.sleep(2)
 
     duration_ms = int((time.time() - start) * 1000)
 
