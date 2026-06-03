@@ -710,9 +710,7 @@ async def get_model(request: Request):
 
 @app.put("/api/config/model")
 async def set_model(request: Request):
-    user_data = _require_user(request)
-    if user_data.get("role") != "admin":
-        raise HTTPException(403, "Admin only.")
+    _require_user(request)
     body = await request.json()
     model = body.get("model", "").strip()
     if not model:
