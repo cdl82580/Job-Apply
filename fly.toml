@@ -7,8 +7,9 @@ primary_region = "ewr"
 # "web" serves the FastAPI app; "bot" runs the Slack Socket Mode bot.
 # Each gets its own machine so the bot stays alive independently.
 [processes]
-  web = "uvicorn api:app --host 0.0.0.0 --port 8080"
-  bot = "python slack_bot.py"
+  web        = "uvicorn api:app --host 0.0.0.0 --port 8080"
+  bot        = "python slack_bot.py"
+  testrunner = "python test_runner_bot.py"
 
 # ── Web process — HTTP service ────────────────────────────────────────
 [http_service]
@@ -36,3 +37,10 @@ primary_region = "ewr"
   memory    = "512mb"
   cpu_kind  = "shared"
   cpus      = 1
+
+# ── Test Runner Bot VM — needs 512mb for Playwright/Chromium ─────────
+[[vm]]
+  memory    = "512mb"
+  cpu_kind  = "shared"
+  cpus      = 1
+  processes = ["testrunner"]

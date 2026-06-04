@@ -1,0 +1,50 @@
+{
+  "_metadata": {
+    "major_version": 1,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "Job Apply — Test Runner",
+    "description": "Run automated test suites for the Job Apply app and get results in Slack.",
+    "background_color": "#1A3C5E"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Job Apply Tests",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/run-tests",
+        "description": "Run a test suite: unit | api | slack | all | ui-anon | ui | ui-admin",
+        "usage_hint": "[unit | api | slack | all | ui-anon | ui | ui-admin]",
+        "should_escape": false
+      },
+      {
+        "command": "/test-status",
+        "description": "Check if a test run is currently in progress",
+        "usage_hint": "",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "chat:write",
+        "im:write",
+        "im:history",
+        "im:read"
+      ]
+    }
+  },
+  "settings": {
+    "socket_mode_enabled": true,
+    "interactivity": {
+      "is_enabled": true
+    },
+    "org_deploy_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
