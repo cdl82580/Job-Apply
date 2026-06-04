@@ -25,10 +25,10 @@ from playwright.sync_api import Page, BrowserContext, expect
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BASE_URL       = os.environ.get("UI_BASE_URL",       "https://job-apply-corey.fly.dev").rstrip("/")
-TEST_EMAIL     = os.environ.get("UI_TEST_EMAIL",     "cdl825@gmail.com")
+TEST_EMAIL     = os.environ.get("UI_TEST_EMAIL",     "cdl825+testuser@gmail.com")
 TEST_PASSWORD  = os.environ.get("UI_TEST_PASSWORD",  "")
-ADMIN_EMAIL    = os.environ.get("UI_ADMIN_EMAIL",    "cdl825+admin@gmail.com")
-ADMIN_PASSWORD = os.environ.get("UI_ADMIN_PASSWORD", TEST_PASSWORD)  # defaults to same as user
+ADMIN_EMAIL    = os.environ.get("UI_ADMIN_EMAIL",    "cdl825+testadmin@gmail.com")
+ADMIN_PASSWORD = os.environ.get("UI_ADMIN_PASSWORD", TEST_PASSWORD)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

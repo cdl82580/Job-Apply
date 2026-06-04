@@ -31,3 +31,4 @@ htmlcov/
 .coverage
 .pytest_cache/
 tests/ui/artifacts/
+.env.test.local
