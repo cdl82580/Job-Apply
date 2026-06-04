@@ -1,8 +1,8 @@
-# job-apply — Corey's Job Application Agent
+# job-apply — Job Apply Agents
 
 A Claude-powered web app (and Slack bot) that takes a job posting and produces a
-tailored resume, ATS resume, and cover letter in under 2 minutes. Includes a
-full-featured application tracker, calendar, admin dashboard, webhook system, and audit logging.
+tailored resume, ATS resume, cover letter, and interview prep doc in under 2 minutes.
+Includes a full-featured application tracker, calendar, admin dashboard, webhook system, and audit logging.
 
 **Live app:** https://job-apply-corey.fly.dev/
 
@@ -14,9 +14,12 @@ full-featured application tracker, calendar, admin dashboard, webhook system, an
 - **Tailored resume** — styled DOCX with brand colors, targeted bullets, competency grid
 - **ATS resume** — plain single-column DOCX, no tables or text boxes, parser-safe
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
+- **Interview Prep** — compact 2-page reference card (0.4" margins, 2-column layout) with 9 sections: interviewer intel, role fit map, gap bridges, dev framework, anchor stories, likely Q&A, questions to ask, differentiating edge, and closing line. Tailored to the interviewer, round type, and focus/slant. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
+- **GitHub portfolio** — FlowShift, task-api, and job-apply repos injected into every prep prompt as additional proof points
+- **JD persistence** — job description saved as `job_description.md` to Google Drive on every run and prep; auto-populated when selecting a job from the tracker or existing run dropdown
 - **Google Drive sync** — all output files uploaded automatically to your Drive folder; PDF version generated via Drive conversion
-- **Interview Prep** — two-column 9-section reference card (role fit map, gap bridges, anchor stories, likely questions, differentiating edge) tailored to the interviewer and round type
 - **SSE progress streaming** — live log output while the agent runs; `done` event includes `replacements_warning` if XML edits partially failed
+- **Machine pinning** — `machine_id` returned from POST endpoints; client sets `fly-force-instance-id` cookie before opening EventSource to guarantee SSE stream hits the same Fly.io machine
 
 ### Application Tracker
 - Full CRUD for job applications — company (via BrandFetch lookup), role, status, priority, recruiter, salary, DUA tracking
@@ -82,13 +85,14 @@ job-apply/
 ├── CLAUDE.md                  ← Agent workflow instructions (Claude Code reads this)
 ├── profile.md                 ← Corey's voice, stories, metrics, do-not-use phrases
 ├── frontend/
-│   ├── index.html             ← Agent SPA (form, progress, results, prep)
+│   ├── index.html             ← Agent SPA (run form, prep form, progress, results)
 │   ├── tracking.html          ← Application tracker
 │   ├── calendar.html          ← Calendar view
 │   ├── admin.html             ← Admin dashboard
 │   ├── login.html             ← Login + Google OAuth
 │   ├── register.html
 │   ├── profile.html           ← Profile settings (Markdown editor)
+│   ├── marked.min.js          ← Bundled marked.js (used by profile.html)
 │   └── img/logo.png           ← Single transparent-background logo (light + dark compatible)
 ├── routers/
 │   ├── applications.py        ← Tracker CRUD + comments + linked runs
@@ -119,11 +123,17 @@ job-apply/
 
 1. Go to https://job-apply-corey.fly.dev/
 2. Register (email/password or Google) and upload `master.docx` + paste your `profile.md`
-3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**
+3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; or use **Interview Prep** section for a prep doc
 4. **Tracker tab** — track applications, add notes, link to agent runs
 5. **Calendar tab** — view and manage interview events and deadlines with Slack/email reminders
 6. **Profile** — update display name, email, password, profile guide (Markdown editor), and resume
 7. Admins are redirected to `/admin.html` automatically
+
+### Interview Prep
+- Select job source: **From Tracker** (auto-loads saved JD from Drive), **From existing run** (dropdown), or **Paste JD**
+- Enter company, role, interview round, and optional focus/slant
+- JD is saved as `job_description.md` to Drive after every run so it auto-loads next time
+- Output: compact 2-page DOCX reference card uploaded to Drive and available for download
 
 ---
 
@@ -177,6 +187,7 @@ Output files land in `output/[Company]_[Role]/`:
 - `Resume_CoreyLaverdiere_[Company]_[Role].docx`
 - `Resume_CoreyLaverdiere_[Company]_[Role]_ATS.docx`
 - `CoverLetter_CoreyLaverdiere_[Company]_[Role].docx`
+- `job_description.md` — saved for future JD auto-load
 
 ---
 
@@ -228,14 +239,18 @@ fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
 fly deploy --app job-apply-corey
 ```
 
-The app runs as **two process groups** on Fly.io (defined in `fly.toml`):
+The app runs as **two process groups** on Fly.io (defined in `fly.toml`), each scaled to **1 machine**:
 
 | Process | Command | Machine | Notes |
 |---|---|---|---|
-| `web` | `uvicorn api:app …` | 1 GB, auto-stop | FastAPI web server |
+| `web` | `uvicorn api:app …` | 1 GB, auto-stop | FastAPI web server — 1 machine required (SSE state is in-memory) |
 | `bot` | `python slack_bot.py` | 256 MB, always-on | Slack Socket Mode bot |
 
-Both share the same Docker image and all Fly secrets.
+> **Important:** Keep `web` scaled to exactly 1 machine. Run and prep state is held
+> in-memory; multiple web machines will cause SSE streams to 404 on the wrong instance.
+> If you need to scale, replace the in-memory `_runs`/`_preps` dicts with a shared store (Redis, etc.).
+
+Both process groups share the same Docker image and all Fly secrets.
 
 **Required secrets:**
 
@@ -316,16 +331,17 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/applications/{id}/runs` | cookie | Link a Drive run to an application |
 | DELETE | `/api/applications/{id}/runs/{lid}` | cookie | Unlink a run |
 | GET | `/api/companies/search?q=` | — | BrandFetch company search |
-| POST | `/api/run` | cookie | Start resume generation run |
+| POST | `/api/run` | cookie | Start resume generation run → returns `{run_id, machine_id}` |
 | GET | `/api/run/{id}/stream` | cookie | SSE progress stream (`done` event includes `replacements_warning` if < 70% XML edits succeeded) |
 | GET | `/api/run/{id}/status` | cookie | Poll run status |
 | GET | `/api/run/{id}/files/{name}` | cookie | Download output file |
-| POST | `/api/prep` | cookie | Start interview prep run |
+| POST | `/api/prep` | cookie | Start interview prep run → returns `{prep_id, machine_id}` |
 | GET | `/api/prep/{id}/stream` | cookie | SSE prep progress stream |
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
-| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive (ownership verified) |
+| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt` (ownership verified) |
+| PUT | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Upsert `job_description.md` in Drive folder |
 | GET | `/api/runs` | cookie | List local run folders by user |
 | GET | `/api/runs/{folder}/job_posting` | cookie | Fetch saved JD from local run folder |
 | GET | `/api/config/model` | cookie | Get active Claude model |
@@ -368,6 +384,14 @@ Edit `profile.md` → "Voice & Tone Rules" and "DO NOT" sections.
 
 ### If framing angle is consistently wrong for a role type
 Edit `CLAUDE.md` → "Common Role Type → Framing Angle Reference" table.
+
+### If interview prep content is too verbose
+The prompt in `apply.py` (`generate_interview_prep`) has hard `MAX N WORDS` limits
+per field. Tighten these if Claude is still over-generating.
+
+### If interview prep proof points reference old roles
+The recency rule is enforced in the prompt: only Applause (2016+), ProdPerfect,
+HSP Group, eHealth, and GitHub projects are allowed. Fidelity is explicitly excluded.
 
 ### If Google Drive token expires
 ```bash
