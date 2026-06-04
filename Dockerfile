@@ -9,8 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl pandoc \
 WORKDIR /app
 
 # Python deps first (layer-cache friendly)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-test.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip install --no-cache-dir pytest pytest-asyncio pytest-mock pytest-cov httpx
 
 # Node deps (docx package for cover letter + ATS resume generation)
 COPY package.json .

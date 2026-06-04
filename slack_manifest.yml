@@ -157,6 +157,15 @@ features:
       description: Show the full Job Apply command reference
       usage_hint: (no arguments)
       should_escape: false
+    # Test runner (owner-only)
+    - command: /run-tests
+      description: Run automated test suites and report results (owner only)
+      usage_hint: "[unit | api | slack | all]"
+      should_escape: false
+    - command: /test-status
+      description: Check if a test run is currently in progress (owner only)
+      usage_hint: (no arguments)
+      should_escape: false
 
 oauth_config:
   scopes:

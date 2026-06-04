@@ -56,6 +56,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 
@@ -79,6 +81,14 @@ SLACK_APP_TOKEN      = os.environ.get("SLACK_APP_TOKEN", "")  # xapp-... for Soc
 BOT_API_KEY          = os.environ["BOT_API_KEY"]
 API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://job-apply-corey.fly.dev").rstrip("/")
 PORT                 = int(os.environ.get("PORT", "3000"))
+
+# Slack user ID authorised to run test suites (resolved once at startup).
+# Set TEST_RUNNER_SLACK_USER_ID as a Fly secret, or falls back to
+# SLACK_NOTIFY_USER_ID. Leave unset to disable /run-tests entirely.
+TEST_RUNNER_SLACK_USER_ID = os.environ.get(
+    "TEST_RUNNER_SLACK_USER_ID",
+    os.environ.get("SLACK_NOTIFY_USER_ID", ""),
+)
 
 ROUND_TYPES = ["recruiter_screen", "hiring_manager", "technical", "panel", "final", "take_home"]
 
@@ -2626,6 +2636,233 @@ def handle_app_home_opened(client, event, logger):
         client.views_publish(user_id=user_id, view={"type": "home", "blocks": blocks})
     except Exception as exc:
         logger.error(f"Failed to publish home tab: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# /run-tests — run automated test suites and report results
+# ---------------------------------------------------------------------------
+
+# Suites available inside the container (no browser — UI tests excluded)
+_TEST_SUITES = {
+    "unit":  {
+        "label": "Unit tests",
+        "paths": [
+            "tests/test_session.py",
+            "tests/test_storage.py",
+            "tests/test_webhooks.py",
+            "tests/test_apply_utils.py",
+        ],
+    },
+    "api": {
+        "label": "API / integration tests",
+        "paths": [
+            "tests/test_auth.py",
+            "tests/test_profile.py",
+            "tests/test_health.py",
+            "tests/test_runs.py",
+            "tests/test_admin.py",
+            "tests/test_security_headers.py",
+            "tests/test_rate_limiting.py",
+        ],
+    },
+    "slack": {
+        "label": "Slack bot tests",
+        "paths": ["tests/slack/"],
+    },
+    "all": {
+        "label": "Full suite (unit + API + Slack)",
+        "paths": ["tests/", "--ignore=tests/ui"],
+    },
+}
+
+_SUITE_ALIASES = {
+    "u": "unit", "units": "unit",
+    "a": "api",  "apis": "api",
+    "s": "slack",
+    "":  "all",  "full": "all", "everything": "all",
+}
+
+_active_test_run: dict | None = None
+_test_run_lock = threading.Lock()
+
+
+def _resolve_suite(raw: str) -> tuple[str, dict] | tuple[None, None]:
+    """Return (suite_key, suite_config) or (None, None) if unknown."""
+    key = raw.strip().lower()
+    key = _SUITE_ALIASES.get(key, key)
+    suite = _TEST_SUITES.get(key)
+    return (key, suite) if suite else (None, None)
+
+
+def _run_pytest(paths: list[str], extra_args: list[str] | None = None) -> dict:
+    """Execute pytest in a subprocess and return {passed, failed, errors, output, duration}."""
+    cmd = [
+        sys.executable, "-m", "pytest",
+        "--no-cov", "--tb=short", "-q",
+        *paths,
+        *(extra_args or []),
+    ]
+    t0 = time.time()
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd="/app",
+        timeout=300,
+    )
+    duration = time.time() - t0
+    output   = (result.stdout + result.stderr).strip()
+
+    # Parse summary line: "X passed, Y failed, Z error in N.Xs"
+    passed = failed = errors = 0
+    for line in output.splitlines()[::-1]:
+        m = re.search(r"(\d+) passed", line)
+        if m:
+            passed = int(m.group(1))
+        m = re.search(r"(\d+) failed", line)
+        if m:
+            failed = int(m.group(1))
+        m = re.search(r"(\d+) error", line)
+        if m:
+            errors = int(m.group(1))
+        if "passed" in line or "failed" in line or "error" in line:
+            break
+
+    return {
+        "passed":   passed,
+        "failed":   failed,
+        "errors":   errors,
+        "output":   output,
+        "duration": duration,
+        "returncode": result.returncode,
+    }
+
+
+def _format_test_results(suite_label: str, r: dict) -> list[dict]:
+    """Build Slack blocks summarising the test run."""
+    total  = r["passed"] + r["failed"] + r["errors"]
+    ok     = r["returncode"] == 0 and r["failed"] == 0 and r["errors"] == 0
+    icon   = ":white_check_mark:" if ok else ":x:"
+    status = "All tests passed" if ok else f"{r['failed']} failed, {r['errors']} errors"
+    dur    = f"{r['duration']:.1f}s"
+
+    header = f"{icon}  *{suite_label}* — {status}  ·  {r['passed']}/{total} passed  ·  _{dur}_"
+
+    blocks: list[dict] = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+    ]
+
+    if not ok:
+        # Extract just the failure sections (lines starting with FAILED or the traceback)
+        lines        = r["output"].splitlines()
+        failure_lines: list[str] = []
+        in_failure   = False
+        for line in lines:
+            if line.startswith("FAILED") or line.startswith("ERROR "):
+                in_failure = True
+            if in_failure:
+                failure_lines.append(line)
+            if in_failure and line == "":
+                in_failure = False
+
+        failure_text = "\n".join(failure_lines[:40])  # cap at 40 lines
+        if len(failure_text) > 2800:
+            failure_text = failure_text[:2800] + "\n…(truncated)"
+
+        if failure_text:
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"```{failure_text}```"},
+            })
+
+    return blocks
+
+
+@app.command("/run-tests")
+def run_tests_command(ack, body, respond, client):
+    global _active_test_run
+
+    ack()
+
+    # ── Access control ────────────────────────────────────────────────────
+    caller_id = body.get("user_id", "")
+    if not TEST_RUNNER_SLACK_USER_ID:
+        respond(":lock: Test runner is disabled — `TEST_RUNNER_SLACK_USER_ID` not set.")
+        return
+    if caller_id != TEST_RUNNER_SLACK_USER_ID:
+        respond(":no_entry: You are not authorised to run tests.")
+        return
+
+    # ── Resolve suite ────────────────────────────────────────────────────
+    raw = body.get("text", "").strip()
+    suite_key, suite = _resolve_suite(raw)
+    if suite is None:
+        keys = ", ".join(f"`{k}`" for k in _TEST_SUITES)
+        respond(f":x: Unknown suite `{raw}`. Available: {keys}")
+        return
+
+    # ── Concurrency guard ────────────────────────────────────────────────
+    with _test_run_lock:
+        if _active_test_run is not None:
+            respond(f":hourglass: A test run is already in progress (`{_active_test_run['suite']}`). Try again shortly.")
+            return
+        _active_test_run = {"suite": suite_key}
+
+    # ── Post initial message ─────────────────────────────────────────────
+    channel  = body.get("channel_id")
+    init_msg = client.chat_postMessage(
+        channel=channel,
+        text=f":test_tube: Running *{suite['label']}*…",
+        blocks=[{
+            "type": "section",
+            "text": {"type": "mrkdwn",
+                     "text": f":test_tube: Running *{suite['label']}*…  _(this takes ~10–30s)_"},
+        }],
+    )
+    ts = init_msg["ts"]
+
+    # ── Background worker ────────────────────────────────────────────────
+    def _worker():
+        global _active_test_run
+        try:
+            result = _run_pytest(suite["paths"])
+            blocks = _format_test_results(suite["label"], result)
+        except subprocess.TimeoutExpired:
+            blocks = [{"type": "section", "text": {"type": "mrkdwn",
+                        "text": ":alarm_clock: Test run timed out after 5 minutes."}}]
+        except Exception as exc:
+            blocks = [{"type": "section", "text": {"type": "mrkdwn",
+                        "text": f":x: Test runner crashed: `{exc}`"}}]
+        finally:
+            with _test_run_lock:
+                _active_test_run = None
+
+        try:
+            client.chat_update(channel=channel, ts=ts, blocks=blocks,
+                               text=blocks[0]["text"]["text"])
+        except Exception as exc:
+            client.chat_postMessage(channel=channel,
+                                    text=f":x: Could not update result message: {exc}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+@app.command("/test-status")
+def test_status_command(ack, body, respond):
+    ack()
+
+    caller_id = body.get("user_id", "")
+    if TEST_RUNNER_SLACK_USER_ID and caller_id != TEST_RUNNER_SLACK_USER_ID:
+        respond(":no_entry: You are not authorised to view test status.")
+        return
+
+    with _test_run_lock:
+        active = _active_test_run
+
+    if active:
+        respond(f":hourglass_flowing_sand: Test run in progress: *{active['suite']}*")
+    else:
+        respond(":white_check_mark: No test run currently active.")
 
 
 # ---------------------------------------------------------------------------

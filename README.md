@@ -276,6 +276,7 @@ Both process groups share the same Docker image and all Fly secrets.
 | `SLACK_NOTIFY_USER_ID` | Slack user ID to DM for calendar reminders |
 | `GDRIVE_TOKEN_JSON` | Google Drive OAuth token JSON |
 | `GDRIVE_PARENT_FOLDER_ID` | Drive folder ID for run output (`Job Applications`) |
+| `TEST_RUNNER_SLACK_USER_ID` | Slack user ID authorised to run `/run-tests` (falls back to `SLACK_NOTIFY_USER_ID`) |
 
 ---
 
