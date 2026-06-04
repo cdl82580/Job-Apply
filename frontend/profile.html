@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile — Job Application Agent</title>
   <link rel="icon" href="/favicon.png" type="image/png">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="/marked.min.js"></script>
   <script>
     (function(){
       var t = localStorage.getItem('theme') ||
@@ -467,6 +467,34 @@
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
 
+  // Init marked before any async calls that use it
+  if (typeof marked !== 'undefined') marked.use({ breaks: true, gfm: true });
+
+  function renderPreview(text) {
+    const preview = document.getElementById('profilePreview');
+    if (typeof marked !== 'undefined') {
+      preview.innerHTML = marked.parse(text || '*No profile content yet.*');
+    } else {
+      preview.textContent = text || '';
+    }
+    preview.classList.remove('hidden');
+    document.getElementById('profile_text').classList.add('hidden');
+    document.getElementById('mdToolbar').classList.add('hidden');
+  }
+
+  function showEditor() {
+    document.getElementById('profilePreview').classList.add('hidden');
+    document.getElementById('profile_text').classList.remove('hidden');
+    document.getElementById('mdToolbar').classList.remove('hidden');
+  }
+
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  }
+  document.getElementById('logoutBtn').addEventListener('click', doLogout);
+  document.getElementById('logoutBtnHeader').addEventListener('click', doLogout);
+
   async function loadProfile() {
     // Admins have no profile — send them to the dashboard
     try {
@@ -530,23 +558,6 @@
     }
     setTimeout(() => { toastEl.style.display = 'none'; }, 5000);
   });
-
-  // ── Markdown helpers ─────────────────────────────────────────────
-  marked.use({ breaks: true, gfm: true });
-
-  function renderPreview(text) {
-    const preview = document.getElementById('profilePreview');
-    preview.innerHTML = marked.parse(text || '*No profile content yet.*');
-    preview.classList.remove('hidden');
-    document.getElementById('profile_text').classList.add('hidden');
-    document.getElementById('mdToolbar').classList.add('hidden');
-  }
-
-  function showEditor() {
-    document.getElementById('profilePreview').classList.add('hidden');
-    document.getElementById('profile_text').classList.remove('hidden');
-    document.getElementById('mdToolbar').classList.remove('hidden');
-  }
 
   // ── Markdown toolbar ─────────────────────────────────────────────
   document.getElementById('mdToolbar').addEventListener('click', e => {
@@ -696,12 +707,6 @@
     btn.disabled = false; btn.textContent = 'Update Password';
   });
 
-  async function doLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login.html';
-  }
-  document.getElementById('logoutBtn').addEventListener('click', doLogout);
-  document.getElementById('logoutBtnHeader').addEventListener('click', doLogout);
 </script>
 </body>
 </html>

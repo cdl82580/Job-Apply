@@ -72,7 +72,9 @@ try:
         WorkflowError,
         WorkflowResult,
         generate_interview_prep,
+        claude,
         get_gdrive_job_posting,
+        save_gdrive_job_posting,
         list_gdrive_run_folders,
         run_workflow,
         safe_filename,
@@ -1249,7 +1251,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
                "folder_url": ""}),
         daemon=True,
     ).start()
-    return {"run_id": run_id}
+    return {"run_id": run_id, "machine_id": FLY_MACHINE_ID or None}
 
 
 @app.get("/api/run/{run_id}/stream")
@@ -1360,6 +1362,46 @@ async def gdrive_get_job_posting(folder_id: str, request: Request):
     return {"job_posting": text}
 
 
+@app.post("/api/jd/format")
+async def format_job_posting(request: Request):
+    """Use Claude to convert a pasted plain-text JD into clean markdown for storage."""
+    _require_user(request)
+    body = await request.json()
+    raw  = (body.get("job_posting") or "").strip()
+    if not raw:
+        raise HTTPException(400, "job_posting is required")
+    system = "You are a document formatter. Convert the raw job description text into clean, well-structured markdown. Use ## for section headings, bullet lists for requirements/responsibilities, and preserve all content faithfully. Return only the markdown, no preamble."
+    config = WorkflowConfig(progress=lambda _: None)
+    try:
+        md = claude(system, raw, max_tokens=4096, config=config)
+    except Exception as e:
+        raise HTTPException(500, f"Formatting failed: {e}")
+    return {"markdown": md}
+
+
+@app.put("/api/gdrive/runs/{folder_id}/job_posting")
+async def gdrive_save_job_posting(folder_id: str, request: Request):
+    """Upsert job_description.md in a specific Drive folder."""
+    user_data  = _require_user(request)
+    user_label = user_data["email"]
+    body       = await request.json()
+    markdown   = body.get("job_posting", "").strip()
+    if not markdown:
+        raise HTTPException(400, "job_posting field is required")
+    try:
+        user_folders = list_gdrive_run_folders(user_label, WorkflowConfig(progress=lambda _: None, user_label=user_label))
+    except Exception:
+        raise HTTPException(503, "Could not verify Drive folder ownership — please try again")
+    allowed_ids = {f.get("id") for f in user_folders if f.get("id")}
+    if folder_id not in allowed_ids:
+        raise HTTPException(403, "Access denied to this Drive folder")
+    config  = WorkflowConfig(progress=lambda _: None, user_label=user_label)
+    success = save_gdrive_job_posting(folder_id, markdown, config)
+    if not success:
+        raise HTTPException(500, "Failed to save job description to Drive")
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Run listing (for interview prep dropdown)
 # ---------------------------------------------------------------------------
@@ -1375,7 +1417,7 @@ async def list_runs(request: Request):
             if d.is_dir():
                 runs.append({
                     "folder":          d.name,
-                    "has_job_posting": (d / "job_posting.txt").exists(),
+                    "has_job_posting": (d / "job_description.md").exists() or (d / "job_posting.txt").exists(),
                 })
     return {"runs": runs}
 
@@ -1384,14 +1426,16 @@ async def list_runs(request: Request):
 async def get_run_job_posting(folder: str, request: Request):
     user_data = _require_user(request)
     user_dir  = OUTPUT_DIR / safe_filename(user_data["user_id"])
+    run_dir   = user_dir / folder
     try:
-        path = (user_dir / folder / "job_posting.txt").resolve()
-        path.relative_to(user_dir.resolve())
+        run_dir.resolve().relative_to(user_dir.resolve())
     except ValueError:
         raise HTTPException(400, "Invalid folder")
-    if not path.exists():
-        raise HTTPException(404, "Job posting not saved for this run")
-    return {"job_posting": path.read_text(encoding="utf-8")}
+    for name in ("job_description.md", "job_posting.txt"):
+        path = run_dir / name
+        if path.exists():
+            return {"job_posting": path.read_text(encoding="utf-8")}
+    raise HTTPException(404, "Job posting not saved for this run")
 
 
 # ---------------------------------------------------------------------------
@@ -1474,7 +1518,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                "round_type": req.round_type, "folder_url": ""}),
         daemon=True,
     ).start()
-    return {"prep_id": prep_id}
+    return {"prep_id": prep_id, "machine_id": FLY_MACHINE_ID or None}
 
 
 @app.get("/api/prep/{prep_id}/stream")
