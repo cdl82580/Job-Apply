@@ -31,9 +31,8 @@ primary_region = "ewr"
   cpus      = 1
   processes = ["web"]
 
-# ── Bot VM — lightweight, must stay running for Socket Mode ──────────
+# ── Bot VM — needs 512mb to run Playwright/Chromium for UI tests ─────
 [[vm]]
-  memory    = "256mb"
+  memory    = "512mb"
   cpu_kind  = "shared"
   cpus      = 1
-  processes = ["bot"]

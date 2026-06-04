@@ -2673,13 +2673,33 @@ _TEST_SUITES = {
         "label": "Full suite (unit + API + Slack)",
         "paths": ["tests/", "--ignore=tests/ui"],
     },
+    "ui-anon": {
+        "label": "UI tests — anonymous (no credentials)",
+        "paths": ["tests/ui/test_login.py", "tests/ui/test_register.py"],
+        "browser": True,
+    },
+    "ui": {
+        "label": "UI tests — authenticated",
+        "paths": ["tests/ui/"],
+        "browser": True,
+        "needs_creds": True,
+    },
+    "ui-admin": {
+        "label": "UI tests — admin",
+        "paths": ["tests/ui/test_admin.py"],
+        "browser": True,
+        "needs_creds": True,
+    },
 }
 
 _SUITE_ALIASES = {
-    "u": "unit", "units": "unit",
-    "a": "api",  "apis": "api",
+    "u": "unit",    "units": "unit",
+    "a": "api",     "apis": "api",
     "s": "slack",
-    "":  "all",  "full": "all", "everything": "all",
+    "":  "all",     "full": "all",     "everything": "all",
+    "ui": "ui",     "web": "ui",
+    "anon": "ui-anon", "ui-anon": "ui-anon",
+    "admin": "ui-admin", "ui-admin": "ui-admin",
 }
 
 _active_test_run: dict | None = None
@@ -2694,7 +2714,8 @@ def _resolve_suite(raw: str) -> tuple[str, dict] | tuple[None, None]:
     return (key, suite) if suite else (None, None)
 
 
-def _run_pytest(paths: list[str], extra_args: list[str] | None = None) -> dict:
+def _run_pytest(paths: list[str], extra_args: list[str] | None = None,
+                env_overrides: dict | None = None) -> dict:
     """Execute pytest in a subprocess and return {passed, failed, errors, output, duration}."""
     cmd = [
         sys.executable, "-m", "pytest",
@@ -2702,6 +2723,9 @@ def _run_pytest(paths: list[str], extra_args: list[str] | None = None) -> dict:
         *paths,
         *(extra_args or []),
     ]
+    env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
     t0 = time.time()
     result = subprocess.run(
         cmd,
@@ -2709,6 +2733,7 @@ def _run_pytest(paths: list[str], extra_args: list[str] | None = None) -> dict:
         text=True,
         cwd="/app",
         timeout=300,
+        env=env,
     )
     duration = time.time() - t0
     output   = (result.stdout + result.stderr).strip()
@@ -2825,7 +2850,32 @@ def run_tests_command(ack, body, respond, client):
     def _worker():
         global _active_test_run
         try:
-            result = _run_pytest(suite["paths"])
+            extra_args: list[str] = []
+            env_overrides: dict[str, str] = {}
+
+            if suite.get("browser"):
+                # Headless Chromium — no sandbox needed in container
+                extra_args += [
+                    "--base-url", os.environ.get("UI_BASE_URL", API_BASE),
+                    "--browser", "chromium",
+                ]
+                # Pass UI test credentials from env (set as Fly secrets)
+                for key in ("UI_BASE_URL", "UI_TEST_EMAIL", "UI_TEST_PASSWORD",
+                            "UI_ADMIN_EMAIL", "UI_ADMIN_PASSWORD"):
+                    val = os.environ.get(key, "")
+                    if val:
+                        env_overrides[key] = val
+                # Default base URL to the live app if not explicitly set
+                if "UI_BASE_URL" not in env_overrides:
+                    env_overrides["UI_BASE_URL"] = API_BASE
+
+                if suite.get("needs_creds") and not os.environ.get("UI_TEST_PASSWORD"):
+                    blocks = [{"type": "section", "text": {"type": "mrkdwn",
+                        "text": ":lock: UI test credentials not set. Add `UI_TEST_PASSWORD` and `UI_ADMIN_PASSWORD` as Fly secrets."}}]
+                    return
+
+            result = _run_pytest(suite["paths"], extra_args=extra_args,
+                                 env_overrides=env_overrides or None)
             blocks = _format_test_results(suite["label"], result)
         except subprocess.TimeoutExpired:
             blocks = [{"type": "section", "text": {"type": "mrkdwn",

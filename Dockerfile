@@ -11,7 +11,11 @@ WORKDIR /app
 # Python deps first (layer-cache friendly)
 COPY requirements.txt requirements-test.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir pytest pytest-asyncio pytest-mock pytest-cov httpx
+ && pip install --no-cache-dir pytest pytest-asyncio pytest-mock pytest-cov httpx \
+ && pip install --no-cache-dir playwright pytest-playwright pytest-base-url
+
+# Install Chromium + system deps for Playwright UI tests
+RUN playwright install chromium --with-deps
 
 # Node deps (docx package for cover letter + ATS resume generation)
 COPY package.json .
