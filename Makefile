@@ -16,6 +16,10 @@ test-fast:
 test-unit:
 	pytest tests/test_session.py tests/test_storage.py tests/test_webhooks.py tests/test_apply_utils.py --no-cov
 
+# Slack bot tests only
+test-slack:
+	pytest tests/slack/ --no-cov -v
+
 # API/integration tests only
 test-api:
 	pytest tests/test_auth.py tests/test_profile.py tests/test_health.py tests/test_runs.py \
