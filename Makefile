@@ -60,3 +60,10 @@ test-ui-anon:
 	  --base-url=$(or $(UI_BASE_URL),https://job-apply-corey.fly.dev) \
 	  --screenshot=only-on-failure \
 	  -v
+
+# Run only the admin UI tests (requires UI_ADMIN_EMAIL + UI_ADMIN_PASSWORD)
+test-ui-admin:
+	pytest tests/ui/test_admin.py \
+	  --base-url=$(or $(UI_BASE_URL),https://job-apply-corey.fly.dev) \
+	  --screenshot=only-on-failure \
+	  -v

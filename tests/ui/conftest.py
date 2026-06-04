@@ -24,9 +24,11 @@ from playwright.sync_api import Page, BrowserContext, expect
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BASE_URL      = os.environ.get("UI_BASE_URL",      "https://job-apply-corey.fly.dev").rstrip("/")
-TEST_EMAIL    = os.environ.get("UI_TEST_EMAIL",    "cdl825@gmail.com")
-TEST_PASSWORD = os.environ.get("UI_TEST_PASSWORD", "")
+BASE_URL       = os.environ.get("UI_BASE_URL",       "https://job-apply-corey.fly.dev").rstrip("/")
+TEST_EMAIL     = os.environ.get("UI_TEST_EMAIL",     "cdl825@gmail.com")
+TEST_PASSWORD  = os.environ.get("UI_TEST_PASSWORD",  "")
+ADMIN_EMAIL    = os.environ.get("UI_ADMIN_EMAIL",    "cdl825+admin@gmail.com")
+ADMIN_PASSWORD = os.environ.get("UI_ADMIN_PASSWORD", TEST_PASSWORD)  # defaults to same as user
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -88,6 +90,50 @@ def auth_page(browser, base_url, authenticated_state):
 def anon_page(browser, base_url):
     """A Page with no session (anonymous)."""
     context = browser.new_context(base_url=base_url, viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture(scope="session")
+def admin_authenticated_state(browser, base_url):
+    """
+    Log in as admin once per session.
+    Requires UI_ADMIN_EMAIL + UI_ADMIN_PASSWORD (or UI_TEST_PASSWORD) env vars.
+    """
+    if not ADMIN_PASSWORD:
+        pytest.skip("UI_ADMIN_PASSWORD not set — skipping admin UI tests")
+
+    context = browser.new_context(base_url=base_url, viewport={"width": 1280, "height": 900})
+    page = context.new_page()
+
+    page.goto("/login.html")
+    page.fill("#email",    ADMIN_EMAIL)
+    page.fill("#password", ADMIN_PASSWORD)
+    page.click("#submitBtn")
+
+    # Admins are redirected to /admin.html
+    try:
+        page.wait_for_url(lambda url: "admin" in url or "login" not in url, timeout=15_000)
+    except Exception:
+        pytest.skip("Admin login failed — check UI_ADMIN_EMAIL / UI_ADMIN_PASSWORD")
+
+    if "login" in page.url:
+        pytest.skip("Admin login failed — check credentials")
+
+    state = context.storage_state()
+    context.close()
+    return state
+
+
+@pytest.fixture()
+def admin_page(browser, base_url, admin_authenticated_state):
+    """A Page with a valid admin session."""
+    context = browser.new_context(
+        base_url=base_url,
+        viewport={"width": 1280, "height": 900},
+        storage_state=admin_authenticated_state,
+    )
     page = context.new_page()
     yield page
     context.close()
