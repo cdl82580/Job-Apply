@@ -172,6 +172,16 @@
       background: var(--primary); color: white; border-color: var(--primary);
     }
     .pill:hover:not(.active) { border-color: var(--border); color: var(--text); }
+    .clear-filters-btn {
+      padding: .3rem .75rem; border-radius: 999px;
+      border: 1px solid var(--input-border);
+      background: transparent; color: var(--muted);
+      font-size: .775rem; font-weight: 600; cursor: pointer;
+      transition: all .12s; white-space: nowrap;
+    }
+    .clear-filters-btn:hover { border-color: #EF4444; color: #EF4444; }
+    .clear-filters-btn { display: none; }
+    .clear-filters-btn.visible { display: inline-block; }
 
     /* ── Stats bar ────────────────────────────────────────────────── */
     .stats-bar {
@@ -658,6 +668,7 @@
     <div class="search-wrap">
       <input type="text" id="searchInput" placeholder="Search company or role…">
     </div>
+    <button class="clear-filters-btn" id="clearFiltersBtn">✕ Clear</button>
     <div class="pill-group" id="statusPills">
       <button class="pill active" data-status="">All</button>
       <button class="pill" data-status="Interviewing">Interviewing</button>
@@ -1094,6 +1105,7 @@ function applyFilters() {
   }
   _filtered = _sortList(list);
   _page = 1;
+  if (typeof _updateClearBtn === 'function') _updateClearBtn();
   renderTable();
 }
 
@@ -1254,6 +1266,18 @@ document.getElementById('statusPills').addEventListener('click', (e) => {
 
 document.getElementById('searchInput').addEventListener('input', (e) => {
   _searchQ = e.target.value.trim();
+  applyFilters();
+});
+
+function _updateClearBtn() {
+  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(  _activeStatus || _searchQ));
+}
+document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+  _activeStatus = '';
+  _searchQ = '';
+  document.getElementById('searchInput').value = '';
+  document.querySelectorAll('#statusPills .pill').forEach(p => p.classList.remove('active'));
+  document.querySelector('#statusPills .pill[data-status=""]').classList.add('active');
   applyFilters();
 });
 
