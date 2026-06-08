@@ -973,6 +973,7 @@ def step6_cover_letter(
 GDRIVE_PARENT_FOLDER_ID = os.environ.get("GDRIVE_PARENT_FOLDER_ID", "")
 GDRIVE_TOKEN_PATH       = Path.home() / ".config" / "job-apply" / "gdrive_token.json"
 GDRIVE_CREDS_PATH       = Path(__file__).parent / "gdrive_credentials.json"
+APYHUB_API_KEY          = os.environ.get("APYHUB_API_KEY", "")
 _MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _SCOPES    = ["https://www.googleapis.com/auth/drive.file"]
 
@@ -1059,6 +1060,50 @@ def _gdrive_get_or_create_folder(service, name: str, parent_id: str) -> tuple[st
         fields="id, webViewLink",
     ).execute()
     return created["id"], created["webViewLink"], True
+
+
+def _ensure_run_folder(service, company_safe: str, role_safe: str, config: WorkflowConfig) -> tuple[str, str]:
+    """Resolve (and create if needed) the Drive folder for a company/role pair.
+
+    Drive structure:
+      Job Applications/
+        {user_label}/          ← created when config.user_label is set
+          {Company}_{Role}/
+
+    Returns (folder_id, webViewLink). Idempotent — safe to call repeatedly.
+    """
+    if config.user_label:
+        user_folder_id, _, user_created = _gdrive_get_or_create_folder(
+            service, config.user_label, GDRIVE_PARENT_FOLDER_ID
+        )
+        config.progress(f"  ✓ Drive user folder: {config.user_label}")
+        if user_created:
+            _set_link_viewer(service, user_folder_id, config.progress)
+        run_parent_id = user_folder_id
+    else:
+        run_parent_id = GDRIVE_PARENT_FOLDER_ID
+
+    run_folder_name = f"{company_safe}_{role_safe}"
+    run_folder_id, folder_url, _ = _gdrive_get_or_create_folder(
+        service, run_folder_name, run_parent_id
+    )
+    config.progress(f"  ✓ Drive run folder: {run_folder_name}")
+    return run_folder_id, folder_url
+
+
+def ensure_application_gdrive_folder(company: str, role: str, config: WorkflowConfig) -> tuple[str, str] | None:
+    """Get-or-create the Drive folder for an application's company/role, outside of a full run.
+
+    Returns (folder_id, folder_url), or None if Drive isn't configured/reachable.
+    """
+    service = _gdrive_service(config)
+    if service is None:
+        return None
+    try:
+        return _ensure_run_folder(service, safe_filename(company), safe_filename(role), config)
+    except Exception as exc:
+        config.progress(f"  ⚠ Could not resolve Drive folder: {exc}")
+        return None
 
 
 def _set_link_viewer(service, folder_id: str, progress: callable) -> None:
@@ -1164,23 +1209,7 @@ def step8_upload(
         if service is None:
             return None
 
-        # Resolve the parent folder (user subfolder, or root if CLI/no user)
-        if config.user_label:
-            user_folder_id, _, user_created = _gdrive_get_or_create_folder(
-                service, config.user_label, GDRIVE_PARENT_FOLDER_ID
-            )
-            config.progress(f"  ✓ Drive user folder: {config.user_label}")
-            if user_created:
-                _set_link_viewer(service, user_folder_id, config.progress)
-            run_parent_id = user_folder_id
-        else:
-            run_parent_id = GDRIVE_PARENT_FOLDER_ID
-
-        run_folder_name = f"{company_safe}_{role_safe}"
-        run_folder_id, folder_url, _ = _gdrive_get_or_create_folder(
-            service, run_folder_name, run_parent_id
-        )
-        config.progress(f"  ✓ Drive run folder: {run_folder_name}")
+        run_folder_id, folder_url = _ensure_run_folder(service, company_safe, role_safe, config)
 
         for f in sorted(run_dir.iterdir()):
             if f.name.startswith("~$"):
@@ -1189,10 +1218,6 @@ def step8_upload(
                 mime = _MIME_DOCX
             elif f.suffix == ".pdf":
                 mime = "application/pdf"
-            elif f.name == "job_posting.txt":
-                mime = "text/plain; charset=utf-8"
-            elif f.name == "job_description.md":
-                mime = "text/markdown; charset=utf-8"
             else:
                 continue
             media = MediaFileUpload(str(f), mimetype=mime, resumable=False)
@@ -1264,25 +1289,6 @@ def _upload_single_to_drive(
             fields="id",
         ).execute()
         config.progress(f"  ✓ Uploaded {file_path.name}")
-
-        # Also upload job_description.md if it exists alongside the file
-        jd_path = file_path.parent / "job_description.md"
-        if jd_path.exists():
-            from googleapiclient.http import MediaInMemoryUpload as _MIMU
-            # Remove any existing copy first
-            existing_jd = service.files().list(
-                q=f"name='job_description.md' and '{folder_id}' in parents and trashed=false",
-                fields="files(id)", pageSize=1,
-            ).execute().get("files", [])
-            for ef in existing_jd:
-                service.files().delete(fileId=ef["id"]).execute()
-            jd_media = _MIMU(jd_path.read_bytes(), mimetype="text/markdown", resumable=False)
-            service.files().create(
-                body={"name": "job_description.md", "parents": [folder_id]},
-                media_body=jd_media,
-                fields="id",
-            ).execute()
-            config.progress("  ✓ Uploaded job_description.md")
 
         return folder_url
 
@@ -1423,6 +1429,66 @@ def save_gdrive_job_posting(folder_id: str, markdown: str, config: WorkflowConfi
 
 
 # ---------------------------------------------------------------------------
+# Auto-capture: extract job description from a posting URL via apyhub
+# ---------------------------------------------------------------------------
+
+def extract_job_description_from_url(url: str, config: WorkflowConfig) -> str | None:
+    """Extract the job description text from a posting URL via the apyhub API.
+
+    Returns the extracted text, or None on missing key / timeout / failure.
+    Best-effort — never raises.
+    """
+    if not APYHUB_API_KEY:
+        config.progress("  ⚠ APYHUB_API_KEY not set — skipping job description extraction")
+        return None
+    try:
+        import requests
+        resp = requests.get(
+            "https://api.apyhub.com/extract/text/webpage",
+            params={"url": url, "preserve_paragraphs": "true"},
+            headers={"apy-token": APYHUB_API_KEY, "Content-Type": "application/json"},
+            data="{}",
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data.get("data")
+        if not text or not isinstance(text, str):
+            config.progress("  ⚠ apyhub returned no extractable text")
+            return None
+        return text
+    except Exception as exc:
+        config.progress(f"  ⚠ Job description extraction failed: {exc}")
+        return None
+
+
+def auto_capture_job_description(company: str, role: str, url: str, config: WorkflowConfig) -> bool:
+    """Best-effort pipeline: ensure the application's Drive folder exists, extract
+    the JD text from its posting URL via apyhub, and save it as job_description.md.
+
+    Returns True on success, False if any step fails. Never raises.
+    """
+    config.progress(f"\n📄 Auto-capturing job description for {company} / {role}")
+
+    folder = ensure_application_gdrive_folder(company, role, config)
+    if folder is None:
+        config.progress("  ⚠ Could not resolve Drive folder — aborting auto-capture")
+        return False
+    folder_id, _ = folder
+
+    text = extract_job_description_from_url(url, config)
+    if not text:
+        return False
+
+    if not save_gdrive_job_posting(folder_id, text, config):
+        config.progress("  ⚠ Could not save job_description.md to Drive")
+        return False
+
+    config.progress("  ✓ Saved job_description.md to Drive")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Public workflow entry point
 # ---------------------------------------------------------------------------
 
@@ -1462,10 +1528,6 @@ def run_workflow(
     else:
         run_dir = OUTPUT_DIR / f"{company_safe}_{role_safe}"
     run_dir.mkdir(parents=True, exist_ok=True)
-
-    # Persist job posting so interview prep can retrieve it later
-    (run_dir / "job_posting.txt").write_text(job_posting, encoding="utf-8")
-    (run_dir / "job_description.md").write_text(job_posting, encoding="utf-8")
 
     resume_out = run_dir / f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}.docx"
     ats_out    = run_dir / f"Resume_{APPLICANT_NAME}_{company_safe}_{role_safe}_ATS.docx"
@@ -1979,9 +2041,6 @@ def generate_interview_prep(
         f"  ✓ Inputs loaded "
         f"({len(resume_text)} chars resume, {len(profile)} chars profile)"
     )
-
-    # Persist job posting for future retrieval
-    (run_dir / "job_description.md").write_text(job_posting, encoding="utf-8")
 
     # Step 2: Generate content with Claude
     print_step(2, "Generating Interview Prep Content", wfc)

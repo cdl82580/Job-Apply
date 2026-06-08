@@ -1415,27 +1415,8 @@ async def list_runs(request: Request):
         dirs = sorted(user_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
         for d in dirs:
             if d.is_dir():
-                runs.append({
-                    "folder":          d.name,
-                    "has_job_posting": (d / "job_description.md").exists() or (d / "job_posting.txt").exists(),
-                })
+                runs.append({"folder": d.name})
     return {"runs": runs}
-
-
-@app.get("/api/runs/{folder}/job_posting")
-async def get_run_job_posting(folder: str, request: Request):
-    user_data = _require_user(request)
-    user_dir  = OUTPUT_DIR / safe_filename(user_data["user_id"])
-    run_dir   = user_dir / folder
-    try:
-        run_dir.resolve().relative_to(user_dir.resolve())
-    except ValueError:
-        raise HTTPException(400, "Invalid folder")
-    for name in ("job_description.md", "job_posting.txt"):
-        path = run_dir / name
-        if path.exists():
-            return {"job_posting": path.read_text(encoding="utf-8")}
-    raise HTTPException(404, "Job posting not saved for this run")
 
 
 # ---------------------------------------------------------------------------

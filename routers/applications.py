@@ -15,6 +15,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from typing import Any
@@ -139,6 +140,25 @@ def _actor(request: Request) -> str:
     return request.state.user.get("email", request.state.user.get("user_id", "unknown"))
 
 
+def _trigger_job_description_capture(company: str, role_title: str, url: str, user_label: str) -> None:
+    """Best-effort, async: ensure the application's Drive folder exists and
+    auto-capture its job description from `url` via apyhub. Never raises —
+    failures here must never affect the application-create response."""
+    try:
+        from apply import auto_capture_job_description, WorkflowConfig
+
+        def _run():
+            try:
+                config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
+                auto_capture_job_description(company, role_title, url, config)
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Application CRUD
 # ---------------------------------------------------------------------------
@@ -185,6 +205,10 @@ async def create_application(body: ApplicationCreate, request: Request):
     }
     record["audit_log"].append(_audit_entry("created", actor))
     record = app_store.save_application(user_id, record)
+
+    if record.get("url"):
+        _trigger_job_description_capture(record["company"], record["role_title"], record["url"], actor)
+
     return record
 
 
