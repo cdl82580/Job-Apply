@@ -1431,10 +1431,21 @@ def save_gdrive_job_posting(folder_id: str, markdown: str, config: WorkflowConfi
 # Auto-capture: extract job description from a posting URL via Claude
 # ---------------------------------------------------------------------------
 
-_JD_EXTRACTION_SYSTEM = """You extract job posting content from raw webpage HTML/text.
-Return ONLY the job description itself — title, company, responsibilities,
-requirements, qualifications, compensation, location, etc. — as clean plain text.
-Strip out navigation, cookie banners, headers/footers, unrelated links, and ads.
+_JD_EXTRACTION_SYSTEM = """You extract a single job posting from raw webpage HTML/text.
+
+Return ONLY the content of THIS job posting, as clean plain text, organized under
+these sections where present: Title, Company, Location, Compensation, About the
+Role / Summary, Responsibilities, Requirements / Qualifications, Benefits, How to
+Apply. Preserve the original wording — do not paraphrase or summarize.
+
+Aggressively strip out everything that is not part of this specific posting's
+content, including but not limited to: cookie/consent banners, site navigation
+and menus, headers and footers, "related jobs" / "similar postings" / "other
+openings" lists, social-share links, sign-in/account prompts, ads, tracking
+scripts, legal boilerplate (privacy policy, terms of use, EEO statements that
+aren't part of the actual posting body), and any company marketing content not
+specific to this role.
+
 If the page does not contain a job posting, respond with exactly: NONE"""
 
 
