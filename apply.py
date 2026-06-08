@@ -550,105 +550,154 @@ def apply_brand_colors(xml: str, colors: dict) -> str:
 def _xml_escape(text: str) -> str:
     """Escape text for safe insertion as XML character data.
     Resolves any pre-escaped entities first to avoid double-encoding, then
-    re-escapes cleanly — so Claude can write & or &amp; and both work."""
+    re-escapes cleanly — so callers can write & or &amp; and both work."""
     for entity, char in [("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
                          ("&apos;", "'"), ("&quot;", '"')]:
         text = text.replace(entity, char)
     return html.escape(text, quote=False)
 
 
+def _extract_xml_field(xml: str, prefix: str) -> str | None:
+    """Return the exact substring of *xml* that should be used as the `old`
+    argument to `str.replace()` for this field.
+
+    Normally that is just the text content of the matching `<w:t>` element.
+    When Word has split a single logical run across a `<w:lastRenderedPageBreak/>`
+    element the returned string spans both `<w:t>` contents plus the break tag,
+    so that one `str.replace()` call collapses the split back to a single run.
+
+    `prefix` must be the first few characters of the field as they appear
+    *inside the XML* (entity-escaped: & → &amp;, etc.).  Returns None if not
+    found.
+    """
+    escaped = re.escape(prefix)
+    pat = r'<w:t(?:\s[^>]*)?>(' + escaped + r'(?:(?!</w:t>).)*)</w:t>'
+    m = re.search(pat, xml, re.S)
+    if not m:
+        return None
+    first_text = m.group(1)
+
+    # Check whether a <w:lastRenderedPageBreak/> immediately follows and
+    # introduces a continuation <w:t>.  If so, include the break + second run
+    # so the caller's replace() collapses both into one clean <w:t>.
+    after = xml[m.end():]
+    pb = re.match(
+        r'^(\s*<w:lastRenderedPageBreak/>)(\s*<w:t[^>]*>)((?:(?!</w:t>).)*)',
+        after, re.S,
+    )
+    if pb:
+        return first_text + '</w:t>' + pb.group(1) + pb.group(2) + pb.group(3)
+    return first_text
+
+
+# Stable unique prefixes for every field that changes on every run.
+# These are the values in master.docx — they're always the `old` side.
+# IMPORTANT: use the entity-escaped form (&amp; not &) to match raw XML.
+_MASTER_TAGLINE_PREFIX    = "Delivering AI-Powered Integrations"
+_MASTER_SUMMARY_PREFIX    = "Enterprise technology leader with 12+ years"
+_MASTER_SUBTITLE_PREFIX   = "AI Solutions &amp; Integration Engineer"
+_MASTER_EHBULLET_PREFIXES = [
+    "Architected and delivered AI-powered proof-of-concepts",
+    "Delivered HAL, an ITSM chatbot agent",
+    "Enterprise platform owner and integration and workflow",
+    "Delivered 4+ production integrations in under 12 months",
+    "Served as Salesforce System Administrator;",
+    "Led discovery and requirements workshops",
+]
+_MASTER_HSPBULLET_PREFIXES = [
+    "Full-stack integration and solutions owner across internal",
+    "Designed and delivered a self-serve pricing quote application",
+    "Delivered 20+ integrations for the GateWay customer portal",
+    "Engaged directly with department leaders as an embedded",
+]
+# 15 competency cells in row-major order (row1·col1 … row3·col5).
+# Entity-escaped prefixes that are long enough to be globally unique.
+_MASTER_COMP_PREFIXES = [
+    "Agentic AI &amp;",
+    "RAG Pipelines &amp;",
+    "REST, SOAP &amp;",
+    "Tray.ai / iPaaS",
+    "Solution Architecture &amp;",
+    "End-to-End Integration &amp;",
+    "Salesforce CRM &amp;",
+    "Microsoft 365 / Graph API",
+    "POC-to-Production Deployment",
+    "Six Sigma Green Belt",
+    "JavaScript / JSON / SQL",
+    "Workday &amp; Okta",
+    "Stakeholder Enablement &amp;",
+    "Technical Documentation &amp; ROI",
+    "Cross-functional Collaboration",
+]
+
+
+def _build_replacement_ops(xml: str, analysis: dict) -> list[tuple[str, str]]:
+    """Build (old, new) pairs for every section that changes each run.
+
+    *old* is the exact substring extracted from the raw XML (handles entity
+    escaping and page-break splits automatically).
+    *new* is the XML-escaped replacement text from the analysis dict.
+
+    No Claude call — no guessing.  If a field can't be found the entry is
+    still emitted with old='' so the caller can report it as NOT FOUND.
+    """
+    ops: list[tuple[str, str]] = []
+
+    def op(prefix: str, new_text: str) -> None:
+        old = _extract_xml_field(xml, prefix)
+        ops.append((old or '', _xml_escape(new_text)))
+
+    # Tagline
+    op(_MASTER_TAGLINE_PREFIX, analysis['tagline'])
+
+    # Summary
+    op(_MASTER_SUMMARY_PREFIX, analysis['summary'])
+
+    # Competency cells — analysis['competencies'] is a flat list in row-major
+    # order; zip with the master prefixes so we always replace the right cell.
+    for prefix, new_comp in zip(_MASTER_COMP_PREFIXES, analysis['competencies']):
+        op(prefix, new_comp)
+
+    # eHealth subtitle bar
+    op(_MASTER_SUBTITLE_PREFIX, analysis['ehealth_title_subtitle'])
+
+    # eHealth bullets
+    for prefix, new_bullet in zip(_MASTER_EHBULLET_PREFIXES, analysis['ehealth_bullets']):
+        op(prefix, new_bullet)
+
+    # HSP Group bullets
+    for prefix, new_bullet in zip(_MASTER_HSPBULLET_PREFIXES, analysis['hsp_bullets']):
+        op(prefix, new_bullet)
+
+    return ops
+
+
 def step4_apply_edits(
     analysis: dict,
-    resume_text: str,
+    resume_text: str,       # kept for API compatibility; no longer used here
     colors: dict | None,
     config: WorkflowConfig,
-) -> int:
+) -> tuple[int, int]:
     """Apply all content edits and brand colors to the unpacked XML.
-    Returns the number of successful replacements."""
+
+    Derives every `old` search string directly from the raw XML (no Claude
+    call, no pandoc-rendered guessing) so replacements are always exact.
+    Returns (succeeded, attempted).
+    """
     print_step(4, "Applying Resume Edits", config)
 
     xml = read_document_xml()
     total_success = 0
     total_attempted = 0
 
-    system = """\
-You are a DOCX XML editor. You will be given:
-1. The current document.xml content (extracted text form of the resume)
-2. The new values for each section
-
-Your job: produce a JSON array of replacement operations. Each operation is:
-  {"old": "exact string currently in the XML", "new": "replacement string"}
-
-Rules:
-- "old" must be the EXACT text currently in the XML - copy it character-for-character
-- "new" is the new text to substitute
-- Use \\u2014 for em dash (-), \\u2019 for right single quote ('), \\u2013 for en dash (-)
-- Do NOT use XML entities (&amp;, &lt;) in the "new" values - write & and < directly;
-  the packing script handles XML encoding
-- The XML uses &amp; for & in the stored content - when writing "old", match exactly
-  including &amp; if present
-- Return ONLY a valid JSON array. No preamble, no markdown fences.
-"""
-
-    user = f"""
-Current resume text (for context):
----
-{resume_text[:8000]}
----
-
-Desired new values:
-- tagline: {analysis['tagline']}
-- summary: {analysis['summary']}
-- ehealth_title_subtitle: {analysis['ehealth_title_subtitle']}
-- ehealth_bullets (6): {json.dumps(analysis['ehealth_bullets'], indent=2)}
-- hsp_bullets (4): {json.dumps(analysis['hsp_bullets'], indent=2)}
-- competencies (14, in row order): {json.dumps(analysis['competencies'], indent=2)}
-
-Produce the JSON array of replacement operations. For each section, find the
-current text in the resume and produce an exact old->new pair.
-
-The competency cells currently contain these values (in order):
-Row 1: Agentic AI & LLM Systems | RAG Pipelines & Prompt Engineering | REST, SOAP & GraphQL APIs | Tray.ai / iPaaS Platform Ownership | Solution Architecture & Delivery
-Row 2: End-to-End Integration & Automation Delivery | Salesforce CRM & Administration | Microsoft 365 / Graph API | POC-to-Production Deployment | Six Sigma Green Belt
-Row 3: JavaScript / JSON / SQL | Workday & Okta Integration | Stakeholder Enablement & AI Literacy | Technical Documentation & ROI Reporting | Cross-functional Collaboration
-
-(Note: row 2 has 5 cells but only 4 competencies are active - the 5th cell "Cross-functional Collaboration" is the last one in row 3, not row 2.)
-
-The tagline currently contains:
-"Delivering AI-Powered Integrations, Workflow Automations & Agentic Solutions Across the Full Enterprise Stack"
-
-Return ONLY valid JSON array.
-"""
-
-    raw = claude(system, user, max_tokens=8000, config=config)
-    raw = re.sub(r"^```json\s*", "", raw.strip())
-    raw = re.sub(r"\s*```$", "", raw.strip())
-
-    try:
-        ops = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise WorkflowError(f"Failed to parse replacement ops JSON: {e}\n\n{raw[:2000]}")
-
-    for op in ops:
-        old = op.get("old", "")
-        new = op.get("new", "")
+    for old, safe_new in _build_replacement_ops(xml, analysis):
         total_attempted += 1
-        safe_new = _xml_escape(new)
-
-        if old in xml:
-            # Exact match (Claude already used &amp; in the old value)
+        if old and old in xml:
             xml = xml.replace(old, safe_new, 1)
             total_success += 1
-            config.progress(f"  ✓ Replaced: {old[:60]}...")
+            config.progress(f"  ✓ {old[:70]!r}...")
         else:
-            # Claude read plain text (bare &) but the XML has &amp; — try normalised form
-            xml_old = _xml_escape(old)
-            if xml_old != old and xml_old in xml:
-                xml = xml.replace(xml_old, safe_new, 1)
-                total_success += 1
-                config.progress(f"  ✓ Replaced (normalised): {old[:60]}...")
-            else:
-                config.progress(f"  ✗ NOT FOUND: {old[:60]}...")
+            config.progress(f"  ✗ NOT FOUND: {old[:70]!r}...")
 
     if colors:
         xml = apply_brand_colors(xml, colors)
