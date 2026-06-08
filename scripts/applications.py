@@ -48,7 +48,7 @@ _INDEX_FIELDS = {
     "id", "company", "domain", "company_logo_url", "role_title",
     "status", "date_applied", "last_updated", "created_at", "priority", "dua",
     "url", "recruiter_name", "recruiter_email", "location", "salary_range", "job_source",
-    "linked_runs",
+    "linked_runs", "match_score",
 }
 
 
@@ -178,6 +178,20 @@ def unlink_run(user_id: str, app_id: str, link_id: str) -> bool:
         storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
         _upsert_index(user_id, record)
     return True
+
+
+def save_match_score(user_id: str, app_id: str, match_score: dict[str, Any]) -> dict[str, Any] | None:
+    """Store a resume<->JD match score on an application. Returns the updated
+    record or None if not found. Does not bump last_updated — scoring is a
+    derived analysis, not a user edit to the application itself."""
+    with _user_lock(user_id):
+        record = get_application(user_id, app_id)
+        if not record:
+            return None
+        record["match_score"] = match_score
+        storage.put_text(_app_key(user_id, record["id"]), json.dumps(record))
+        _upsert_index(user_id, record)
+    return record
 
 
 def save_deleted_tombstone(user_id: str, record: dict[str, Any]) -> None:

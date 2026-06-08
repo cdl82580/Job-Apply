@@ -228,6 +228,47 @@ def _link_run_to_app(
         pass  # never let linking failure break the run response
 
 
+def _trigger_match_scoring(
+    user_id: str,
+    app_id: str,
+    job_posting: str,
+    resume_path,           # Path to the resume docx already on disk for this run
+    profile_text: str,
+    user_label: str,
+) -> None:
+    """Best-effort, async: score how well this run's resume/profile matched the
+    job posting it was tailored against, and store the result on the application
+    record. Never raises — failures here must never affect the run response."""
+    try:
+        from apply import score_application_match, extract_resume_text, WorkflowConfig
+        from scripts.applications import save_match_score, get_application, save_application
+
+        def _run():
+            try:
+                config = WorkflowConfig(progress=lambda _: None, user_label=user_label,
+                                        master_resume=resume_path)
+                resume_text = extract_resume_text(config)
+                match_score = score_application_match(job_posting, resume_text, profile_text, config)
+                match_score["scored_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                match_score["scored_by"] = "system"
+                record = save_match_score(user_id, app_id, match_score)
+                if record:
+                    record.setdefault("audit_log", []).append({
+                        "id":        str(uuid.uuid4()),
+                        "action":    "match_scored",
+                        "actor":     "system",
+                        "timestamp": match_score["scored_at"],
+                        "changes":   {"score": match_score["score"], "category": match_score["category"]},
+                    })
+                    save_application(user_id, record)
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
+    except Exception:
+        pass
+
+
 def _client_ip(request: Request) -> str | None:
     """Best-effort client IP — uses the rightmost X-Forwarded-For entry set by
     Fly.io's trusted proxy, which cannot be spoofed by the client."""
@@ -1226,6 +1267,9 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         if req.app_id:
             _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="resume",
                              result_dir=result.run_dir, folder_url=result.folder_url or "")
+            _trigger_match_scoring(user_id=user_id, app_id=req.app_id, job_posting=req.job_posting,
+                                   resume_path=resume_path, profile_text=profile_text,
+                                   user_label=user_data["email"])
         return result
 
     def _done_payload(result: WorkflowResult) -> dict:

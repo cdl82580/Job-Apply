@@ -414,6 +414,97 @@ async def unlink_run(app_id: str, link_id: str, request: Request):
         app_store.save_application(user_id, record)
 
 
+def _resolve_jd_text(record: dict, config) -> str | None:
+    """Find job description text for an application: prefer a Drive folder linked
+    via any run (job_description capture happens into the same per-company/role
+    folder as resume/interview-prep runs), falling back to extracting fresh from
+    the application's posting URL."""
+    from apply import get_gdrive_job_posting, extract_job_description_from_url
+
+    seen_folders: set[str] = set()
+    linked = record.get("linked_runs", [])
+    # Prefer an explicit job_description link, then any other linked folder.
+    ordered = sorted(linked, key=lambda r: 0 if r.get("type") == "job_description" else 1)
+    for run in ordered:
+        folder_id = run.get("gdrive_folder_id")
+        if not folder_id or folder_id in seen_folders:
+            continue
+        seen_folders.add(folder_id)
+        text = get_gdrive_job_posting(folder_id, config)
+        if text:
+            return text
+
+    url = record.get("url")
+    if url:
+        return extract_job_description_from_url(url, config)
+    return None
+
+
+@router.post("/{app_id}/score")
+async def score_application(app_id: str, request: Request):
+    """(Re)score how well the user's resume/profile matches this application's
+    job posting. Synchronous — same pattern as /api/jd/format."""
+    user_id = request.state.user["user_id"]
+    actor   = _actor(request)
+    record  = _get_or_404(user_id, app_id)
+
+    from apply import score_application_match, extract_resume_text, WorkflowConfig
+    from scripts import storage
+    import tempfile
+    from pathlib import Path
+
+    config = WorkflowConfig(progress=lambda _: None, user_label=actor)
+
+    jd_text = _resolve_jd_text(record, config)
+    if not jd_text:
+        raise HTTPException(
+            422,
+            "No job description available to score against — add a posting URL "
+            "or link a job description to this application first.",
+        )
+
+    resume_bytes = storage.get_resume(user_id)
+    if not resume_bytes:
+        raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+    profile_text = storage.get_profile(user_id)
+    if not profile_text:
+        raise HTTPException(400, "No profile guide saved. Add one in your profile.")
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+    try:
+        tmp.write(resume_bytes)
+        tmp.close()
+        resume_config = WorkflowConfig(progress=lambda _: None, user_label=actor,
+                                       master_resume=Path(tmp.name))
+        resume_text = extract_resume_text(resume_config)
+    finally:
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
+
+    try:
+        match_score = score_application_match(jd_text, resume_text, profile_text, config)
+    except Exception as e:
+        raise HTTPException(500, f"Scoring failed: {e}")
+
+    match_score["scored_at"] = _now()
+    match_score["scored_by"] = actor
+
+    record = app_store.save_match_score(user_id, app_id, match_score)
+    if not record:
+        raise HTTPException(404, "Application not found")
+
+    record.setdefault("audit_log", []).append(
+        _audit_entry("match_scored", actor, {
+            "score": match_score["score"], "category": match_score["category"],
+        })
+    )
+    app_store.save_application(user_id, record)
+
+    return match_score
+
+
 @router.delete("/{app_id}/comments/{comment_id}", status_code=204)
 async def delete_comment(app_id: str, comment_id: str, request: Request):
     user_id = request.state.user["user_id"]

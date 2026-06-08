@@ -1507,6 +1507,99 @@ def auto_capture_job_description(company: str, role: str, url: str, config: Work
 
 
 # ---------------------------------------------------------------------------
+# Resume <-> job match scoring
+# ---------------------------------------------------------------------------
+
+MATCH_CATEGORIES = (
+    (80, "Strong Match"),
+    (60, "Good Match"),
+    (40, "Stretch"),
+    (0,  "Long Shot"),
+)
+
+
+def _match_category(score: int) -> str:
+    for threshold, label in MATCH_CATEGORIES:
+        if score >= threshold:
+            return label
+    return MATCH_CATEGORIES[-1][1]
+
+
+_MATCH_SCORING_SYSTEM = """You are a hiring-fit analyst. Compare a candidate's resume \
+and profile against a job posting and produce an honest, calibrated match score.
+
+Score four dimensions, each on a 0-100 scale, then combine them into an overall \
+score using these weights:
+- skills (40%): overlap between the JD's required/preferred skills and the \
+candidate's demonstrated technical stack and experience
+- role_type (25%): how well the JD's role archetype (e.g. delivery, platform \
+engineering, solutions engineering, AI/agentic, customer success) matches the \
+roles and narrative threads the candidate's resume/profile emphasize
+- seniority (20%): whether the JD's level and scope of ownership match the \
+candidate's career trajectory and proof points (don't penalize lightly for being \
+slightly over- or under-leveled; penalize heavily for a large mismatch)
+- differentiators (15%): whether the JD calls out things the candidate \
+specifically excels at or has unusual proof points for
+
+Be honest and calibrated — most real-world matches land in the 40-75 range. \
+Reserve 80+ for postings that are a clear, specific fit, and use the low end for \
+postings that share little beyond the same general industry.
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "dimensions": {
+    "skills": <int 0-100>,
+    "role_type": <int 0-100>,
+    "seniority": <int 0-100>,
+    "differentiators": <int 0-100>
+  },
+  "score": <int 0-100, the weighted overall score, rounded>,
+  "rationale": "<1-2 sentences: the strongest alignment, then the biggest gap>"
+}
+
+No preamble, no markdown fences, no commentary — JSON only."""
+
+
+def score_application_match(
+    jd_text: str,
+    resume_text: str,
+    profile_text: str,
+    config: WorkflowConfig | None = None,
+) -> dict:
+    """Ask Claude to score how well a candidate's resume/profile matches a job
+    posting. Returns {dimensions, score, category, rationale}. Raises on
+    failure — callers decide how to surface that (this is not best-effort)."""
+    user = f"""\
+Job Posting:
+---
+{jd_text}
+---
+
+Candidate Resume:
+---
+{resume_text}
+---
+
+Candidate Profile Guide:
+---
+{profile_text}
+---
+"""
+    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=1024, config=config)
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw.strip())
+    data = json.loads(raw)
+
+    score = max(0, min(100, int(round(data["score"]))))
+    return {
+        "score":      score,
+        "category":   _match_category(score),
+        "dimensions": data.get("dimensions", {}),
+        "rationale":  data.get("rationale", ""),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public workflow entry point
 # ---------------------------------------------------------------------------
 

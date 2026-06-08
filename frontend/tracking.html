@@ -228,6 +228,26 @@
     [data-theme="dark"] .p-medium { background: #2D2010; color: #FCD34D; }
     [data-theme="dark"] .p-low    { background: #0D2B1E; color: #4ADE80; }
 
+    /* ── Match score badges ───────────────────────────────────────── */
+    .m-strong  { background: #D1FAE5; color: #065F46; }
+    .m-good    { background: #DBEAFE; color: #1D4ED8; }
+    .m-stretch { background: #FEF3C7; color: #92400E; }
+    .m-long    { background: #FEE2E2; color: #991B1B; }
+    .m-none    { background: #F3F4F6; color: #6B7280; }
+    [data-theme="dark"] .m-strong  { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .m-good    { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .m-stretch { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .m-long    { background: #2B1010; color: #F87171; }
+    [data-theme="dark"] .m-none    { background: #1F2937; color: #9CA3AF; }
+    .match-cell { display: flex; align-items: center; gap: .4rem; }
+    .match-score-btn {
+      border: none; background: transparent; cursor: pointer;
+      font-size: .7rem; color: var(--muted); font-weight: 600;
+      padding: .2rem .35rem; border-radius: 6px; white-space: nowrap;
+    }
+    .match-score-btn:hover { background: var(--hover-bg, rgba(0,0,0,.05)); color: var(--primary); }
+    .match-score-btn.scoring { opacity: .55; pointer-events: none; }
+
     /* ── Applications table ───────────────────────────────────────── */
     .app-table {
       width: 100%; border-collapse: collapse;
@@ -680,6 +700,14 @@
       <button class="pill" data-status="Rejected">Rejected</button>
       <button class="pill" data-status="Not Applying">Not Applying</button>
     </div>
+    <div class="pill-group" id="matchPills">
+      <button class="pill active" data-match="">Any Match</button>
+      <button class="pill" data-match="Strong Match">Strong Match</button>
+      <button class="pill" data-match="Good Match">Good Match</button>
+      <button class="pill" data-match="Stretch">Stretch</button>
+      <button class="pill" data-match="Long Shot">Long Shot</button>
+      <button class="pill" data-match="Not scored">Not Scored</button>
+    </div>
   </div>
 
   <!-- ── Stats bar ───────────────────────────────────────────────── -->
@@ -699,6 +727,7 @@
         <th class="sortable" data-col="role_title">Role<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="status">Status<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="priority">Priority<span class="sort-arrow">↕</span></th>
+        <th class="sortable" data-col="match_score">Match<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="created_at">Created<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="date_applied">Applied<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="last_updated">Updated<span class="sort-arrow">↕</span></th>
@@ -707,9 +736,9 @@
     </thead>
     <tbody id="appTableBody">
       <!-- skeleton rows -->
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:70%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:55%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:65%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:70%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:55%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:65%;height:14px"></div></td></tr>
     </tbody>
   </table>
 
@@ -971,11 +1000,19 @@ const STATUS_ORDER = {
   'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'Researching': 3,
   'On Hold': 4, 'Offer': 5, 'Rejected': 6, 'Not Applying': 7,
 };
+// Match category → CSS badge class
+const MATCH_CLASS = {
+  'Strong Match': 'm-strong',
+  'Good Match':   'm-good',
+  'Stretch':      'm-stretch',
+  'Long Shot':    'm-long',
+};
 
 function _sortVal(a, col) {
   switch (col) {
     case 'priority':     return PRIORITY_ORDER[a.priority] ?? 99;
     case 'status':       return STATUS_ORDER[a.status] ?? 99;
+    case 'match_score':  return a.match_score?.score ?? -1;
     case 'created_at':   return a.created_at   || '';
     case 'date_applied': return a.date_applied || '';
     case 'last_updated': return a.last_updated || '';
@@ -1047,6 +1084,17 @@ function priorityBadge(p) {
   return `<span class="badge ${PRIORITY_CLASS[p] || ''}">${p}</span>`;
 }
 
+// Match-score cell: badge (if scored) + a score/rescore action button.
+function matchCell(a) {
+  const m = a.match_score;
+  const scored = m && typeof m.score === 'number';
+  const badge = scored
+    ? `<span class="badge ${MATCH_CLASS[m.category] || 'm-none'}"${m.rationale ? ` title="${esc(m.rationale)}"` : ''}>${m.score} · ${esc(m.category)}</span>`
+    : `<span class="badge m-none">Not scored</span>`;
+  const btn = `<button class="match-score-btn" data-id="${a.id}" data-action="score" title="${scored ? 'Re-run match analysis' : 'Run match analysis against your resume'}">${scored ? 'Rescore' : 'Score'}</button>`;
+  return `<div class="match-cell">${badge}${btn}</div>`;
+}
+
 function logoEl(domain, company, storedLogoUrl) {
   // Prefer the signed URL stored on the record (from BrandFetch search response).
   // Fall back to the CDN proxy only when no stored URL is available.
@@ -1102,11 +1150,17 @@ function updateStats() {
 }
 
 let _activeStatus = '';
+let _activeMatch  = '';
 let _searchQ      = '';
 
 function applyFilters() {
   let list = _apps;
   if (_activeStatus) list = list.filter(a => a.status === _activeStatus);
+  if (_activeMatch) {
+    list = _activeMatch === 'Not scored'
+      ? list.filter(a => !a.match_score || typeof a.match_score.score !== 'number')
+      : list.filter(a => a.match_score?.category === _activeMatch);
+  }
   if (_searchQ) {
     const q = _searchQ.toLowerCase();
     list = list.filter(a =>
@@ -1160,6 +1214,7 @@ function renderTable() {
       <td class="role-cell">${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}</td>
       <td>${priorityBadge(a.priority)}</td>
+      <td>${matchCell(a)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.created_at)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
@@ -1187,6 +1242,9 @@ function renderTable() {
         ${priorityBadge(a.priority)}
         <span style="font-size:.75rem;color:var(--muted)">${fmtDate(a.date_applied)}</span>
       </div>
+      <div class="app-card-meta">
+        ${matchCell(a)}
+      </div>
       <div class="app-card-actions">
         <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">Edit</button>
         ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
@@ -1208,6 +1266,27 @@ function handleRowAction(e) {
   const action = btn.dataset.action;
   if (action === 'edit')   openDrawer(id);
   if (action === 'delete') confirmDelete(id);
+  if (action === 'score')  scoreApplication(id, btn);
+}
+
+// Run (or re-run) the resume<->JD match analysis for one application.
+async function scoreApplication(id, btn) {
+  if (btn) { btn.classList.add('scoring'); btn.textContent = 'Scoring…'; }
+  try {
+    const res = await apiFetch(`/api/applications/${id}/score`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Scoring failed (${res.status})`);
+    }
+    const matchScore = await res.json();
+    const app = _apps.find(a => a.id === id);
+    if (app) app.match_score = matchScore;
+    applyFilters();
+  } catch (e) {
+    if (e.message !== '401') alert(e.message || 'Scoring failed — please try again.');
+    else return;
+  }
+  // applyFilters() re-renders (and resets the button); nothing further to clean up.
 }
 
 // ── Pagination ───────────────────────────────────────────────────────
@@ -1278,20 +1357,32 @@ document.getElementById('statusPills').addEventListener('click', (e) => {
   applyFilters();
 });
 
+document.getElementById('matchPills').addEventListener('click', (e) => {
+  const pill = e.target.closest('.pill');
+  if (!pill) return;
+  document.querySelectorAll('#matchPills .pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  _activeMatch = pill.dataset.match;
+  applyFilters();
+});
+
 document.getElementById('searchInput').addEventListener('input', (e) => {
   _searchQ = e.target.value.trim();
   applyFilters();
 });
 
 function _updateClearBtn() {
-  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(  _activeStatus || _searchQ));
+  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus || _activeMatch || _searchQ));
 }
 document.getElementById('clearFiltersBtn').addEventListener('click', () => {
   _activeStatus = '';
+  _activeMatch = '';
   _searchQ = '';
   document.getElementById('searchInput').value = '';
   document.querySelectorAll('#statusPills .pill').forEach(p => p.classList.remove('active'));
   document.querySelector('#statusPills .pill[data-status=""]').classList.add('active');
+  document.querySelectorAll('#matchPills .pill').forEach(p => p.classList.remove('active'));
+  document.querySelector('#matchPills .pill[data-match=""]').classList.add('active');
   applyFilters();
 });
 
