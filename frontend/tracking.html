@@ -883,6 +883,18 @@
   </div>
 </div>
 
+<!-- ── Run agent confirm modal ──────────────────────────────────── -->
+<div class="modal-wrap" id="runAgentModal">
+  <div class="modal">
+    <h3>Generate resume &amp; cover letter now?</h3>
+    <p id="runAgentModalMsg">We're pulling in the job description for this posting in the background. Want to kick off the resume + cover letter agent for this application now?</p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="runAgentCancel">Not now</button>
+      <button class="btn btn-sm" id="runAgentConfirm">Yes, run it</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Delete confirm modal ─────────────────────────────────────── -->
 <div class="modal-wrap" id="deleteModal">
   <div class="modal">
@@ -1570,16 +1582,15 @@ async function saveDrawer() {
       return;
     }
 
+    const wasNew = !_editId;
+    const created = wasNew ? await res.clone().json().catch(() => null) : null;
+
     // Handle any pending new comment
     const commentText = document.getElementById('newCommentText').value.trim();
     if (commentText && _editId) {
       await addComment(_editId, commentText);
-    } else if (commentText && !_editId) {
-      // For new apps, get the id from the response and add the comment
-      const created = await res.clone().json().catch(() => null);
-      if (created?.id) {
-        await addComment(created.id, commentText);
-      }
+    } else if (commentText && created?.id) {
+      await addComment(created.id, commentText);
     }
 
     await loadApps();
@@ -1589,6 +1600,9 @@ async function saveDrawer() {
       setDrawerMode('view');
     } else {
       closeDrawer();
+      if (created?.id && payload.url) {
+        promptRunAgent(created.id);
+      }
     }
   } catch (e) {
     if (e.message !== '401') {
@@ -1726,6 +1740,27 @@ document.getElementById('addCommentBtn').addEventListener('click', async () => {
   const text = document.getElementById('newCommentText').value.trim();
   if (!text || !_editId) return;
   await addComment(_editId, text);
+});
+
+// ── Run agent prompt (shown after creating a new application with a URL) ──
+const runAgentModal   = document.getElementById('runAgentModal');
+const runAgentConfirm = document.getElementById('runAgentConfirm');
+const runAgentCancel  = document.getElementById('runAgentCancel');
+let _runAgentAppId    = null;
+
+function promptRunAgent(id) {
+  _runAgentAppId = id;
+  runAgentModal.classList.add('open');
+}
+
+runAgentCancel.addEventListener('click', () => {
+  runAgentModal.classList.remove('open');
+  _runAgentAppId = null;
+});
+
+runAgentConfirm.addEventListener('click', () => {
+  if (!_runAgentAppId) return;
+  window.location.href = `/?app_id=${encodeURIComponent(_runAgentAppId)}&autorun=1`;
 });
 
 // ── Delete ────────────────────────────────────────────────────────────

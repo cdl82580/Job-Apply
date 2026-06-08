@@ -1462,30 +1462,30 @@ def extract_job_description_from_url(url: str, config: WorkflowConfig) -> str | 
         return None
 
 
-def auto_capture_job_description(company: str, role: str, url: str, config: WorkflowConfig) -> bool:
+def auto_capture_job_description(company: str, role: str, url: str, config: WorkflowConfig) -> tuple[str, str] | None:
     """Best-effort pipeline: ensure the application's Drive folder exists, extract
     the JD text from its posting URL via apyhub, and save it as job_description.md.
 
-    Returns True on success, False if any step fails. Never raises.
+    Returns (folder_id, folder_url) once the folder is resolved — regardless of
+    whether extraction itself succeeded — so callers can link the folder to the
+    application record either way. Returns None only if the folder couldn't be
+    resolved at all. Never raises.
     """
     config.progress(f"\n📄 Auto-capturing job description for {company} / {role}")
 
     folder = ensure_application_gdrive_folder(company, role, config)
     if folder is None:
         config.progress("  ⚠ Could not resolve Drive folder — aborting auto-capture")
-        return False
-    folder_id, _ = folder
+        return None
+    folder_id, folder_url = folder
 
     text = extract_job_description_from_url(url, config)
-    if not text:
-        return False
-
-    if not save_gdrive_job_posting(folder_id, text, config):
+    if text and save_gdrive_job_posting(folder_id, text, config):
+        config.progress("  ✓ Saved job_description.md to Drive")
+    else:
         config.progress("  ⚠ Could not save job_description.md to Drive")
-        return False
 
-    config.progress("  ✓ Saved job_description.md to Drive")
-    return True
+    return folder_id, folder_url
 
 
 # ---------------------------------------------------------------------------

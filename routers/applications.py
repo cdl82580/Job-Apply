@@ -140,17 +140,39 @@ def _actor(request: Request) -> str:
     return request.state.user.get("email", request.state.user.get("user_id", "unknown"))
 
 
-def _trigger_job_description_capture(company: str, role_title: str, url: str, user_label: str) -> None:
-    """Best-effort, async: ensure the application's Drive folder exists and
-    auto-capture its job description from `url` via apyhub. Never raises —
-    failures here must never affect the application-create response."""
+def _trigger_job_description_capture(
+    user_id: str, app_id: str, company: str, role_title: str, url: str, actor: str,
+) -> None:
+    """Best-effort, async: ensure the application's Drive folder exists, link it
+    to the application record (so the UI can find the JD before any resume run
+    has happened), and auto-capture its job description from `url` via apyhub.
+    Never raises — failures here must never affect the application-create response."""
     try:
-        from apply import auto_capture_job_description, WorkflowConfig
+        from apply import auto_capture_job_description, safe_filename, WorkflowConfig
 
         def _run():
             try:
-                config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
-                auto_capture_job_description(company, role_title, url, config)
+                config = WorkflowConfig(progress=lambda _: None, user_label=actor)
+                folder = auto_capture_job_description(company, role_title, url, config)
+                if folder:
+                    folder_id, folder_url = folder
+                    folder_name = f"{safe_filename(company)}_{safe_filename(role_title)}"
+                    record = app_store.link_run(user_id, app_id, {
+                        "id":               str(uuid.uuid4()),
+                        "type":             "job_description",
+                        "folder_name":      folder_name,
+                        "folder_url":       folder_url,
+                        "gdrive_folder_id": folder_id,
+                        "linked_at":        _now(),
+                        "linked_by":        "system",
+                    })
+                    if record:
+                        record.setdefault("audit_log", []).append(
+                            _audit_entry("run_linked", "system", {
+                                "type": "job_description", "folder_name": folder_name,
+                            })
+                        )
+                        app_store.save_application(user_id, record)
             except Exception:
                 pass
 
@@ -207,7 +229,9 @@ async def create_application(body: ApplicationCreate, request: Request):
     record = app_store.save_application(user_id, record)
 
     if record.get("url"):
-        _trigger_job_description_capture(record["company"], record["role_title"], record["url"], actor)
+        _trigger_job_description_capture(
+            user_id, record["id"], record["company"], record["role_title"], record["url"], actor,
+        )
 
     return record
 
