@@ -18,9 +18,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts import storage, applications as app_store
-from scripts.applications import _app_key, _index_key, _audit_entry, _now
+from scripts.applications import _app_key, _index_key
 
 EMAIL = "cdl825@gmail.com"
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _audit_entry(action: str, actor: str, changes: dict | None = None) -> dict:
+    return {
+        "id":        str(uuid.uuid4()),
+        "action":    action,
+        "actor":     actor,
+        "timestamp": _now(),
+        "changes":   changes,
+    }
 
 
 def main() -> None:
