@@ -729,6 +729,7 @@
   <!-- ── Stats bar ───────────────────────────────────────────────── -->
   <div class="stats-bar" id="statsBar">
     <div class="stat-chip"><div class="stat-num" id="statTotal">—</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-chip hidden" id="statFilteredChip"><div class="stat-num" id="statFiltered">—</div><div class="stat-lbl">Filtered</div></div>
     <div class="stat-chip"><div class="stat-num" id="statInterviewing">—</div><div class="stat-lbl">Interviewing</div></div>
     <div class="stat-chip"><div class="stat-num" id="statApplied">—</div><div class="stat-lbl">Applied</div></div>
     <div class="stat-chip"><div class="stat-num" id="statOffer">—</div><div class="stat-lbl">Offers</div></div>
@@ -1191,6 +1192,10 @@ function applyFilters() {
   _filtered = _sortList(list);
   _page = 1;
   if (typeof _updateClearBtn === 'function') _updateClearBtn();
+  const isFiltered = !!(_activeStatus || _activeMatch || _activeDua || _searchQ);
+  const chip = document.getElementById('statFilteredChip');
+  document.getElementById('statFiltered').textContent = _filtered.length;
+  chip.classList.toggle('hidden', !isFiltered);
   renderTable();
 }
 
