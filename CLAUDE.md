@@ -53,6 +53,8 @@ python3 scripts/office/unpack.py resumes/master.docx unpacked/
 ### Step 4 — Apply Resume Edits
 Edit `unpacked/word/document.xml` using Python string replacement (not sed, not grep-and-replace scripts — use a Python script that reads the file, does `content.replace(old, new, 1)` for each change, then writes it back).
 
+**Critical: derive every `old` search string by reading the raw `unpacked/word/document.xml` directly** (grep it or Read it) — never from the Step 1 `pandoc ... -t plain` rendering. Pandoc wraps long lines, indents table-cell text across multiple lines, and unescapes XML entities (`&amp;` → `&`, `&#8217;` → `'`, etc.). None of that matches the literal, single-line, entity-escaped text inside `<w:t>` elements, so search strings copied from the pandoc output will silently fail to match (0/N replacements). Use pandoc's output only to *understand* the resume's content/structure for your analysis — always go back to the raw XML for the literal `old` text you'll search for.
+
 **Always edit these sections in this order:**
 1. **Tagline** (line ~40) — 1 sentence, matches the framing angle
 2. **Professional Summary** (~line 449) — 4–5 sentences, written in Corey's voice
@@ -63,8 +65,8 @@ Edit `unpacked/word/document.xml` using Python string replacement (not sed, not 
 
 **Rules for XML editing:**
 - Use Python `content.replace(old, new, 1)` — never sed or inline bash substitution
-- Use Unicode escapes for special characters: `\u2014` (—), `\u2019` ('), `\u2013` (–)
-- Do NOT use XML entities like `&amp;` in Python strings — the file already has them; match exactly
+- Use Unicode escapes for special characters in your *replacement* (`new`) text: `\u2014` (—), `\u2019` ('), `\u2013` (–)
+- The XML stores ampersands as the entity `&amp;`, not a literal `&`. Your `old` search strings must contain `&amp;` (matching the raw XML exactly) wherever the visible text has "&" — a literal `&` will never match and the replacement will report NOT FOUND
 - After all replacements, verify the count: print how many substitutions succeeded vs. failed
 - Do not touch ProdPerfect, Applause, or Fidelity bullets — leave them as-is
 
