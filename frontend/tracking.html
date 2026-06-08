@@ -1165,6 +1165,7 @@ function renderTable() {
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
         ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
+        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : ''}
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
         <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
       </div></td>`;
@@ -1189,6 +1190,7 @@ function renderTable() {
       <div class="app-card-actions">
         <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">Edit</button>
         ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
+        ${folderUrl(a) ? `<a class="btn btn-ghost btn-sm" href="${esc(folderUrl(a))}" target="_blank" rel="noopener">Folder &#x1F4C1;</a>` : ''}
         <button class="btn btn-danger btn-sm" data-id="${a.id}" data-action="delete">Delete</button>
       </div>`;
     cards.appendChild(card);
@@ -1795,6 +1797,10 @@ deleteConfirm.addEventListener('click', async () => {
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────
+function folderUrl(a) {
+  const link = (a.linked_runs || []).find(r => r.folder_url && r.gdrive_folder_id);
+  return link ? safeHref(link.folder_url) : null;
+}
 function safeHref(url) {
   if (!url) return null;
   try {
