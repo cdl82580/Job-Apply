@@ -973,7 +973,6 @@ def step6_cover_letter(
 GDRIVE_PARENT_FOLDER_ID = os.environ.get("GDRIVE_PARENT_FOLDER_ID", "")
 GDRIVE_TOKEN_PATH       = Path.home() / ".config" / "job-apply" / "gdrive_token.json"
 GDRIVE_CREDS_PATH       = Path(__file__).parent / "gdrive_credentials.json"
-APYHUB_API_KEY          = os.environ.get("APYHUB_API_KEY", "")
 _MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _SCOPES    = ["https://www.googleapis.com/auth/drive.file"]
 
@@ -1429,32 +1428,40 @@ def save_gdrive_job_posting(folder_id: str, markdown: str, config: WorkflowConfi
 
 
 # ---------------------------------------------------------------------------
-# Auto-capture: extract job description from a posting URL via apyhub
+# Auto-capture: extract job description from a posting URL via Claude
 # ---------------------------------------------------------------------------
 
-def extract_job_description_from_url(url: str, config: WorkflowConfig) -> str | None:
-    """Extract the job description text from a posting URL via the apyhub API.
+_JD_EXTRACTION_SYSTEM = """You extract job posting content from raw webpage HTML/text.
+Return ONLY the job description itself — title, company, responsibilities,
+requirements, qualifications, compensation, location, etc. — as clean plain text.
+Strip out navigation, cookie banners, headers/footers, unrelated links, and ads.
+If the page does not contain a job posting, respond with exactly: NONE"""
 
-    Returns the extracted text, or None on missing key / timeout / failure.
+
+def extract_job_description_from_url(url: str, config: WorkflowConfig) -> str | None:
+    """Extract the job description text from a posting URL by fetching the page
+    and asking Claude to pull out just the posting content.
+
+    Returns the extracted text, or None on fetch failure / no posting found.
     Best-effort — never raises.
     """
-    if not APYHUB_API_KEY:
-        config.progress("  ⚠ APYHUB_API_KEY not set — skipping job description extraction")
-        return None
     try:
         import requests
         resp = requests.get(
-            "https://api.apyhub.com/extract/text/webpage",
-            params={"url": url, "preserve_paragraphs": "true"},
-            headers={"apy-token": APYHUB_API_KEY, "Content-Type": "application/json"},
-            data="{}",
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; JobApplyBot/1.0)"},
             timeout=20,
         )
         resp.raise_for_status()
-        data = resp.json()
-        text = data.get("data")
-        if not text or not isinstance(text, str):
-            config.progress("  ⚠ apyhub returned no extractable text")
+        page_text = resp.text[:60_000]
+    except Exception as exc:
+        config.progress(f"  ⚠ Could not fetch posting URL: {exc}")
+        return None
+
+    try:
+        text = claude(_JD_EXTRACTION_SYSTEM, page_text, max_tokens=4096, config=config).strip()
+        if not text or text == "NONE":
+            config.progress("  ⚠ Claude found no extractable job description")
             return None
         return text
     except Exception as exc:
@@ -1464,7 +1471,7 @@ def extract_job_description_from_url(url: str, config: WorkflowConfig) -> str | 
 
 def auto_capture_job_description(company: str, role: str, url: str, config: WorkflowConfig) -> tuple[str, str] | None:
     """Best-effort pipeline: ensure the application's Drive folder exists, extract
-    the JD text from its posting URL via apyhub, and save it as job_description.md.
+    the JD text from its posting URL via Claude, and save it as job_description.md.
 
     Returns (folder_id, folder_url) once the folder is resolved — regardless of
     whether extraction itself succeeded — so callers can link the folder to the

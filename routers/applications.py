@@ -145,7 +145,7 @@ def _trigger_job_description_capture(
 ) -> None:
     """Best-effort, async: ensure the application's Drive folder exists, link it
     to the application record (so the UI can find the JD before any resume run
-    has happened), and auto-capture its job description from `url` via apyhub.
+    has happened), and auto-capture its job description from `url` via Claude.
     Never raises — failures here must never affect the application-create response."""
     try:
         from apply import auto_capture_job_description, safe_filename, WorkflowConfig

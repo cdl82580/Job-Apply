@@ -5,10 +5,10 @@ scripts/backfill_jd_capture.py
 One-off backfill: for every application in "Researching" status that has a
 posting URL but no linked job_description Drive folder yet, run the same
 auto-capture pipeline that now fires automatically on application creation
-(ensure Drive folder -> extract JD via apyhub -> save job_description.md ->
+(ensure Drive folder -> extract JD via Claude -> save job_description.md ->
 link folder to the application record).
 
-Run on the Fly machine (has AWS/Drive/apyhub creds):
+Run on the Fly machine (has AWS/Drive/Anthropic creds):
   fly ssh console -C "python3 scripts/backfill_jd_capture.py"
 """
 from __future__ import annotations
