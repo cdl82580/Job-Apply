@@ -221,13 +221,6 @@
     [data-theme="dark"] .s-offer         { background: #0D2B1E; color: #4ADE80; }
     [data-theme="dark"] .s-rejected      { background: #2B1010; color: #F87171; }
 
-    .p-high   { background: #FEE2E2; color: #991B1B; }
-    .p-medium { background: #FEF3C7; color: #92400E; }
-    .p-low    { background: #D1FAE5; color: #065F46; }
-    [data-theme="dark"] .p-high   { background: #2B1010; color: #F87171; }
-    [data-theme="dark"] .p-medium { background: #2D2010; color: #FCD34D; }
-    [data-theme="dark"] .p-low    { background: #0D2B1E; color: #4ADE80; }
-
     /* ── Match score badges ───────────────────────────────────────── */
     /* ── DUA badge ────────────────────────────────────────────── */
     .dua-badge {
@@ -743,7 +736,6 @@
         <th class="sortable" data-col="company">Company<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="role_title">Role<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="status">Status<span class="sort-arrow">↕</span></th>
-        <th class="sortable" data-col="priority">Priority<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="match_score">Match<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="created_at">Created<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="date_applied">Applied<span class="sort-arrow">↕</span></th>
@@ -753,9 +745,9 @@
     </thead>
     <tbody id="appTableBody">
       <!-- skeleton rows -->
-      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:70%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:55%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="9"><div class="skel" style="width:65%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:70%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:55%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:65%;height:14px"></div></td></tr>
     </tbody>
   </table>
 
@@ -841,14 +833,6 @@
           <option>Offer</option>
           <option>Rejected</option>
           <option>Not Applying</option>
-        </select>
-      </div>
-      <div class="field" style="margin-bottom:0">
-        <label for="dPriority">Priority</label>
-        <select id="dPriority" data-field>
-          <option>High</option>
-          <option selected>Medium</option>
-          <option>Low</option>
         </select>
       </div>
     </div>
@@ -1010,8 +994,6 @@ let _page       = 1;
 let _perPage    = 25;
 let _skipHistory = false;  // prevents pushState during popstate handling
 
-// Priority sort order
-const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
 // Status sort order
 const STATUS_ORDER = {
   'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'Researching': 3,
@@ -1027,7 +1009,6 @@ const MATCH_CLASS = {
 
 function _sortVal(a, col) {
   switch (col) {
-    case 'priority':     return PRIORITY_ORDER[a.priority] ?? 99;
     case 'status':       return STATUS_ORDER[a.status] ?? 99;
     case 'match_score':  return a.match_score?.score ?? -1;
     case 'created_at':   return a.created_at   || '';
@@ -1092,15 +1073,9 @@ const STATUS_CLASS = {
   'Offer':        's-offer',
   'Rejected':     's-rejected',
 };
-const PRIORITY_CLASS = { High: 'p-high', Medium: 'p-medium', Low: 'p-low' };
-
 function statusBadge(s) {
   return `<span class="badge ${STATUS_CLASS[s] || ''}">${s}</span>`;
 }
-function priorityBadge(p) {
-  return `<span class="badge ${PRIORITY_CLASS[p] || ''}">${p}</span>`;
-}
-
 // Match-score cell: badge (if scored) + a score/rescore action button.
 function matchCell(a) {
   const m = a.match_score;
@@ -1237,7 +1212,6 @@ function renderTable() {
       </div></td>
       <td class="role-cell">${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}${a.dua ? ' <span class="dua-badge" title="Reported to DUA">DUA ✓</span>' : ''}</td>
-      <td>${priorityBadge(a.priority)}</td>
       <td>${matchCell(a)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.created_at)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
@@ -1263,7 +1237,6 @@ function renderTable() {
       </div>
       <div class="app-card-meta">
         ${statusBadge(a.status)}
-        ${priorityBadge(a.priority)}
         ${a.dua ? '<span class="dua-badge" title="Reported to DUA">DUA ✓</span>' : ''}
         <span style="font-size:.75rem;color:var(--muted)">${fmtDate(a.date_applied)}</span>
       </div>
@@ -1603,7 +1576,6 @@ function resetDrawerForm() {
   dSuggestionsEl.classList.add('hidden');
   document.getElementById('dRole').value          = '';
   document.getElementById('dStatus').value        = 'Researching';
-  document.getElementById('dPriority').value      = 'Medium';
   document.getElementById('dDateApplied').value   = '';
   document.getElementById('dJobSource').value     = '';
   document.getElementById('dLocation').value      = '';
@@ -1643,7 +1615,6 @@ function fillDrawer(a) {
 
   document.getElementById('dRole').value           = a.role_title    || '';
   document.getElementById('dStatus').value         = a.status        || 'Researching';
-  document.getElementById('dPriority').value       = a.priority      || 'Medium';
   document.getElementById('dDateApplied').value    = a.date_applied  ? a.date_applied.split('T')[0] : '';
   document.getElementById('dJobSource').value      = a.job_source    || '';
   document.getElementById('dLocation').value       = a.location      || '';
@@ -1683,7 +1654,6 @@ async function saveDrawer() {
     company_logo_url: dLogoUrlInput.value || '',
     role_title:      role,
     status:          document.getElementById('dStatus').value,
-    priority:        document.getElementById('dPriority').value,
     date_applied:    document.getElementById('dDateApplied').value || null,
     dua:             document.getElementById('dDua').checked,
     job_source:      document.getElementById('dJobSource').value.trim(),
