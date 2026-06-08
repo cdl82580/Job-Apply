@@ -229,6 +229,17 @@
     [data-theme="dark"] .p-low    { background: #0D2B1E; color: #4ADE80; }
 
     /* ── Match score badges ───────────────────────────────────────── */
+    /* ── DUA badge ────────────────────────────────────────────── */
+    .dua-badge {
+      display: inline-flex; align-items: center; gap: .2rem;
+      font-size: .65rem; font-weight: 700; letter-spacing: .02em;
+      padding: .15rem .45rem; border-radius: 999px;
+      background: #E0F2FE; color: #0369A1;
+      border: 1px solid #BAE6FD;
+      white-space: nowrap; vertical-align: middle;
+    }
+    [data-theme="dark"] .dua-badge { background: #0C2340; color: #7DD3FC; border-color: #075985; }
+
     .m-strong  { background: #D1FAE5; color: #065F46; }
     .m-good    { background: #DBEAFE; color: #1D4ED8; }
     .m-stretch { background: #FEF3C7; color: #92400E; }
@@ -708,6 +719,11 @@
       <button class="pill" data-match="Long Shot">Long Shot</button>
       <button class="pill" data-match="Not scored">Not Scored</button>
     </div>
+    <div class="pill-group" id="duaPills">
+      <button class="pill active" data-dua="">DUA: All</button>
+      <button class="pill" data-dua="yes">DUA Filed</button>
+      <button class="pill" data-dua="no">Not Filed</button>
+    </div>
   </div>
 
   <!-- ── Stats bar ───────────────────────────────────────────────── -->
@@ -1151,6 +1167,7 @@ function updateStats() {
 
 let _activeStatus = '';
 let _activeMatch  = '';
+let _activeDua    = '';
 let _searchQ      = '';
 
 function applyFilters() {
@@ -1161,6 +1178,8 @@ function applyFilters() {
       ? list.filter(a => !a.match_score || typeof a.match_score.score !== 'number')
       : list.filter(a => a.match_score?.category === _activeMatch);
   }
+  if (_activeDua === 'yes') list = list.filter(a => !!a.dua);
+  if (_activeDua === 'no')  list = list.filter(a => !a.dua);
   if (_searchQ) {
     const q = _searchQ.toLowerCase();
     list = list.filter(a =>
@@ -1212,7 +1231,7 @@ function renderTable() {
         </div>
       </div></td>
       <td class="role-cell">${esc(a.role_title)}</td>
-      <td>${statusBadge(a.status)}</td>
+      <td>${statusBadge(a.status)}${a.dua ? ' <span class="dua-badge" title="Reported to DUA">DUA ✓</span>' : ''}</td>
       <td>${priorityBadge(a.priority)}</td>
       <td>${matchCell(a)}</td>
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.created_at)}</td>
@@ -1240,6 +1259,7 @@ function renderTable() {
       <div class="app-card-meta">
         ${statusBadge(a.status)}
         ${priorityBadge(a.priority)}
+        ${a.dua ? '<span class="dua-badge" title="Reported to DUA">DUA ✓</span>' : ''}
         <span style="font-size:.75rem;color:var(--muted)">${fmtDate(a.date_applied)}</span>
       </div>
       <div class="app-card-meta">
@@ -1371,18 +1391,30 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
   applyFilters();
 });
 
+document.getElementById('duaPills').addEventListener('click', (e) => {
+  const pill = e.target.closest('.pill');
+  if (!pill) return;
+  document.querySelectorAll('#duaPills .pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  _activeDua = pill.dataset.dua;
+  applyFilters();
+});
+
 function _updateClearBtn() {
-  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus || _activeMatch || _searchQ));
+  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus || _activeMatch || _activeDua || _searchQ));
 }
 document.getElementById('clearFiltersBtn').addEventListener('click', () => {
   _activeStatus = '';
   _activeMatch = '';
+  _activeDua = '';
   _searchQ = '';
   document.getElementById('searchInput').value = '';
   document.querySelectorAll('#statusPills .pill').forEach(p => p.classList.remove('active'));
   document.querySelector('#statusPills .pill[data-status=""]').classList.add('active');
   document.querySelectorAll('#matchPills .pill').forEach(p => p.classList.remove('active'));
   document.querySelector('#matchPills .pill[data-match=""]').classList.add('active');
+  document.querySelectorAll('#duaPills .pill').forEach(p => p.classList.remove('active'));
+  document.querySelector('#duaPills .pill[data-dua=""]').classList.add('active');
   applyFilters();
 });
 
