@@ -961,12 +961,24 @@
     ).slice(0, 8);
   }
 
+  function logoError(img) {
+    const fallback = img.dataset.fallback;
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
+    } else {
+      const ph = document.createElement('div');
+      ph.className = img.dataset.phClass || 'app-sugg-logo-ph';
+      ph.textContent = (img.dataset.company || '?').slice(0, 2).toUpperCase();
+      img.replaceWith(ph);
+    }
+  }
+
   function appLogoHtml(a, cls = 'app-sugg-logo') {
-    // Prefer the signed URL stored on the record; fall back to CDN proxy via domain.
     const src = safeHref(a.company_logo_url)
       || (a.domain ? `/api/companies/logo?domain=${encodeURIComponent(a.domain)}` : null);
+    const fallback = a.domain ? `/api/companies/logo?domain=${encodeURIComponent(a.domain)}` : '';
     if (src) {
-      return `<img class="${cls}" src="${esc(src)}" alt="${esc(a.company)}" onerror="this.outerHTML='<div class=\\'app-sugg-logo-ph\\'>${esc(a.company).slice(0,2).toUpperCase()}</div>'">`;
+      return `<img class="${cls}" src="${esc(src)}" alt="${esc(a.company)}" data-company="${esc(a.company)}" data-fallback="${esc(fallback)}" data-ph-class="app-sugg-logo-ph" onerror="logoError(this)">`;
     }
     return `<div class="app-sugg-logo-ph">${esc(a.company).slice(0,2).toUpperCase()}</div>`;
   }
@@ -1057,8 +1069,13 @@
     // Show selected chip — prefer stored signed URL, fall back to CDN proxy
     const selLogoSrc = safeHref(app.company_logo_url)
       || (app.domain ? `/api/companies/logo?domain=${encodeURIComponent(app.domain)}` : null);
+    const selLogoFallback = app.domain ? `/api/companies/logo?domain=${encodeURIComponent(app.domain)}` : '';
     if (selLogoSrc) {
       selLogoEl.src = selLogoSrc;
+      selLogoEl.dataset.fallback = selLogoFallback;
+      selLogoEl.dataset.company = app.company;
+      selLogoEl.dataset.phClass = 'app-sugg-logo-ph';
+      selLogoEl.onerror = () => logoError(selLogoEl);
       selLogoEl.style.display = 'block';
     } else {
       selLogoEl.style.display = 'none';
