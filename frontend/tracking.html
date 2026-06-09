@@ -1219,6 +1219,7 @@ function renderTable() {
       <td><div class="actions-cell">
         ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
         ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : ''}
+        <button class="icon-btn" data-id="${a.id}" data-action="run" title="Run resume agent">&#x25B6;</button>
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
         <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
       </div></td>`;
@@ -1244,6 +1245,7 @@ function renderTable() {
         ${matchCell(a)}
       </div>
       <div class="app-card-actions">
+        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="run">&#x25B6; Run Agent</button>
         <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">Edit</button>
         ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
         ${folderUrl(a) ? `<a class="btn btn-ghost btn-sm" href="${esc(folderUrl(a))}" target="_blank" rel="noopener">Folder &#x1F4C1;</a>` : ''}
@@ -1262,6 +1264,7 @@ function handleRowAction(e) {
   if (!btn) return;
   const id     = btn.dataset.id;
   const action = btn.dataset.action;
+  if (action === 'run')    window.location.href = `/?app_id=${encodeURIComponent(id)}&autorun=1`;
   if (action === 'edit')   openDrawer(id);
   if (action === 'delete') confirmDelete(id);
   if (action === 'score')  scoreApplication(id, btn);
