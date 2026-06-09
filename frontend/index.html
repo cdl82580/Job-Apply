@@ -874,49 +874,33 @@
     }
 
     if (jdStatusEl) {
-      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Extracting job description from the posting URL — this can take up to a minute…';
+      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Extracting job description from the posting URL…';
       jdStatusEl.className = 'jd-status';
       jdStatusEl.classList.remove('hidden');
     }
 
-    const maxAttempts = 20;   // ~60s at 3s intervals
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise(r => setTimeout(r, 3000));
-
-      let refreshed = null;
-      try {
-        const r = await apiFetch(`/api/applications/${encodeURIComponent(appId)}`);
-        if (r.ok) refreshed = await r.json();
-      } catch (_) {}
-      if (!refreshed) continue;
-
-      const folderId = (refreshed.linked_runs || []).find(l => l.type === 'job_description')?.gdrive_folder_id;
-      if (!folderId) continue;
-
-      let jd = null;
-      try {
-        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
-        if (r.ok) jd = (await r.json()).job_posting;
-      } catch (_) {}
-
-      if (jd && jd.trim()) {
-        document.getElementById('job_posting').value = jd;
-        _runLinkedFolderId = folderId;
-        if (jdStatusEl) {
-          jdStatusEl.innerHTML = '✓ Job description loaded from Drive';
-          jdStatusEl.className = 'jd-status loaded';
+    try {
+      const r = await apiFetch(`/api/applications/${encodeURIComponent(appId)}/extract-jd`, { method: 'POST' });
+      if (r.ok) {
+        const { job_posting } = await r.json();
+        if (job_posting && job_posting.trim()) {
+          document.getElementById('job_posting').value = job_posting;
+          if (jdStatusEl) {
+            jdStatusEl.innerHTML = '✓ Job description extracted';
+            jdStatusEl.className = 'jd-status loaded';
+          }
+          form.requestSubmit();
+          return;
         }
-        form.requestSubmit();
-        return;
       }
-    }
+    } catch (_) {}
 
-    // Timed out — fall back to manual entry
+    // Extraction failed — fall back to manual entry
     if (jdStatusEl) {
       const linkHtml = app.url
         ? `<a href="${esc(safeHref(app.url))}" target="_blank" rel="noopener" style="color:var(--border);font-weight:600;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Open the job posting ↗</a>`
         : 'Open the job posting';
-      jdStatusEl.innerHTML = `Couldn't auto-extract the job description in time — ${linkHtml}, copy the description, and paste it below, then click Generate.`;
+      jdStatusEl.innerHTML = `Couldn't extract the job description — ${linkHtml}, copy the description, and paste it below, then click Generate.`;
       jdStatusEl.className = 'jd-status';
     }
   }
