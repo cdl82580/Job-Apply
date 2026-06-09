@@ -1092,8 +1092,12 @@ function logoEl(domain, company, storedLogoUrl) {
   // Fall back to the CDN proxy only when no stored URL is available.
   const src = safeHref(storedLogoUrl)
     || (domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null);
+  const fallbackSrc = domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null;
   if (src) {
-    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" onerror="this.replaceWith(makePlaceholder(this.dataset.company))">`;
+    const onerror = (src !== fallbackSrc && fallbackSrc)
+      ? `if(this.dataset.fallback&&!this.dataset.tried){this.dataset.tried=1;this.src=this.dataset.fallback}else{this.replaceWith(makePlaceholder(this.dataset.company))}`
+      : `this.replaceWith(makePlaceholder(this.dataset.company))`;
+    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="${esc(fallbackSrc || '')}" onerror="${onerror}">`;
   }
   return makePlaceholderHtml(company);
 }
