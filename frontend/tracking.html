@@ -1094,12 +1094,17 @@ function logoEl(domain, company, storedLogoUrl) {
     || (domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null);
   const fallbackSrc = domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null;
   if (src) {
-    const onerror = (src !== fallbackSrc && fallbackSrc)
-      ? `if(this.dataset.fallback&&!this.dataset.tried){this.dataset.tried=1;this.src=this.dataset.fallback}else{this.replaceWith(makePlaceholder(this.dataset.company))}`
-      : `this.replaceWith(makePlaceholder(this.dataset.company))`;
-    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="${esc(fallbackSrc || '')}" onerror="${onerror}">`;
+    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="${esc(fallbackSrc || '')}" onerror="logoError(this)">`;
   }
   return makePlaceholderHtml(company);
+}
+function logoError(img) {
+  const fallback = img.dataset.fallback;
+  if (fallback && img.src !== fallback) {
+    img.src = fallback;
+  } else {
+    img.replaceWith(makePlaceholder(img.dataset.company));
+  }
 }
 function makePlaceholder(company) {
   const el = document.createElement('div');
