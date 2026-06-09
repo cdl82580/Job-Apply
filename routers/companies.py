@@ -14,8 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
-_BRANDFETCH_KEY     = os.environ.get("BRANDFETCH_API_KEY", "")
-_BRANDFETCH_CDN_KEY = os.environ.get("BRANDFETCH_CDN_KEY", "")
+_BRANDFETCH_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
 _BRANDFETCH_URL     = "https://api.brandfetch.io/v2/search/{query}"
 
 
@@ -57,27 +56,31 @@ async def search_companies(q: str = Query(..., min_length=1)):
 
 @router.get("/logo")
 async def company_logo(domain: str = Query(..., min_length=1)):
-    """Proxy BrandFetch CDN logo requests so the CDN key stays server-side."""
-    if not _BRANDFETCH_CDN_KEY:
+    """Fetch a fresh logo URL for the domain via BrandFetch search, then proxy the image."""
+    if not _BRANDFETCH_KEY:
         raise HTTPException(503, "Logo service not configured")
-    # Validate domain is a simple hostname with no path traversal
     if "/" in domain or "\\" in domain or domain.startswith("."):
         raise HTTPException(400, "Invalid domain")
-    import requests as _req
     try:
-        resp = _req.get(
-            f"https://cdn.brandfetch.io/domain/{domain}",
-            params={"c": _BRANDFETCH_CDN_KEY},
+        search = requests.get(
+            _BRANDFETCH_URL.format(query=domain),
+            params={"c": _BRANDFETCH_KEY},
             timeout=8,
-            stream=True,
         )
-        if resp.status_code == 404:
-            raise HTTPException(404, "Logo not found")
-        resp.raise_for_status()
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(502, "Logo fetch failed")
-    from fastapi.responses import Response
-    ct = resp.headers.get("Content-Type", "image/png")
-    return Response(content=resp.content, media_type=ct)
+        search.raise_for_status()
+        results = search.json()
+    except Exception as exc:
+        raise HTTPException(502, f"Logo search failed: {exc}")
+
+    icon_url = None
+    for item in results:
+        if (item.get("domain") or "").lower() == domain.lower():
+            icon_url = item.get("icon") or ""
+            break
+    if not icon_url and results:
+        icon_url = results[0].get("icon") or ""
+    if not icon_url:
+        raise HTTPException(404, "Logo not found")
+
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=icon_url, status_code=302)
