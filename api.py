@@ -1386,17 +1386,21 @@ async def gdrive_list_runs(request: Request):
 
 @app.get("/api/gdrive/runs/{folder_id}/job_posting")
 async def gdrive_get_job_posting(folder_id: str, request: Request):
-    """Fetch job_posting.txt from a specific Drive folder (by Drive folder ID)."""
-    user_data  = _require_user(request)
+    """Fetch job_posting from a specific Drive folder (by Drive folder ID)."""
+    user_data = _require_user(request)
+    user_id   = user_data["id"]
     user_label = user_data["email"]
-    # Verify the folder belongs to this user before fetching its contents.
-    # Fail closed: if listing succeeds and the folder is not in the result, deny.
-    # If listing fails entirely, also deny rather than falling through.
-    try:
-        user_folders = list_gdrive_run_folders(user_label, WorkflowConfig(progress=lambda _: None, user_label=user_label))
-    except Exception as _list_exc:
-        raise HTTPException(503, "Could not verify Drive folder ownership — please try again")
-    allowed_ids = {f.get("id") for f in user_folders if f.get("id")}
+    # Verify the folder belongs to this user by checking their application records.
+    # This is fast (Tigris lookup) and handles all linked_run folder types without
+    # the 100-folder cap that the Drive listing has.
+    from scripts import applications as app_store
+    apps = app_store.list_applications(user_id)
+    allowed_ids = {
+        run.get("gdrive_folder_id")
+        for app in apps
+        for run in (app.get("linked_runs") or [])
+        if run.get("gdrive_folder_id")
+    }
     if folder_id not in allowed_ids:
         raise HTTPException(403, "Access denied to this Drive folder")
     config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
