@@ -873,6 +873,29 @@
       return;
     }
 
+    // Check all linked run folders for an existing job posting before extracting
+    if (jdStatusEl) {
+      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Looking for saved job description…';
+      jdStatusEl.className = 'jd-status';
+      jdStatusEl.classList.remove('hidden');
+    }
+    const allFolderIds = (app.linked_runs || []).map(r => r.gdrive_folder_id).filter(Boolean);
+    for (const folderId of allFolderIds) {
+      try {
+        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
+        if (r.ok) {
+          const { job_posting } = await r.json();
+          if (job_posting && job_posting.trim()) {
+            document.getElementById('job_posting').value = job_posting;
+            _runLinkedFolderId = folderId;
+            if (jdStatusEl) { jdStatusEl.innerHTML = '✓ Job description loaded from Drive'; jdStatusEl.className = 'jd-status loaded'; }
+            form.requestSubmit();
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
     if (jdStatusEl) {
       jdStatusEl.innerHTML = '<span class="spin-xs"></span> Extracting job description from the posting URL…';
       jdStatusEl.className = 'jd-status';
