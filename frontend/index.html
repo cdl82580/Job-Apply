@@ -1092,11 +1092,15 @@
     }
 
     let jd = null;
-    const folderId = (app.linked_runs || [])[0]?.gdrive_folder_id;
-    if (folderId) {
+    const runs = app.linked_runs || [];
+    const jdRun = runs.find(r => r.type === 'job_description') || runs[0];
+    const orderedFolderIds = jdRun
+      ? [jdRun.gdrive_folder_id, ...runs.filter(r => r !== jdRun).map(r => r.gdrive_folder_id)]
+      : runs.map(r => r.gdrive_folder_id);
+    for (const folderId of orderedFolderIds.filter(Boolean)) {
       try {
         const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
-        if (r.ok) jd = (await r.json()).job_posting;
+        if (r.ok) { const body = await r.json(); if (body.job_posting) { jd = body.job_posting; break; } }
       } catch (_) {}
     }
 
