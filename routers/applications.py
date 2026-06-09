@@ -505,6 +505,22 @@ async def score_application(app_id: str, request: Request):
     return match_score
 
 
+@router.post("/{app_id}/extract-jd")
+async def extract_application_jd(app_id: str, request: Request):
+    """Fetch the application's posting URL and extract the job description via Claude."""
+    user_id = request.state.user["user_id"]
+    record  = _get_or_404(user_id, app_id)
+    url = (record.get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "Application has no posting URL")
+    from apply import extract_job_description_from_url, WorkflowConfig
+    config = WorkflowConfig(progress=lambda _: None)
+    text = extract_job_description_from_url(url, config)
+    if not text:
+        raise HTTPException(422, "Could not extract job description from that URL")
+    return {"job_posting": text}
+
+
 @router.delete("/{app_id}/comments/{comment_id}", status_code=204)
 async def delete_comment(app_id: str, comment_id: str, request: Request):
     user_id = request.state.user["user_id"]

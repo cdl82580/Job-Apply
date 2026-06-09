@@ -75,7 +75,6 @@ try:
         claude,
         get_gdrive_job_posting,
         save_gdrive_job_posting,
-        extract_job_description_from_url,
         list_gdrive_run_folders,
         run_workflow,
         safe_filename,
@@ -1422,25 +1421,6 @@ async def format_job_posting(request: Request):
     except Exception as e:
         raise HTTPException(500, f"Formatting failed: {e}")
     return {"markdown": md}
-
-
-@app.post("/api/applications/{app_id}/extract-jd")
-async def extract_application_jd(app_id: str, request: Request):
-    """Fetch the application's posting URL and extract the job description via Claude."""
-    user_data = _require_user(request)
-    user_id   = user_data["id"]
-    apps      = load_applications(user_id)
-    record    = next((a for a in apps if a.get("id") == app_id), None)
-    if not record:
-        raise HTTPException(404, "Application not found")
-    url = (record.get("url") or "").strip()
-    if not url:
-        raise HTTPException(400, "Application has no posting URL")
-    config = WorkflowConfig(progress=lambda _: None)
-    text = extract_job_description_from_url(url, config)
-    if not text:
-        raise HTTPException(422, "Could not extract job description from that URL")
-    return {"job_posting": text}
 
 
 @app.put("/api/gdrive/runs/{folder_id}/job_posting")
