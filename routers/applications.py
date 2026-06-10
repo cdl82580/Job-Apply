@@ -271,6 +271,14 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
         )
 
     record = app_store.save_application(user_id, record)
+
+    # If the URL was updated, re-capture the job description in the background
+    if "url" in updates and updates["url"] and updates["url"] != (changes or {}).get("url", {}).get("from"):
+        _trigger_job_description_capture(
+            user_id, app_id,
+            record["company"], record["role_title"], updates["url"], actor,
+        )
+
     return record
 
 
