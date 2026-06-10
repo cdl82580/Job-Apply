@@ -520,11 +520,12 @@
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
     <div class="filter-row" id="runsFilterRow">
-      <input type="text" id="runsSearch" placeholder="Search by folder name or ID…" style="max-width:220px">
+      <input type="text" id="runsSearch" placeholder="Search by company, role, or ID…" style="max-width:220px">
       <select id="runsTypeFilter">
         <option value="">All types</option>
         <option value="resume">Resume</option>
         <option value="interview_prep">Interview Prep</option>
+        <option value="job_description">Job Description</option>
       </select>
       <select id="runsUserFilter"><option value="">All users</option></select>
       <select id="runsStatusFilter">
@@ -555,7 +556,7 @@
     <table>
       <thead><tr>
         <th>Type</th>
-        <th>Run Folder</th>
+        <th>Application</th>
         <th>User</th>
         <th>Status</th>
         <th class="sortable-th" id="runsSortTh" style="cursor:pointer;user-select:none;white-space:nowrap">
@@ -1319,7 +1320,7 @@ function renderApps() {
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
-const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching' };
+const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching', job_description: 's-onhold' };
 
 function filterAndRenderRuns() {
   const type     = document.getElementById('runsTypeFilter').value;
@@ -1330,7 +1331,7 @@ function filterAndRenderRuns() {
 
   const q = document.getElementById('runsSearch').value.trim().toLowerCase();
   let list = _allRuns;
-  if (q)      list = list.filter(r => (r.name||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
+  if (q)      list = list.filter(r => (r.app_company||r.name||'').toLowerCase().includes(q) || (r.app_role||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
   if (type)   list = list.filter(r => r.type === type);
   if (user)   list = list.filter(r => r.user_email === user);
   if (status) list = list.filter(r => r.status === status);
@@ -1358,17 +1359,18 @@ function renderRuns(runs) {
   tbody.innerHTML = '';
   for (const r of runs) {
     const tr        = document.createElement('tr');
-    const typeLabel = r.type === 'interview_prep' ? 'Interview Prep' : 'Resume';
+    const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
+                    : r.type === 'job_description' ? 'Job Description' : 'Resume';
     const typeClass = RUN_TYPE_CLASS[r.type] || '';
     const statusColor = (r.status === 'running' || r.status === 'queued')
       ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
-    const nameParts   = (r.name || '').split('_');
-    const folderLabel = nameParts.length > 1
-      ? `${nameParts[0]} · ${nameParts.slice(1).join(' ')}`
-      : (r.name || '—');
+    const appLabel = r.app_company
+      ? `${r.app_company} · ${r.app_role || ''}`.replace(/ · $/, '')
+      : (() => { const p = (r.name||'').split('_'); return p.length > 1 ? `${p[0]} · ${p.slice(1).join(' ')}` : (r.name||'—'); })();
+    const appTitle = r.app_company ? `${r.app_company} — ${r.app_role}` : (r.name||'');
     tr.innerHTML = `
       <td><span class="badge ${typeClass}" style="font-size:.7rem">${esc(typeLabel)}</span></td>
-      <td style="font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(folderLabel)}</td>
+      <td style="font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(appTitle)}">${esc(appLabel)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(r.user_email || '—')}</td>
       <td><span style="font-size:.8rem;font-weight:600;color:${statusColor}">${esc(r.status)}</span></td>
       <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${r.created_at ? fmtDateTime(r.created_at) : '—'}</td>
@@ -2084,11 +2086,11 @@ const APP_HEADERS = ['Application ID','Company','Domain','Role Title','Status','
 function _runRows(list) {
   return list.map(r => [
     r.id||'',
-    r.type === 'interview_prep' ? 'Interview Prep' : 'Resume',
-    r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
+    r.type === 'interview_prep' ? 'Interview Prep' : r.type === 'job_description' ? 'Job Description' : 'Resume',
+    r.app_company||'', r.app_role||'', r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
   ]);
 }
-const RUN_HEADERS = ['Folder ID','Type','Folder Name','User Email','Status','Created At','Drive URL'];
+const RUN_HEADERS = ['Folder ID','Type','Company','Role','Folder Name','User Email','Status','Created At','Drive URL'];
 
 function _auditRows(events) {
   return events.map(e => [

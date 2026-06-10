@@ -435,9 +435,10 @@ async def list_all_runs(request: Request):
         norm = _re.sub(r"[^a-z0-9]", "", name.lower())
         return "interview_prep" if any(kw in norm for kw in PREP_KEYWORDS) else "resume"
 
-    # Build folder_id → run_type map from application tracker records so JD
-    # folders (same naming pattern as resume folders) can be typed correctly.
-    folder_type_map: dict[str, str] = {}
+    # Build folder_id → {type, app_id, app_company, app_role} from application
+    # tracker records. Needed to: (a) classify JD folders correctly, and
+    # (b) surface the associated job application in the runs table.
+    folder_meta_map: dict[str, dict] = {}
     try:
         for uid in storage.list_all_users():
             for app in app_store.list_applications(uid.get("user_id", "")).get("items", []):
@@ -446,9 +447,13 @@ async def list_all_runs(request: Request):
                     continue
                 for run in full.get("linked_runs", []):
                     fid = run.get("gdrive_folder_id")
-                    rtype = run.get("type")
-                    if fid and rtype:
-                        folder_type_map[fid] = rtype
+                    if fid:
+                        folder_meta_map[fid] = {
+                            "type":        run.get("type", ""),
+                            "app_id":      full["id"],
+                            "app_company": full.get("company", ""),
+                            "app_role":    full.get("role_title", ""),
+                        }
     except Exception:
         pass  # degraded gracefully — fall back to name inference
 
@@ -486,10 +491,14 @@ async def list_all_runs(request: Request):
                         if child["id"] in seen_ids:
                             continue
                         seen_ids.add(child["id"])
+                        meta = folder_meta_map.get(child["id"], {})
                         all_runs.append({
                             "id":            child["id"],
                             "name":          child["name"],
-                            "type":          folder_type_map.get(child["id"]) or _infer_type(child["name"]),
+                            "type":          meta.get("type") or _infer_type(child["name"]),
+                            "app_id":        meta.get("app_id", ""),
+                            "app_company":   meta.get("app_company", ""),
+                            "app_role":      meta.get("app_role", ""),
                             "web_view_link": child.get("webViewLink", ""),
                             "created_at":    child.get("createdTime", ""),
                             "user_email":    user_email,
@@ -500,10 +509,14 @@ async def list_all_runs(request: Request):
                     if item["id"] in seen_ids:
                         continue
                     seen_ids.add(item["id"])
+                    meta = folder_meta_map.get(item["id"], {})
                     all_runs.append({
                         "id":            item["id"],
                         "name":          name,
-                        "type":          folder_type_map.get(item["id"]) or _infer_type(name),
+                        "type":          meta.get("type") or _infer_type(name),
+                        "app_id":        meta.get("app_id", ""),
+                        "app_company":   meta.get("app_company", ""),
+                        "app_role":      meta.get("app_role", ""),
                         "web_view_link": item.get("webViewLink", ""),
                         "created_at":    item.get("createdTime", ""),
                         "user_email":    "",
