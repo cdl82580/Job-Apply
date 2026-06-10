@@ -16,16 +16,21 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
 - **Interview Prep** — compact 2-page reference card (0.4" margins, 2-column layout) with 9 sections: interviewer intel, role fit map, gap bridges, dev framework, anchor stories, likely Q&A, questions to ask, differentiating edge, and closing line. Tailored to the interviewer, round type, and focus/slant. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
 - **GitHub portfolio** — FlowShift, task-api, and job-apply repos injected into every prep prompt as additional proof points
-- **JD persistence** — job description saved as `job_description.md` to Google Drive on every run and prep; auto-populated when selecting a job from the tracker or existing run dropdown
+- **JD persistence** — job description saved as `job_description.md` to Google Drive on every run; when a JD is pasted and the run completes the file is written to the output folder and a `job_description` run is linked to the application so it auto-loads on subsequent runs and prep
 - **Google Drive sync** — all output files uploaded automatically to your Drive folder; PDF version generated via Drive conversion
 - **SSE progress streaming** — live log output while the agent runs; `done` event includes `replacements_warning` if XML edits partially failed
 - **Machine pinning** — `machine_id` returned from POST endpoints; client sets `fly-force-instance-id` cookie before opening EventSource to guarantee SSE stream hits the same Fly.io machine
 
 ### Application Tracker
-- Full CRUD for job applications — company (via BrandFetch lookup), role, status, priority, recruiter, salary, DUA tracking
+- Full CRUD for job applications — company (via BrandFetch lookup), role, status, recruiter, salary, DUA tracking
+- **Match scoring** — Claude-powered resume↔JD fit score (0–100) with category badge (Strong Match / Good Match / Stretch / Long Shot) and per-dimension breakdown; Rescore button per row
+- **DUA indicator** — tag and filter applications reported to unemployment (DUA)
+- **Auto `date_applied`** — setting status to "Applied" automatically sets today's date if not already present
+- **Run agent from tracker** — ▶ icon on each row opens the agent page with the app pre-selected and JD loaded from Drive
+- **Setup Drive folder** — ⊕ icon on rows without a Drive folder creates the folder and attempts JD capture from the posting URL in the background
 - Comments/notes system per application with timestamped history
-- Linked agent runs — automatically links generated resumes/prep docs to applications
-- Sorting, filtering, pagination, search by ID
+- Linked agent runs — automatically links generated resumes/prep docs to applications; editing the posting URL re-captures the JD
+- Sorting, filtering (status, match score, DUA, search), pagination
 - CSV and formatted Excel export with frozen headers and alternating rows
 
 ### Calendar
@@ -130,9 +135,8 @@ job-apply/
 7. Admins are redirected to `/admin.html` automatically
 
 ### Interview Prep
-- Select job source: **From Tracker** (auto-loads saved JD from Drive), **From existing run** (dropdown), or **Paste JD**
-- Enter company, role, interview round, and optional focus/slant
-- JD is saved as `job_description.md` to Drive after every run so it auto-loads next time
+- Select an existing tracker application — requires a saved `job_description.md` in the app's Drive folder (run the resume agent first if it doesn't exist)
+- Enter interview round and optional focus/slant; company and role auto-fill from the selected application
 - Output: compact 2-page DOCX reference card uploaded to Drive and available for download
 
 ---
@@ -152,8 +156,8 @@ job-apply/
 | 📋 Tracker | `/tracker` | Pipeline summary by status |
 | 📋 Tracker | `/track-list [status]` | List applications (optional status filter) |
 | 📋 Tracker | `/track-view` | View full details of an application |
-| 📋 Tracker | `/track-add` | Add a new application (BrandFetch company search, all fields) |
-| 📋 Tracker | `/track-update` | Two-step: pick app → edit all fields pre-filled |
+| 📋 Tracker | `/track-add` | Add a new application (BrandFetch company search, all fields except priority) |
+| 📋 Tracker | `/track-update` | Two-step: pick app → edit all fields pre-filled (setting status to Applied auto-sets date applied) |
 | 📋 Tracker | `/track-note` | Add a comment to an application |
 | 📋 Tracker | `/track-delete` | Delete an application (two-step confirm) |
 | 🔍 Lookup | `/company [name]` | Search company info via BrandFetch |
@@ -323,7 +327,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/applications` | cookie | List applications (paginated) |
 | POST | `/api/applications` | cookie | Create application |
 | GET | `/api/applications/{id}` | cookie | Get full application record |
-| PUT | `/api/applications/{id}` | cookie | Update application |
+| PUT | `/api/applications/{id}` | cookie | Update application — auto-sets `date_applied` on status→Applied; re-captures JD if `url` changes |
 | DELETE | `/api/applications/{id}` | cookie | Delete application |
 | GET | `/api/applications/{id}/audit` | cookie | Application-level audit log |
 | POST | `/api/applications/{id}/comments` | cookie | Add comment |
@@ -331,8 +335,12 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | DELETE | `/api/applications/{id}/comments/{cid}` | cookie | Delete comment |
 | POST | `/api/applications/{id}/runs` | cookie | Link a Drive run to an application |
 | DELETE | `/api/applications/{id}/runs/{lid}` | cookie | Unlink a run |
+| POST | `/api/applications/{id}/score` | cookie | Run (or re-run) resume↔JD match scoring; persists result to record |
+| POST | `/api/applications/{id}/extract-jd` | cookie | Extract JD text from the app's posting URL via Claude |
+| POST | `/api/applications/{id}/setup-folder` | cookie | Create Drive folder + attempt JD capture in background; returns 202 immediately |
 | GET | `/api/companies/search?q=` | — | BrandFetch company search |
-| POST | `/api/run` | cookie | Start resume generation run → returns `{run_id, machine_id}` |
+| GET | `/api/companies/logo?domain=` | — | Fetch company logo — redirects (302) to signed BrandFetch CDN URL |
+| POST | `/api/run` | cookie | Start resume generation run → returns `{run_id, machine_id}`; accepts `jd_folder_id` to load JD server-side from Drive |
 | GET | `/api/run/{id}/stream` | cookie | SSE progress stream (`done` event includes `replacements_warning` if < 70% XML edits succeeded) |
 | GET | `/api/run/{id}/status` | cookie | Poll run status |
 | GET | `/api/run/{id}/files/{name}` | cookie | Download output file |
@@ -341,7 +349,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
-| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt` (ownership verified) |
+| GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt`; ownership verified via Tigris app records |
 | PUT | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Upsert `job_description.md` in Drive folder |
 | GET | `/api/runs` | cookie | List local run folders by user |
 | GET | `/api/runs/{folder}/job_posting` | cookie | Fetch saved JD from local run folder |
@@ -395,10 +403,14 @@ The recency rule is enforced in the prompt: only Applause (2016+), ProdPerfect,
 HSP Group, eHealth, and GitHub projects are allowed. Fidelity is explicitly excluded.
 
 ### If Google Drive token expires
+The token is refreshed automatically and persisted to Tigris (`system/gdrive_token.json`) so it survives container restarts. If it's fully revoked (e.g. after revoking app access in Google Account settings), re-authorize:
 ```bash
 rm ~/.config/job-apply/gdrive_token.json
 python3 setup_gdrive.py
 fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
+# Then clear the stale Tigris copy so the new token takes precedence on next boot:
+fly ssh console -C "python3 -c \"from scripts import storage; storage.delete_text('system/gdrive_token.json')\""
+fly deploy --app job-apply-corey
 ```
 
 ### If webhook deliveries are being blocked
