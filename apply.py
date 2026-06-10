@@ -1670,7 +1670,7 @@ Candidate Profile Guide:
     raw = re.sub(r"\s*```$", "", raw.strip())
     data = json.loads(raw)
 
-    score = max(0, min(100, int(round(data["score"]))))
+    score = max(0, min(100, int(round(float(data["score"])))))
     return {
         "score":      score,
         "category":   _match_category(score),
