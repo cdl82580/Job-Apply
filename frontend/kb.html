@@ -1,0 +1,1957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Knowledge Base — Job Apply Agents</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --primary:      #1A3C5E;
+      --border:       #2B6CB0;
+      --fill:         #EEF4FB;
+      --text:         #111827;
+      --muted:        #6B7280;
+      --error:        #DC2626;
+      --success:      #065F46;
+      --radius:       8px;
+      --bg-page:      #F9FAFB;
+      --bg-card:      #FFFFFF;
+      --card-border:  #E5E7EB;
+      --input-bg:     #FFFFFF;
+      --input-border: #D1D5DB;
+    }
+
+    [data-theme="dark"] {
+      --primary:      #A5B4FC;
+      --border:       #6366F1;
+      --fill:         #1A1A2E;
+      --text:         #F0F0F5;
+      --muted:        #94A3B8;
+      --error:        #F87171;
+      --success:      #4ADE80;
+      --bg-page:      #0A0A0A;
+      --bg-card:      #111111;
+      --card-border:  #1E1E1E;
+      --input-bg:     #161616;
+      --input-border: #2B2B2B;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-page);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      transition: background .2s, color .2s;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 2px solid var(--primary);
+      margin-bottom: 0;
+      padding: 0 1rem;
+      position: sticky;
+      top: 0;
+      background: var(--bg-page);
+      z-index: 100;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem 0 .875rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .header-left { display: flex; align-items: center; gap: .875rem; flex-shrink: 0; }
+    .app-logo { width: 36px; height: 36px; }
+    .app-logo img { width: 36px; height: 36px; }
+    header h1 { font-size: 1.25rem; font-weight: 700; color: var(--primary); margin: 0; white-space: nowrap; }
+
+    .header-search {
+      flex: 1;
+      max-width: 420px;
+      position: relative;
+    }
+    .header-search svg {
+      position: absolute;
+      left: .65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .header-search input {
+      width: 100%;
+      padding: .45rem .75rem .45rem 2.1rem;
+      border: 1px solid var(--input-border);
+      border-radius: 20px;
+      font-size: .875rem;
+      font-family: inherit;
+      background: var(--input-bg);
+      color: var(--text);
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+    }
+    .header-search input:focus {
+      border-color: var(--border);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--border) 20%, transparent);
+    }
+    .header-search input::placeholder { color: var(--muted); }
+
+    .header-actions { display: flex; align-items: center; gap: .25rem; flex-shrink: 0; }
+    .header-icon-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; background: none; border: none;
+      cursor: pointer; padding: 0; color: var(--muted); border-radius: 6px;
+      text-decoration: none; transition: color .15s, background .15s;
+    }
+    .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
+    .header-icon-btn.active { color: var(--primary); }
+    .theme-toggle {
+      background: none; border: 1px solid var(--card-border); border-radius: 20px;
+      padding: .3rem .65rem; cursor: pointer; font-size: .8rem; color: var(--muted);
+      transition: border-color .15s;
+    }
+    .theme-toggle:hover { border-color: var(--border); }
+
+    /* ── Layout ── */
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 2rem;
+      padding-top: 1.5rem;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar { position: sticky; top: 72px; height: fit-content; }
+    .sidebar-section { margin-bottom: 1.5rem; }
+    .sidebar-heading {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin: 0 0 .5rem;
+      padding: 0 .5rem;
+    }
+    .sidebar-item {
+      display: block;
+      padding: .4rem .5rem;
+      border-radius: 6px;
+      font-size: .85rem;
+      color: var(--muted);
+      text-decoration: none;
+      cursor: pointer;
+      transition: color .12s, background .12s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .sidebar-item:hover { color: var(--text); background: var(--fill); }
+    .sidebar-item.active { color: var(--primary); background: var(--fill); font-weight: 600; }
+
+    /* ── Main content ── */
+    .main { min-width: 0; }
+
+    /* ── Search results state ── */
+    .search-results { display: none; }
+    .search-results.visible { display: block; }
+
+    .result-item {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: .75rem;
+      cursor: pointer;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .result-item:hover {
+      border-color: var(--border);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--border) 15%, transparent);
+    }
+    .result-title { font-size: .95rem; font-weight: 600; color: var(--primary); margin: 0 0 .25rem; }
+    .result-cat { font-size: .72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .3rem; }
+    .result-snippet { font-size: .82rem; color: var(--muted); line-height: 1.5; }
+    .result-snippet mark { background: color-mix(in srgb, var(--border) 25%, transparent); color: var(--text); border-radius: 2px; padding: 0 2px; }
+    .no-results { color: var(--muted); font-size: .9rem; padding: 2rem 0; text-align: center; }
+
+    /* ── Category view ── */
+    .category-view { display: none; }
+    .category-view.visible { display: block; }
+
+    .cat-header { margin-bottom: 1.5rem; }
+    .cat-title { font-size: 1.35rem; font-weight: 700; color: var(--primary); margin: 0 0 .3rem; }
+    .cat-desc { color: var(--muted); font-size: .9rem; margin: 0; }
+
+    .article-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: .875rem;
+    }
+    .article-card {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      cursor: pointer;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .article-card:hover {
+      border-color: var(--border);
+      box-shadow: 0 2px 10px color-mix(in srgb, var(--border) 15%, transparent);
+    }
+    .article-card-title { font-size: .9rem; font-weight: 600; color: var(--primary); margin: 0 0 .35rem; }
+    .article-card-snippet { font-size: .8rem; color: var(--muted); line-height: 1.5; margin: 0; }
+
+    /* ── Article view ── */
+    .article-view { display: none; }
+    .article-view.visible { display: block; }
+
+    .breadcrumb {
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+    }
+    .breadcrumb a, .breadcrumb button {
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: .8rem;
+      font-family: inherit;
+    }
+    .breadcrumb a:hover, .breadcrumb button:hover { text-decoration: underline; }
+
+    .article-title { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .5rem; }
+    .article-meta { font-size: .78rem; color: var(--muted); margin-bottom: 1.75rem; display: flex; gap: 1rem; }
+    .article-body { line-height: 1.7; font-size: .925rem; }
+    .article-body h2 { font-size: 1.05rem; font-weight: 700; color: var(--primary); margin: 1.75rem 0 .6rem; padding-bottom: .35rem; border-bottom: 1px solid var(--card-border); }
+    .article-body h3 { font-size: .9rem; font-weight: 700; color: var(--text); margin: 1.25rem 0 .4rem; }
+    .article-body p { margin: 0 0 .9rem; color: var(--text); }
+    .article-body ul, .article-body ol { margin: 0 0 .9rem; padding-left: 1.4rem; }
+    .article-body li { margin-bottom: .3rem; }
+    .article-body code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: .82em;
+      background: var(--fill);
+      border: 1px solid var(--card-border);
+      border-radius: 3px;
+      padding: .1em .35em;
+    }
+    .article-body pre {
+      background: #0F172A;
+      color: #CBD5E1;
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin: .75rem 0 1rem;
+    }
+    .article-body pre code { background: none; border: none; padding: 0; font-size: .82rem; color: inherit; }
+    .article-body blockquote {
+      border-left: 3px solid var(--border);
+      margin: .75rem 0 1rem;
+      padding: .5rem .75rem .5rem 1rem;
+      background: var(--fill);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: var(--muted);
+      font-style: italic;
+    }
+    .article-body table { width: 100%; border-collapse: collapse; margin: .75rem 0 1rem; font-size: .85rem; }
+    .article-body th {
+      padding: .55rem .75rem; text-align: left; background: var(--bg-page);
+      border-bottom: 2px solid var(--card-border); font-size: .75rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    }
+    .article-body td { padding: .6rem .75rem; border-bottom: 1px solid var(--card-border); }
+    .article-body tr:last-child td { border-bottom: none; }
+    .article-body .tag {
+      display: inline-block; font-size: .7rem; font-weight: 700; padding: .15rem .5rem;
+      border-radius: 999px; background: var(--fill); color: var(--primary);
+      border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+      margin: .1rem .15rem;
+    }
+
+    /* ── Home / all categories ── */
+    .home-view { display: none; }
+    .home-view.visible { display: block; }
+    .home-title { font-size: 1.35rem; font-weight: 700; color: var(--primary); margin: 0 0 .3rem; }
+    .home-sub { color: var(--muted); font-size: .9rem; margin: 0 0 1.75rem; }
+
+    .cat-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .875rem; }
+    .cat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      cursor: pointer;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .cat-card:hover { border-color: var(--border); box-shadow: 0 2px 10px color-mix(in srgb, var(--border) 15%, transparent); }
+    .cat-card-icon { font-size: 1.5rem; margin-bottom: .5rem; }
+    .cat-card-title { font-size: .92rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
+    .cat-card-count { font-size: .75rem; color: var(--muted); }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; border-bottom: 1px solid var(--card-border); padding-bottom: 1rem; margin-bottom: .5rem; }
+      .header-search { max-width: 180px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-left">
+      <div class="app-logo">
+        <a href="/index.html"><img class="logo-img" src="/img/logo.png" alt="Logo"></a>
+      </div>
+      <h1>Knowledge Base</h1>
+    </div>
+
+    <div class="header-search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" id="globalSearch" placeholder="Search articles…" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="header-actions">
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a class="header-icon-btn" href="/index.html" title="Home">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/tracking.html" title="Application Tracker">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/profile.html" title="Profile">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-heading">Browse</div>
+      <button class="sidebar-item active" data-view="home">All Categories</button>
+    </div>
+    <div id="sidebarCats"></div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main" id="main">
+
+    <!-- Search results -->
+    <div class="search-results" id="searchResults">
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:1rem;" id="searchMeta"></div>
+      <div id="searchList"></div>
+    </div>
+
+    <!-- Home view -->
+    <div class="home-view visible" id="homeView">
+      <p class="home-title">Welcome to the Knowledge Base</p>
+      <p class="home-sub">Everything you need to run great job applications — from role framing to workflow troubleshooting.</p>
+      <div class="cat-cards" id="catCards"></div>
+    </div>
+
+    <!-- Category view -->
+    <div class="category-view" id="categoryView">
+      <div class="cat-header">
+        <button class="breadcrumb" style="margin-bottom:.5rem;" onclick="showHome()">← All Categories</button>
+        <p class="cat-title" id="catViewTitle"></p>
+        <p class="cat-desc" id="catViewDesc"></p>
+      </div>
+      <div class="article-grid" id="articleGrid"></div>
+    </div>
+
+    <!-- Article view -->
+    <div class="article-view" id="articleView">
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <h1 class="article-title" id="articleTitle"></h1>
+      <div class="article-meta" id="articleMeta"></div>
+      <div class="article-body" id="articleBody"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   Knowledge Base Data
+───────────────────────────────────────────────────────────── */
+const KB = {
+  categories: [
+    { id: 'getting-started',  label: 'Getting Started',         icon: '🚀', desc: 'First steps, workflow overview, and how the agent produces your documents.' },
+    { id: 'role-types',       label: 'Role Types & Framing',    icon: '🎯', desc: 'Framing angles and strategy for each role category the agent supports.' },
+    { id: 'resume',           label: 'Resume Tailoring',        icon: '📄', desc: 'How the agent customizes the master resume — XML editing, competencies, and bullets.' },
+    { id: 'cover-letter',     label: 'Cover Letter',            icon: '✉️',  desc: 'Structure, tone rules, opening hooks, and evidence paragraph strategy.' },
+    { id: 'ats',              label: 'ATS Optimization',        icon: '🤖', desc: 'How the ATS resume is built and what makes it parser-friendly.' },
+    { id: 'workflow',         label: 'Workflow & Automation',   icon: '⚙️',  desc: 'CLI usage, web app, Google Drive upload, and scheduling prep.' },
+    { id: 'troubleshooting',  label: 'Troubleshooting',         icon: '🔧', desc: 'Common failures, XML debugging, pack/unpack errors, and fixes.' },
+    { id: 'webhooks',         label: 'Webhooks',                icon: '🔗', desc: 'Outbound webhook configuration, event types, payload formats, and HMAC signing.' },
+    { id: 'slack',            label: 'Slack Integration',       icon: '💬', desc: 'All slash commands, calendar DMs, notification setup, and the Slack bot reference.' },
+  ],
+
+  articles: [
+
+    /* ── Getting Started ─────────────────────────────────────── */
+    {
+      id: 'gs-overview',
+      category: 'getting-started',
+      title: 'How the Agent Works',
+      snippet: 'End-to-end overview of the 8-step workflow that produces a tailored resume, ATS resume, and cover letter.',
+      readTime: '3 min',
+      body: `
+<h2>What the Agent Does</h2>
+<p>The Job Apply Agent takes a job posting and produces three documents — all tailored to that specific role:</p>
+<ul>
+  <li><strong>Tailored Resume</strong> (<code>.docx</code>) — styled, two-column, branded format built on your master resume</li>
+  <li><strong>ATS Resume</strong> (<code>.docx</code>) — single-column, plain-text-friendly version for applicant tracking systems</li>
+  <li><strong>Cover Letter</strong> (<code>.docx</code>) — evidence-led, first-person letter written in your voice</li>
+</ul>
+<p>All three are uploaded to a Google Drive subfolder and named consistently for easy retrieval.</p>
+
+<h2>The 8-Step Workflow</h2>
+<ol>
+  <li><strong>Read inputs</strong> — master resume, <code>profile.md</code>, and the job posting</li>
+  <li><strong>Analysis</strong> — role type classification, framing angle, top-5 JD requirements, competency mapping</li>
+  <li><strong>Unpack master</strong> — extract the <code>.docx</code> XML to an <code>unpacked/</code> directory</li>
+  <li><strong>Apply edits</strong> — rewrite tagline, summary, competencies, and bullets via Python string replacement</li>
+  <li><strong>Pack &amp; validate</strong> — repack the XML into a valid <code>.docx</code> and confirm all validations pass</li>
+  <li><strong>ATS resume</strong> — automatically generated from the same tailored content</li>
+  <li><strong>Cover letter</strong> — generated via a Node.js script using the <code>docx</code> package</li>
+  <li><strong>Upload to Drive</strong> — all three files land in a new subfolder under <em>Job Applications</em></li>
+</ol>
+
+<h2>One Invariant</h2>
+<blockquote>Every run starts from <code>resumes/master.docx</code>. Never a previously tailored file.</blockquote>
+<p>This keeps the master clean and ensures each run is independent. The <code>unpacked/</code> directory and temp scripts are cleaned up after each run.</p>
+      `
+    },
+    {
+      id: 'gs-first-run',
+      category: 'getting-started',
+      title: 'Running Your First Application',
+      snippet: 'CLI and web app entry points, file naming convention, and what to expect on the first run.',
+      readTime: '4 min',
+      body: `
+<h2>Two Ways to Run</h2>
+
+<h3>1. CLI</h3>
+<pre><code>python3 apply.py --job jobs/job.txt --company "CompanyName" --role "Role Title"</code></pre>
+<p>Save the job posting as plain text in <code>jobs/job.txt</code>, then run the command above. The agent reads the file and executes all 8 steps.</p>
+
+<h3>2. Web App</h3>
+<p>Go to <a href="https://job-apply-corey.fly.dev/" target="_blank">job-apply-corey.fly.dev</a>, paste the job posting into the form, fill in company and role, then click <strong>Run</strong>. Progress streams live via SSE.</p>
+
+<h2>Output Structure</h2>
+<p>Each run creates a subfolder under <code>output/</code>:</p>
+<pre><code>output/Acme_SolutionsEngineer/
+  Resume_CoreyLaverdiere_Acme_SolutionsEngineer.docx
+  Resume_CoreyLaverdiere_Acme_SolutionsEngineer_ATS.docx
+  CoverLetter_CoreyLaverdiere_Acme_SolutionsEngineer.docx</code></pre>
+<p>The subfolder name is <code>[CompanyName]_[ShortRole]</code> with spaces removed.</p>
+
+<h2>Google Drive Upload</h2>
+<p>If <code>gdrive_credentials.json</code> is present in the project root, files are automatically uploaded to a subfolder under <em>Job Applications</em>. If the credentials file is missing, upload is silently skipped and a warning is printed — all local files are still produced.</p>
+
+<h2>First-Time Drive Setup</h2>
+<pre><code>python3 setup_gdrive.py</code></pre>
+<p>Follow the printed instructions to download OAuth credentials from Google Cloud Console, then re-run. A browser window opens once for authorization; the token is cached at <code>~/.config/job-apply/gdrive_token.json</code>.</p>
+      `
+    },
+    {
+      id: 'gs-analysis',
+      category: 'getting-started',
+      title: 'Understanding the Analysis Phase',
+      snippet: 'What the agent figures out in Step 2 before touching any files — role type, framing angle, competency mapping.',
+      readTime: '3 min',
+      body: `
+<h2>Why Analysis Comes First</h2>
+<p>Before any file is modified, the agent produces a structured analysis of the job posting. This is the plan that drives every subsequent edit. Skipping or rushing it produces generic output.</p>
+
+<h2>What the Analysis Covers</h2>
+<ul>
+  <li><strong>Role type</strong> — Is this PS Delivery? Pre-Sales SE? TAM? Integration Engineer? The classification determines the framing angle.</li>
+  <li><strong>Framing angle</strong> — A single narrative thread that runs through the tagline, summary, competencies, and every bullet. Everything ladders up to this one story.</li>
+  <li><strong>Top 5 JD requirements</strong> — The things that must appear on page 1, usually drawn directly from the job description's "requirements" or "responsibilities" section.</li>
+  <li><strong>Competencies to feature</strong> — Which 14 of the available competency cells best match this JD. Order matters — left-to-right, top-to-bottom scan order.</li>
+  <li><strong>Bullets to rewrite</strong> — Which eHealth and HSP bullets need the most work and why.</li>
+  <li><strong>Cover letter hook</strong> — The opening angle, usually a mirror or paraphrase of the JD's own language.</li>
+  <li><strong>Tone notes</strong> — Specific language from the JD worth echoing back.</li>
+</ul>
+
+<h2>Reading the Analysis Output</h2>
+<p>The analysis is printed as a numbered list before any edits begin. If you're watching a run in the terminal or via SSE, this is the first substantive output — it's worth reading to verify the agent classified the role correctly before the edits start.</p>
+<p>If the framing angle looks wrong, you can interrupt and provide a correction — the agent will re-analyze before proceeding.</p>
+      `
+    },
+
+    /* ── Role Types ──────────────────────────────────────────── */
+    {
+      id: 'role-ps',
+      category: 'role-types',
+      title: 'Professional Services / PS Delivery',
+      snippet: 'Full lifecycle ownership from requirements through hypercare. How to frame PS delivery roles.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>PS Delivery roles are about owning the entire customer journey — from requirements gathering and solution design through implementation, go-live, and hypercare. The hiring manager wants to see lifecycle ownership, not just task execution.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"Full lifecycle ownership, customer trust, requirements → hypercare."</strong></p>
+<p>Every bullet should tell a story of end-to-end ownership. Not "I built X" but "I took X from requirements through hypercare and the customer renewed."</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Multi-stakeholder project ownership (sponsor + technical team + end users)</li>
+  <li>Discovery and requirements documentation</li>
+  <li>Integration work that connected systems the customer couldn't connect before</li>
+  <li>Go-live milestones met on schedule</li>
+  <li>Customer satisfaction post-launch (CSAT scores, renewal, expansion)</li>
+  <li>Escalation management — stepping in when things went wrong</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>Implementation Leadership, Customer Success, Stakeholder Management, Technical Discovery, Integration Architecture</em></p>
+
+<h2>Cover Letter Hook</h2>
+<p>Mirror the JD's language around "implementation" or "delivery excellence." Open with a customer outcome, not a credential. Example: <em>"When [Company] talks about implementation excellence, I read that as what I've spent the last six years doing — taking healthcare organizations from signed contract to live production."</em></p>
+
+<h2>Bullets to Watch</h2>
+<ul>
+  <li>Avoid passive voice ("was responsible for"). Use "Led", "Owned", "Delivered".</li>
+  <li>Every bullet should have a measurable outcome or a named customer signal.</li>
+  <li>Don't bury the scope — "across 12 health authorities" belongs in the bullet, not cut for space.</li>
+</ul>
+      `
+    },
+    {
+      id: 'role-se',
+      category: 'role-types',
+      title: 'Solutions Engineer / Pre-Sales SE',
+      snippet: 'Technical credibility plus customer communication, from demo to close. Pre-sales SE framing.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>Solutions Engineers are the technical face of the sales motion — the person who makes the product real for the buyer. They bridge product capability and customer need, run demos, answer hard technical questions, and help close deals.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"Technical credibility + customer communication, demo → close."</strong></p>
+<p>The narrative is: I can go deep enough to earn technical trust, and I can translate that depth into language that moves buyers forward.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Technical depth in the relevant domain (APIs, integrations, data, AI — whatever the JD calls out)</li>
+  <li>Demo experience — custom demos, discovery calls, POC delivery</li>
+  <li>Deal influence — tied to a closed deal, shortened sales cycle, expanded scope</li>
+  <li>Cross-functional collaboration with AE and product</li>
+  <li>RFP/security questionnaire work</li>
+  <li>Competitive differentiation</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>Technical Communication, Solution Architecture, Customer Discovery, Demo Excellence, API & Integration Knowledge</em></p>
+
+<h2>Cover Letter Hook</h2>
+<p>Open with what you know about their product or the problem space. Reference a real technical detail from their docs or a specific challenge their buyers face. Shows you did the homework before the interview, not just after.</p>
+
+<h2>Tone Calibration</h2>
+<p>SE roles span a wide range — some want a "sales engineer" who's polished and business-facing; others want a deep technical architect who happens to talk to customers. Read the JD carefully. If it mentions "technical discovery" and "RFP", lean technical. If it says "executive presentations" and "strategic accounts", lean communication.</p>
+      `
+    },
+    {
+      id: 'role-tam',
+      category: 'role-types',
+      title: 'Technical Account Manager',
+      snippet: 'Relationship depth, platform adoption, retention, escalation management. TAM framing strategy.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>TAMs own the post-sale technical relationship. They're accountable for adoption, platform health, renewal, and customer outcomes — and they're the internal champion for their accounts when something goes wrong.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"Relationship depth, platform adoption, retention, escalation management."</strong></p>
+<p>The narrative: I earn the technical trust to influence product roadmaps, and I own outcomes — not just tasks.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Named accounts with named outcomes (adoption %, NPS, renewal)</li>
+  <li>QBR and executive briefing experience</li>
+  <li>Escalation ownership — taking a sev-1 from panic to resolution</li>
+  <li>Technical depth that earned credibility with customer engineers</li>
+  <li>Product feedback loop — influencing roadmap from customer signals</li>
+  <li>Expansion revenue tied to your relationships</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>Customer Relationship Management, Technical Escalation, Platform Adoption, Executive Communication, Renewal &amp; Expansion</em></p>
+
+<h2>Cover Letter Hook</h2>
+<p>Open with a retention or relationship story. TAM hiring managers care about whether you can hold a relationship together when things go sideways. That's harder to screen for than technical skills — make it concrete early.</p>
+
+<h2>What Not to Write</h2>
+<p>Avoid framing that sounds like a help desk. TAM is a strategic role. "Resolved 40 support tickets" sounds reactive. "Owned technical health for a 200-seat enterprise account through a platform migration" sounds like a TAM.</p>
+      `
+    },
+    {
+      id: 'role-integration',
+      category: 'role-types',
+      title: 'Integration / Platform Engineer',
+      snippet: 'API-first, event-driven, shipping at speed. How to frame integration and platform engineering roles.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>Integration engineers are the connective tissue of the enterprise software stack — they design, build, and maintain the pipes that move data between systems reliably and at scale.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"API-first, event-driven, shipping at speed, connective layer."</strong></p>
+<p>The narrative: I build reliable integrations that other teams depend on, I own them end-to-end, and I ship fast without creating brittle glue.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Specific integration patterns: REST, webhooks, event streaming (Kafka, SNS/SQS), HL7/FHIR if healthcare</li>
+  <li>Number and complexity of integrations owned</li>
+  <li>Data volume / throughput metrics</li>
+  <li>Uptime / reliability owned</li>
+  <li>API design ownership — not just consumption</li>
+  <li>Platform tooling built for other engineers</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>API Design &amp; Integration, Event-Driven Architecture, Platform Engineering, Reliability Engineering, Developer Experience</em></p>
+
+<h2>Cover Letter Hook</h2>
+<p>Reference a specific integration challenge or pattern from their JD (HL7 FHIR, Salesforce integration, Stripe webhooks — whatever they named). Shows technical recognition, not just enthusiasm.</p>
+
+<h2>Healthcare Integration Note</h2>
+<p>If the role is in healthcare, HL7 v2, FHIR R4, SMART on FHIR, and EHR integration patterns (Epic, Cerner) are strong signals to surface explicitly. These are rare enough that mentioning them by name stands out.</p>
+      `
+    },
+    {
+      id: 'role-founding',
+      category: 'role-types',
+      title: 'Founding / Agent Platform Engineer',
+      snippet: 'External interface ownership, trust boundary design, clean contracts. Founding and agent platform roles.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>Founding or early platform roles require someone who can define the architecture from scratch, make good interface decisions without extensive prior art to copy, and earn trust from both technical and non-technical stakeholders.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"External interface ownership, trust boundary, clean contracts."</strong></p>
+<p>The narrative: I own the external surface of a system — the part that other teams, customers, or agents depend on — and I make those contracts stable and predictable.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>API or integration surface designed from scratch</li>
+  <li>Decisions made under ambiguity (greenfield, no prior art)</li>
+  <li>Ownership through early production — not just prototype</li>
+  <li>Cross-team API contracts that held up over time</li>
+  <li>Security and trust model design</li>
+  <li>Hiring or team-building if applicable</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>System Design, API Contract Design, Security &amp; Trust Boundaries, Greenfield Ownership, Cross-Functional Leadership</em></p>
+
+<h2>Cover Letter Hook</h2>
+<p>Founding-stage companies are hiring someone to figure things out, not execute a playbook. Open with a story about a decision you made under ambiguity that turned out to be right — and what the signal was that told you to go that direction.</p>
+      `
+    },
+    {
+      id: 'role-ai',
+      category: 'role-types',
+      title: 'AI / Agentic Solutions',
+      snippet: 'LLM pipelines, RAG, agentic workflow design, POC to production. Framing for AI-native roles.',
+      readTime: '5 min',
+      body: `
+<h2>Core Identity</h2>
+<p>AI and agentic roles sit at the boundary of research-adjacent prototyping and production system engineering. The gap between "we built a demo" and "we run this in prod at scale" is where most teams struggle — and it's where your framing should focus.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"LLM pipelines, RAG, agentic workflow design, POC → production."</strong></p>
+<p>The narrative: I know how to build AI systems that actually work in production, not just in demos.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Specific LLM/API work: Claude, GPT-4, Gemini — name the model and the use case</li>
+  <li>RAG architecture: chunking strategy, embedding choice, retrieval evaluation</li>
+  <li>Agentic systems: tool use, multi-step reasoning, agent orchestration</li>
+  <li>Evals and reliability: how you measured and improved quality</li>
+  <li>Cost and latency optimization</li>
+  <li>POC-to-production trajectory — what changed between the demo and prod</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>LLM System Design, RAG Architecture, Agentic Workflow Engineering, AI Evaluation, Production ML Systems</em></p>
+
+<h2>The Job Apply Agent as an Example</h2>
+<p>This project itself is an agentic system — multi-step prompting, structured output, document generation, Drive integration, and a full CI test suite. It's a first-class example for AI roles: built, owned, runs in production.</p>
+
+<h2>Cover Letter Hook</h2>
+<p>Reference something specific about their AI product or the challenge they've named in the JD. The worst AI cover letters are generic enthusiasm. The best ones reference a real limitation, tradeoff, or design decision in the space they're working in.</p>
+
+<h2>Tone Note</h2>
+<p>AI roles attract a lot of "I'm passionate about AI" applicants. Differentiate by being specific and honest about tradeoffs. "Evals are hard and latency matters" is more credible than "I'm excited about the potential of large language models."</p>
+      `
+    },
+    {
+      id: 'role-csm',
+      category: 'role-types',
+      title: 'Customer Success Manager',
+      snippet: 'Adoption, outcomes, renewal, cross-functional coordination. CSM framing and signals.',
+      readTime: '3 min',
+      body: `
+<h2>Core Identity</h2>
+<p>CSMs own customer outcomes and the commercial relationship post-sale. They're accountable for adoption, health scores, renewal, and expansion — and they coordinate internally to make the customer successful.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"Adoption, outcomes, renewal, cross-functional coordination."</strong></p>
+<p>The narrative: My customers renew because they achieved what they came for — and I made sure the right internal resources showed up at the right time.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Renewal rate or GRR/NRR owned</li>
+  <li>Onboarding time-to-value metrics</li>
+  <li>Health score management and early churn detection</li>
+  <li>QBR facilitation and stakeholder mapping</li>
+  <li>Cross-functional orchestration (product, support, sales)</li>
+  <li>Customer references or case studies produced</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>Customer Outcomes, Renewal Management, Stakeholder Engagement, Onboarding, Risk Identification</em></p>
+
+<h2>Technical CSM Note</h2>
+<p>Many CSM roles increasingly require technical depth — API literacy, data analysis, integration understanding. If the JD calls for a "technical CSM" or mentions specific platforms, surface the relevant technical fluency alongside the relationship skills.</p>
+      `
+    },
+    {
+      id: 'role-fde',
+      category: 'role-types',
+      title: 'Forward Deployed Engineer',
+      snippet: 'Fast build, customer-embedded, POC to production, autonomy. FDE framing for embedded engineering roles.',
+      readTime: '4 min',
+      body: `
+<h2>Core Identity</h2>
+<p>Forward Deployed Engineers (FDEs) are embedded with customers to build real solutions, fast. They combine the technical depth of a software engineer with the customer-facing skills of a PS consultant — and they operate with high autonomy.</p>
+
+<h2>Framing Angle</h2>
+<p><strong>"Fast build, customer-embedded, POC to production, autonomy."</strong></p>
+<p>The narrative: I ship working software in front of the customer, gather feedback in real time, and take it from prototype to production — usually on a tight timeline.</p>
+
+<h2>Top Signals to Surface</h2>
+<ul>
+  <li>Embedded customer engagements with delivery timelines</li>
+  <li>Speed: what you built, how fast, what it replaced</li>
+  <li>Technical breadth: able to span frontend, backend, API, data as needed</li>
+  <li>Customer trust earned through technical credibility</li>
+  <li>Working from ambiguous requirements to shipped product</li>
+  <li>Internal feedback loop: what you learned and brought back to the product team</li>
+</ul>
+
+<h2>Competencies to Emphasize</h2>
+<p>Lead with: <em>Rapid Prototyping, Customer-Embedded Delivery, Full-Stack Development, Technical Discovery, Autonomous Execution</em></p>
+
+<h2>Companies That Hire FDEs</h2>
+<p>Palantir popularized the FDE model, but it's now common at AI companies (Glean, Aisera, Writer), data platforms (Databricks, Snowflake), and enterprise SaaS. Each has its own flavor — adjust the technical depth signals based on the company's core product.</p>
+
+<h2>Cover Letter Hook</h2>
+<p>Open with a specific embedded engagement story. The hiring manager for an FDE role wants to know you can walk into a customer and build something real, fast. Show don't tell.</p>
+      `
+    },
+
+    /* ── Resume Tailoring ────────────────────────────────────── */
+    {
+      id: 'res-master',
+      category: 'resume',
+      title: 'The Master Resume',
+      snippet: 'What lives in master.docx, why it\'s structured the way it is, and the invariant that protects it.',
+      readTime: '3 min',
+      body: `
+<h2>What Is the Master Resume?</h2>
+<p><code>resumes/master.docx</code> is the canonical source for all tailored resumes. It contains every piece of content — all bullets, all possible competencies, the styled layout — in a form optimized for XML editing.</p>
+
+<h2>What It Contains</h2>
+<ul>
+  <li><strong>Tagline</strong> (line ~40 in the XML) — a single-sentence framing statement</li>
+  <li><strong>Professional Summary</strong> (~line 449) — 4–5 sentences in Corey's voice</li>
+  <li><strong>Core Competencies</strong> — 14 cells in a styled table</li>
+  <li><strong>eHealth job title &amp; bullets</strong> — 6 bullets, all editable per run</li>
+  <li><strong>HSP Group bullets</strong> — 4 bullets, all editable per run</li>
+  <li><strong>ProdPerfect, Applause, Fidelity bullets</strong> — static, never modified</li>
+  <li><strong>Education &amp; Certifications</strong> — static</li>
+</ul>
+
+<h2>The Core Invariant</h2>
+<blockquote>Every run starts from <code>resumes/master.docx</code>. Never a previously tailored file.</blockquote>
+<p>If a tailored file were used as the starting point for the next run, drift accumulates — each run carries forward artifacts from the last one. Starting from master guarantees a clean slate.</p>
+
+<h2>What Never Changes</h2>
+<p>The following sections are never modified, regardless of role or JD:</p>
+<ul>
+  <li>ProdPerfect bullets</li>
+  <li>Applause bullets</li>
+  <li>Fidelity bullets</li>
+  <li>Education section</li>
+  <li>Certifications section</li>
+  <li>Contact information</li>
+  <li>Formatting, layout, fonts, colors</li>
+</ul>
+      `
+    },
+    {
+      id: 'res-xml',
+      category: 'resume',
+      title: 'XML Editing — How It Works',
+      snippet: 'How the agent reads and edits document.xml — Python string replacement, XML entities, and the no-pandoc rule.',
+      readTime: '5 min',
+      body: `
+<h2>The Unpack → Edit → Pack Cycle</h2>
+<p>A <code>.docx</code> file is a ZIP archive containing XML files. The workflow unpacks it, edits the XML, then repacks it into a valid <code>.docx</code>.</p>
+<pre><code># Unpack
+python3 scripts/office/unpack.py resumes/master.docx unpacked/
+
+# Edit unpacked/word/document.xml ...
+
+# Pack and validate
+python3 scripts/office/pack.py unpacked/ output/Resume_...docx --original resumes/master.docx</code></pre>
+
+<h2>Python String Replacement — Not sed</h2>
+<p>All edits use Python's <code>content.replace(old, new, 1)</code>. The <code>1</code> ensures exactly one replacement per call — a zero-match result is an error, not a silent skip.</p>
+<pre><code>with open('unpacked/word/document.xml', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+content = content.replace(old_text, new_text, 1)
+
+with open('unpacked/word/document.xml', 'w', encoding='utf-8') as f:
+    f.write(content)</code></pre>
+
+<h2>The Pandoc Rule</h2>
+<p>The agent reads the resume with <code>pandoc resumes/master.docx -t plain</code> to understand the content. But every <code>old</code> search string used in replacements must be derived from reading <code>unpacked/word/document.xml</code> directly — never from the pandoc output.</p>
+<p>Why? Pandoc transforms the content in ways that don't match the raw XML:</p>
+<ul>
+  <li>Wraps long lines at arbitrary column widths</li>
+  <li>Unescapes XML entities (<code>&amp;amp;</code> → <code>&amp;</code>, <code>&amp;#8217;</code> → <code>'</code>)</li>
+  <li>Indents table cell text across multiple lines</li>
+</ul>
+<p>None of that matches the single-line, entity-escaped literal text inside <code>&lt;w:t&gt;</code> elements. Search strings from pandoc output will silently fail to match.</p>
+
+<h2>Special Characters in Replacements</h2>
+<p>Use Unicode escapes in the <code>new</code> (replacement) text:</p>
+<table>
+  <tr><th>Character</th><th>Python escape</th></tr>
+  <tr><td>Em dash —</td><td><code>\\u2014</code></td></tr>
+  <tr><td>Curly apostrophe '</td><td><code>\\u2019</code></td></tr>
+  <tr><td>En dash –</td><td><code>\\u2013</code></td></tr>
+  <tr><td>Ampersand &amp;</td><td>Use <code>&amp;amp;</code> in the <code>old</code> text; use literal <code>&amp;</code> in <code>new</code> text</td></tr>
+</table>
+
+<h2>Verification</h2>
+<p>After all replacements, print a count of successes vs. failures. Any 0-match replacement must be debugged before continuing — silent failure means the document shipped with unedited content.</p>
+      `
+    },
+    {
+      id: 'res-competencies',
+      category: 'resume',
+      title: 'Core Competencies — Mapping to the JD',
+      snippet: 'How to choose 14 competency cells that match the JD and sequence them for scanning.',
+      readTime: '4 min',
+      body: `
+<h2>What Are the Core Competencies?</h2>
+<p>The master resume contains a 14-cell competency table — two rows of 7 cells each. This section is fully rewritten on every run. It's the most-scanned section of the resume and the easiest place to mirror JD language directly.</p>
+
+<h2>How to Choose the 14</h2>
+<ol>
+  <li>Extract the top 10–15 skills, capabilities, or domain areas mentioned in the JD</li>
+  <li>Cross-reference against what's genuinely true about the candidate</li>
+  <li>Choose cells that are specific enough to be meaningful but broad enough to be defensible in an interview</li>
+  <li>Avoid generic filler ("Communication", "Teamwork") unless the JD specifically uses that language</li>
+</ol>
+
+<h2>Sequencing Matters</h2>
+<p>Recruiters and hiring managers scan competency tables left-to-right, top-to-bottom. Put the strongest match to the JD's top requirement in position 1 (top-left cell).</p>
+
+<h2>Example Mapping — PS Delivery Role</h2>
+<table>
+  <tr><th>JD Requirement</th><th>Competency Cell</th></tr>
+  <tr><td>"Implementation ownership"</td><td>Implementation Leadership</td></tr>
+  <tr><td>"Stakeholder management"</td><td>Executive Stakeholder Management</td></tr>
+  <tr><td>"HL7 / FHIR experience"</td><td>HL7 &amp; FHIR Integration</td></tr>
+  <tr><td>"Go-live delivery"</td><td>Go-Live &amp; Hypercare</td></tr>
+  <tr><td>"Customer success"</td><td>Customer Outcome Ownership</td></tr>
+</table>
+
+<h2>Formatting</h2>
+<p>Each cell is a short noun phrase, title-cased, no period. Between 2 and 5 words. The cell is not a sentence — it's a label. "Led cross-functional teams" is a bullet. "Cross-Functional Leadership" is a competency cell.</p>
+      `
+    },
+    {
+      id: 'res-bullets',
+      category: 'resume',
+      title: 'Writing Strong Bullets',
+      snippet: 'The principles behind every eHealth and HSP bullet — action, specificity, quantification, and framing.',
+      readTime: '4 min',
+      body: `
+<h2>The Bullet Formula</h2>
+<p>Every bullet should follow: <strong>Action verb → what you did → scope/context → outcome.</strong> Not every bullet needs all four, but most should have at least three.</p>
+
+<blockquote>❌ "Responsible for managing integrations"<br>
+✅ "Owned HL7 v2 integration layer connecting 12 health authorities to provincial lab results, processing 40K+ ADT messages daily with 99.97% uptime"</blockquote>
+
+<h2>Action Verbs to Lead With</h2>
+<p>For PS/delivery: <em>Led, Delivered, Owned, Drove, Managed, Architected</em><br>
+For technical: <em>Built, Designed, Implemented, Migrated, Automated, Shipped</em><br>
+For customer-facing: <em>Partnered, Advised, Presented, Negotiated, Aligned</em></p>
+
+<h2>Quantification</h2>
+<p>Every bullet benefits from a number. Not "improved performance" but "reduced processing latency from 4s to 340ms." Not "managed multiple accounts" but "owned 8 enterprise accounts totaling $4.2M ARR."</p>
+<p>If you don't have an exact number, use a range or qualifier: "40K+", "12 health authorities", "3 major releases", "$2M+ project".</p>
+
+<h2>Framing the Same Fact Differently</h2>
+<p>The same underlying work can be framed for different role types:</p>
+<table>
+  <tr><th>Role Type</th><th>Same Work, Different Frame</th></tr>
+  <tr><td>PS Delivery</td><td>"Led full-lifecycle delivery of OLIS integration across 12 health authorities, from requirements through hypercare"</td></tr>
+  <tr><td>Integration Engineer</td><td>"Designed and shipped HL7 v2 ADT message pipeline processing 40K+ daily transactions with 99.97% uptime"</td></tr>
+  <tr><td>TAM</td><td>"Managed technical relationship across 12 health authority accounts post-go-live, driving adoption and containing escalations"</td></tr>
+</table>
+
+<h2>What Not to Edit</h2>
+<p>ProdPerfect, Applause, and Fidelity bullets are static and must not be modified regardless of role. Only eHealth (6 bullets) and HSP Group (4 bullets) are rewritten per run.</p>
+      `
+    },
+
+    /* ── Cover Letter ─────────────────────────────────────────── */
+    {
+      id: 'cl-structure',
+      category: 'cover-letter',
+      title: 'Cover Letter Structure',
+      snippet: 'The 5-paragraph evidence-led structure — header, hook, evidence, differentiator, close.',
+      readTime: '4 min',
+      body: `
+<h2>The Structure</h2>
+<ol>
+  <li><strong>Header</strong> — Name (Calibri 20pt bold, #1A3C5E) + contact bar (single line, no "Open to Remote") with bottom border</li>
+  <li><strong>Date, addressee block, Re: line</strong></li>
+  <li><strong>Salutation</strong> — "Dear [Hiring Manager name]," or "Dear Hiring Team,"</li>
+  <li><strong>P1: Hook</strong> — Open with their framing, not yours. Quote or mirror the JD's own language.</li>
+  <li><strong>P2: Primary evidence</strong> — Your strongest, most specific story. Quantified.</li>
+  <li><strong>P3: Secondary evidence</strong> — Second proof point, different aspect of the role.</li>
+  <li><strong>P4: Differentiator</strong> — Something specific to THIS role (AI angle, culture fit, the thing they called out).</li>
+  <li><strong>P5: Close</strong> — 1–2 sentences. No fluff.</li>
+  <li><strong>Sign-off</strong> — "Sincerely," → "Corey Laverdiere" (bold, #1A3C5E) → contact line</li>
+</ol>
+
+<h2>The Most Common Mistakes</h2>
+<ul>
+  <li>Opening with "I am excited to apply for…" — this wastes the most-read sentence</li>
+  <li>Summarizing the resume instead of adding new evidence</li>
+  <li>Generic P4 ("Your culture resonates with me") instead of something specific to the company</li>
+  <li>Long closes with multiple asks — one clear close is enough</li>
+</ul>
+
+<h2>Length Target</h2>
+<p>One page. 4–5 paragraphs. Under 350 words is tight but fine for strong evidence. Over 450 words is too long unless every sentence earns its place.</p>
+
+<h2>Technical Generation</h2>
+<p>The cover letter is generated by a Node.js script (<code>cover_letter_gen.js</code>) using the <code>docx</code> npm package. The script is written fresh per run and cleaned up afterward.</p>
+      `
+    },
+    {
+      id: 'cl-hooks',
+      category: 'cover-letter',
+      title: 'Opening Hooks — How to Start Strong',
+      snippet: 'Techniques for P1 — mirroring JD language, leading with a story, and avoiding "I am excited".',
+      readTime: '3 min',
+      body: `
+<h2>Why P1 Is Different</h2>
+<p>The opening paragraph is the only one a hiring manager definitely reads. The rest depends on whether P1 earns it. A generic opener means the letter gets skimmed or skipped.</p>
+
+<h2>The Mirror Technique</h2>
+<p>Find a phrase in the JD that captures what the role is really about — not the generic boilerplate, but the specific thing the hiring manager cares about. Use it or rephrase it in your first sentence.</p>
+<blockquote>JD says: "We're looking for someone who can take implementation from signed contract to go-live in 90 days."<br><br>
+P1: "When [Company] talks about 90-day implementation cycles, I recognize that as the exact model I've been running for the last six years — and the reason I'm applying."</blockquote>
+
+<h2>The Story Open</h2>
+<p>Lead with a single, specific moment or outcome. Don't set up the story — just start in it.</p>
+<blockquote>"In 2023, I took a stalled HL7 integration at [Health Authority] from six months of deadlock to production in eleven weeks. The team was three people, the technical requirements changed twice, and the go-live date didn't move."</blockquote>
+
+<h2>The Observation Open</h2>
+<p>Make a specific observation about their product, market position, or technical challenge that shows you've done more than read the careers page.</p>
+<blockquote>"Most AI companies are solving for demo quality. [Company]'s pitch is production reliability — which is the harder problem and the one I've been working on."</blockquote>
+
+<h2>What Not to Write</h2>
+<ul>
+  <li>"I am excited to apply for the [role] position at [Company]…" — too weak</li>
+  <li>"I have been following [Company] for some time…" — too vague</li>
+  <li>"With my extensive experience in…" — resume summary, not hook</li>
+</ul>
+      `
+    },
+    {
+      id: 'cl-tone',
+      category: 'cover-letter',
+      title: 'Tone Rules — Writing in Corey\'s Voice',
+      snippet: 'The do-not-use phrases, the voice calibration from profile.md, and how to write like a person instead of a LinkedIn summary.',
+      readTime: '3 min',
+      body: `
+<h2>The Voice</h2>
+<p>The cover letter is written in first person, direct, with no corporate filler. It should sound like Corey explaining the work over coffee — not like a LinkedIn summary written by a committee.</p>
+
+<h2>Do-Not-Use Phrases</h2>
+<ul>
+  <li>"I am excited to…" — don't start any paragraph with this</li>
+  <li>"passion for" — vague and overused</li>
+  <li>"leverage" — jargon filler</li>
+  <li>"synergy" — never</li>
+  <li>"results-driven" — generic</li>
+  <li>"hard-working" — table stakes</li>
+  <li>"team player" — table stakes</li>
+</ul>
+
+<h2>The Core Principle</h2>
+<p>Specific &gt; general. Quantified &gt; vague. Honest &gt; impressive-sounding.</p>
+<blockquote>❌ "I am passionate about driving customer success through innovative integration solutions."<br>
+✅ "The integration stalled because no one owned the HL7 spec negotiations with the EHR vendor. I took that on, got alignment in two weeks, and unblocked three months of work."</blockquote>
+
+<h2>Paragraphs Should Add Evidence</h2>
+<p>A cover letter paragraph that summarizes the resume adds nothing. Every paragraph should contain something not on the resume — a detail, a context, a decision, a result — that makes the reader want to talk to you.</p>
+
+<h2>The Close</h2>
+<p>Short. Direct. One or two sentences. Express interest in talking, not desperation to be hired.</p>
+<blockquote>✅ "Happy to talk through any of this — [calendar link] has my availability."<br>
+✅ "Looking forward to learning more about the role."<br>
+❌ "I truly believe I would be an exceptional fit for this position and would be honored to join your team."</blockquote>
+      `
+    },
+
+    /* ── ATS ─────────────────────────────────────────────────── */
+    {
+      id: 'ats-overview',
+      category: 'ats',
+      title: 'ATS Resume — What It Is and Why It Matters',
+      snippet: 'How the ATS resume is generated, what makes it parser-friendly, and why it\'s different from the styled resume.',
+      readTime: '3 min',
+      body: `
+<h2>The Problem</h2>
+<p>The styled resume (<code>.docx</code>) uses tables, text boxes, and a two-column layout that looks great in Word but can confuse applicant tracking systems (ATS). Many ATS parsers read text linearly and lose track of content in table cells or text boxes.</p>
+
+<h2>The ATS Resume</h2>
+<p>The ATS resume is a single-column, plain-structure version of the same tailored content. It's auto-generated by <code>build_ats_resume()</code> in <code>apply.py</code> after the styled resume is packed.</p>
+
+<h2>What Makes It Parser-Friendly</h2>
+<ul>
+  <li>No tables — all content in flat paragraphs</li>
+  <li>No text boxes</li>
+  <li>No multi-column layout</li>
+  <li>Black text only (no colored elements)</li>
+  <li>Linear reading order matches visual reading order</li>
+  <li>Education and Certifications sections appended at the bottom</li>
+</ul>
+
+<h2>Same Content, Different Structure</h2>
+<p>The ATS resume contains the same tailored content — tagline, summary, all 14 competencies, all 10 bullets, plus the static bullets. Only the layout changes. The competencies are rendered as a comma-separated list or a simple bulleted list, not a table.</p>
+
+<h2>When to Submit Which</h2>
+<ul>
+  <li><strong>Styled resume</strong> — use for any application where a human will likely open the file</li>
+  <li><strong>ATS resume</strong> — use when applying through an ATS portal, or if the job posting asks to paste your resume into a text field</li>
+  <li><strong>Both</strong> — when you're uncertain, upload the ATS version to the portal and attach the styled version to any direct email</li>
+</ul>
+      `
+    },
+    {
+      id: 'ats-tips',
+      category: 'ats',
+      title: 'ATS Optimization Tips',
+      snippet: 'Keyword matching, section headers, file format choices, and what ATS systems actually check.',
+      readTime: '3 min',
+      body: `
+<h2>Keyword Matching</h2>
+<p>Most ATS systems score resumes by keyword frequency and match against required/preferred skills in the JD. The competency cells and bullet rewrites are the primary mechanism for this. Key principle: if the JD uses a specific term, use that exact term — not a synonym.</p>
+<table>
+  <tr><th>JD Term</th><th>Don't Write</th><th>Write</th></tr>
+  <tr><td>"HL7 FHIR"</td><td>"healthcare data standards"</td><td>"HL7 FHIR"</td></tr>
+  <tr><td>"Salesforce CRM"</td><td>"CRM platforms"</td><td>"Salesforce"</td></tr>
+  <tr><td>"RESTful APIs"</td><td>"web services"</td><td>"RESTful APIs"</td></tr>
+</table>
+
+<h2>Section Headers</h2>
+<p>ATS parsers look for standard section header names. The ATS resume uses: <em>Professional Summary, Core Competencies, Professional Experience, Education, Certifications.</em> Avoid creative headers like "My Story" or "What I Bring."</p>
+
+<h2>File Format</h2>
+<p>Both resumes are produced as <code>.docx</code>. Most modern ATS systems handle <code>.docx</code> well. Avoid <code>.pdf</code> for ATS submissions unless the application explicitly accepts it — some older ATS systems struggle with PDF text extraction.</p>
+
+<h2>What ATS Systems Don't Check</h2>
+<ul>
+  <li>Design and visual formatting — the ATS doesn't see the two-column layout</li>
+  <li>Image content — logos, photos, signature images are invisible to parsers</li>
+  <li>Text inside text boxes — this is why the ATS resume eliminates them</li>
+</ul>
+      `
+    },
+
+    /* ── Workflow & Automation ───────────────────────────────── */
+    {
+      id: 'wf-web-app',
+      category: 'workflow',
+      title: 'Using the Web App',
+      snippet: 'How the web interface works — SSE streaming, machine pinning, and the prep workflow.',
+      readTime: '3 min',
+      body: `
+<h2>The Web App</h2>
+<p>The web app is deployed at <a href="https://job-apply-corey.fly.dev/" target="_blank">job-apply-corey.fly.dev</a> on Fly.io. It provides a browser interface for both the run workflow and the interview prep workflow.</p>
+
+<h2>How Progress Streams</h2>
+<p>The run and prep workflows stream progress via Server-Sent Events (SSE). The client opens an <code>EventSource</code> connection after the run is initiated. Each step of the workflow emits a progress event that updates the UI in real time.</p>
+
+<h2>Machine Pinning</h2>
+<p>Because SSE state is in-memory (not stored in a database), all events for a given run must be handled by the same Fly machine. The workflow:</p>
+<ol>
+  <li><code>POST /api/run</code> returns a <code>machine_id</code></li>
+  <li>The client sets a <code>fly-force-instance-id</code> cookie with that machine ID</li>
+  <li>All subsequent requests (including the EventSource) are routed to the same machine</li>
+</ol>
+<p>This is why the web machine stays scaled to 1 — SSE across multiple machines without shared state would lose events.</p>
+
+<h2>Interview Prep</h2>
+<p>The prep workflow (<code>POST /api/prep</code>) generates role-specific interview prep materials — likely questions, stories to prepare, and company research. It follows the same SSE streaming pattern as the run workflow.</p>
+
+<h2>Authentication</h2>
+<p>The web app requires login. User accounts are managed via the admin panel at <code>/admin.html</code>. The API uses token-based auth with the token stored in <code>localStorage</code>.</p>
+      `
+    },
+    {
+      id: 'wf-drive',
+      category: 'workflow',
+      title: 'Google Drive Integration',
+      snippet: 'How the automatic Drive upload works, OAuth setup, and the folder structure.',
+      readTime: '3 min',
+      body: `
+<h2>How Upload Works</h2>
+<p>After all three documents are generated, <code>apply.py</code> calls <code>upload_to_gdrive()</code> which:</p>
+<ol>
+  <li>Loads OAuth credentials from <code>gdrive_credentials.json</code></li>
+  <li>Refreshes/caches the token at <code>~/.config/job-apply/gdrive_token.json</code></li>
+  <li>Creates a subfolder under the <em>Job Applications</em> folder (ID: <code>1JneTCux_wjhhU_TIPWZifO7UtCPb7Ppy</code>)</li>
+  <li>Uploads each <code>.docx</code> directly from disk via <code>MediaFileUpload</code></li>
+  <li>Prints the Google Drive folder link</li>
+</ol>
+
+<h2>File Route</h2>
+<p>Files are uploaded directly from disk — not through Claude, not base64-encoded. This is intentional: routing large file content through the Claude context window is slow and wastes tokens.</p>
+
+<h2>First-Time Setup</h2>
+<pre><code>python3 setup_gdrive.py</code></pre>
+<p>Follow the printed instructions to download OAuth credentials from Google Cloud Console, then re-run. A browser window opens once for authorization. The token is cached and automatically refreshed on subsequent runs.</p>
+
+<h2>If Credentials Are Missing</h2>
+<p>If <code>gdrive_credentials.json</code> is absent, the upload step is silently skipped and a warning is printed. All local output files are still produced — only the Drive upload is skipped.</p>
+
+<h2>Folder Structure in Drive</h2>
+<pre><code>Job Applications/
+  Acme_SolutionsEngineer/
+    Resume_CoreyLaverdiere_Acme_SolutionsEngineer.docx
+    Resume_CoreyLaverdiere_Acme_SolutionsEngineer_ATS.docx
+    CoverLetter_CoreyLaverdiere_Acme_SolutionsEngineer.docx</code></pre>
+      `
+    },
+    {
+      id: 'wf-architecture',
+      category: 'workflow',
+      title: 'System Architecture',
+      snippet: 'How the web app is deployed — Fly.io machines, Tigris S3, FastAPI backend, and SSE state.',
+      readTime: '3 min',
+      body: `
+<h2>Deployment</h2>
+<p>The app runs on <a href="https://fly.io" target="_blank">Fly.io</a> with two machines:</p>
+<ul>
+  <li><strong>web</strong> — serves the frontend and FastAPI API (<code>api.py</code>), handles SSE streaming</li>
+  <li><strong>bot</strong> — runs background tasks (Slack bot, async processing)</li>
+</ul>
+<p>Both machines are scaled to 1. The web machine must stay at 1 because SSE state is in-memory — scaling to 2 without a shared event bus would lose events for requests routed to the wrong machine.</p>
+
+<h2>Storage</h2>
+<ul>
+  <li><strong>Tigris S3</strong> — user data, credentials, uploaded files. Tigris is Fly.io's native S3-compatible object storage.</li>
+  <li><strong>Google Drive</strong> — final output documents, organized by company/role subfolder</li>
+</ul>
+
+<h2>API</h2>
+<p>The backend is FastAPI (<code>api.py</code>). Key endpoints:</p>
+<ul>
+  <li><code>POST /api/run</code> — start a tailoring run, returns <code>machine_id</code></li>
+  <li><code>POST /api/prep</code> — start interview prep, returns <code>machine_id</code></li>
+  <li><code>GET /api/events/{run_id}</code> — SSE stream for run progress</li>
+  <li><code>GET /api/applications</code> — list tracked applications</li>
+</ul>
+<p>Full API reference is in <code>JobApply.postman_collection.json</code> and at <code>/api-docs.html</code>.</p>
+
+<h2>Frontend</h2>
+<p>Plain HTML/CSS/JS — no framework. Each page is a self-contained file in <code>frontend/</code>. Pages share a common header pattern and CSS token system (<code>--primary</code>, <code>--bg-card</code>, etc.).</p>
+      `
+    },
+
+    /* ── Webhooks ────────────────────────────────────────────── */
+    {
+      id: 'wh-overview',
+      category: 'webhooks',
+      title: 'Webhooks Overview',
+      snippet: 'How outbound webhooks work — event-driven HTTP POSTs, HMAC signing, and the delivery log.',
+      readTime: '4 min',
+      body: `
+<h2>What Are Webhooks?</h2>
+<p>Webhooks let you push job application events to any external URL in real time — a Slack channel, an MS Teams room, a Zapier zap, a custom API endpoint, or any HTTP receiver. Every subscribed event fires an HTTP POST within seconds.</p>
+
+<h2>How They Work</h2>
+<ol>
+  <li>An action occurs in the app (run completed, application status changed, user logged in, etc.)</li>
+  <li>The event is dispatched asynchronously in a background thread — no blocking of the main request</li>
+  <li>Each webhook whose subscribed events include the action receives a POST with a JSON payload</li>
+  <li>The last 25 deliveries per webhook are stored and visible in the Admin → Webhooks tab</li>
+</ol>
+
+<h2>HMAC Signing</h2>
+<p>If you set a <strong>Secret</strong> on a webhook, every delivery includes an <code>X-Hub-Signature-256</code> header (same format as GitHub webhooks):</p>
+<pre><code>X-Hub-Signature-256: sha256=&lt;hex-digest&gt;</code></pre>
+<p>The digest is HMAC-SHA256 of the raw request body using your secret as the key. Verify it in your receiver to confirm the request came from this app and wasn't tampered with.</p>
+
+<h2>SSRF Protection</h2>
+<p>Webhook URLs are validated at delivery time against a private-network blocklist (RFC 1918, loopback, link-local). URLs that resolve to private addresses are rejected — this prevents DNS-rebinding attacks where a public hostname resolves to an internal address.</p>
+
+<h2>Delivery Log</h2>
+<p>Each webhook stores its 25 most recent delivery attempts in the Admin panel, including HTTP status, response body (truncated), latency, and timestamp. Use this to debug failed deliveries without needing an external logging tool.</p>
+      `
+    },
+    {
+      id: 'wh-events',
+      category: 'webhooks',
+      title: 'Event Types & Categories',
+      snippet: 'Every event the webhook system can fire — organized by category: auth, profile, applications, runs, admin.',
+      readTime: '4 min',
+      body: `
+<h2>Event Categories</h2>
+<p>Events are grouped into five categories. You can subscribe to an entire category or pick individual events.</p>
+
+<h2>Auth</h2>
+<table>
+  <tr><th>Event</th><th>When it fires</th></tr>
+  <tr><td><code>user_registered</code></td><td>New account created with email/password</td></tr>
+  <tr><td><code>user_registered_google</code></td><td>New account created via Google OAuth</td></tr>
+  <tr><td><code>google_account_linked</code></td><td>Google account linked to existing account</td></tr>
+  <tr><td><code>login_success</code></td><td>Successful email/password login</td></tr>
+  <tr><td><code>login_google</code></td><td>Successful Google OAuth login</td></tr>
+  <tr><td><code>login_failed</code></td><td>Failed login attempt</td></tr>
+  <tr><td><code>logout</code></td><td>User signed out</td></tr>
+  <tr><td><code>email_verified</code></td><td>Email address confirmed via verification link</td></tr>
+  <tr><td><code>password_changed</code></td><td>Password updated</td></tr>
+</table>
+
+<h2>Profile</h2>
+<table>
+  <tr><th>Event</th><th>When it fires</th></tr>
+  <tr><td><code>profile_updated</code></td><td>Display name or profile fields changed</td></tr>
+  <tr><td><code>resume_uploaded</code></td><td>New master resume uploaded</td></tr>
+</table>
+
+<h2>Applications</h2>
+<table>
+  <tr><th>Event</th><th>When it fires</th></tr>
+  <tr><td><code>created</code></td><td>New application record added to tracker</td></tr>
+  <tr><td><code>updated</code></td><td>Application status, stage, or fields changed</td></tr>
+  <tr><td><code>deleted</code></td><td>Application record deleted</td></tr>
+  <tr><td><code>comment_added</code></td><td>Comment added to an application</td></tr>
+  <tr><td><code>run_linked</code></td><td>A document run linked to an application</td></tr>
+  <tr><td><code>imported</code></td><td>Application imported in bulk</td></tr>
+</table>
+
+<h2>Runs</h2>
+<table>
+  <tr><th>Event</th><th>When it fires</th></tr>
+  <tr><td><code>run_started</code></td><td>Document generation run begins</td></tr>
+  <tr><td><code>run_completed</code></td><td>Run finishes successfully (resume + cover letter produced)</td></tr>
+  <tr><td><code>run_failed</code></td><td>Run encountered an error</td></tr>
+  <tr><td><code>prep_started</code></td><td>Interview prep run begins</td></tr>
+  <tr><td><code>prep_completed</code></td><td>Prep run finishes successfully</td></tr>
+  <tr><td><code>prep_failed</code></td><td>Prep run encountered an error</td></tr>
+</table>
+
+<h2>Admin</h2>
+<table>
+  <tr><th>Event</th><th>When it fires</th></tr>
+  <tr><td><code>webhook_created</code></td><td>New webhook configured</td></tr>
+  <tr><td><code>webhook_updated</code></td><td>Webhook settings changed</td></tr>
+  <tr><td><code>webhook_deleted</code></td><td>Webhook removed</td></tr>
+  <tr><td><code>webhook_tested</code></td><td>Test delivery triggered from admin UI</td></tr>
+</table>
+      `
+    },
+    {
+      id: 'wh-formats',
+      category: 'webhooks',
+      title: 'Payload Formats',
+      snippet: 'Generic JSON, Slack Incoming Webhook, MS Teams MessageCard, and Loki push — payload shape for each format.',
+      readTime: '4 min',
+      body: `
+<h2>Choosing a Format</h2>
+<p>When creating a webhook you select one of four payload formats. The format changes the JSON structure sent to your endpoint — the event data is the same, only the envelope differs.</p>
+
+<h2>Generic (default)</h2>
+<p>Full structured payload. Best for custom receivers, Zapier, Make, or any endpoint you control.</p>
+<pre><code>{
+  "event":      "run_completed",
+  "category":   "runs",
+  "timestamp":  "2026-06-10T14:32:00Z",
+  "actor":      "user@example.com",
+  "data": {
+    "run_id":   "abc123",
+    "company":  "Acme",
+    "role":     "Solutions Engineer",
+    ...
+  }
+}</code></pre>
+
+<h2>Slack Incoming Webhook</h2>
+<p>Sends a Slack <code>blocks</code> message with a formatted notification card. Point the URL at a Slack Incoming Webhook URL for your channel.</p>
+<pre><code>{
+  "text": "run_completed — Acme / Solutions Engineer",
+  "blocks": [
+    {
+      "type": "section",
+      "text": { "type": "mrkdwn", "text": ":white_check_mark: *run_completed*\n..." }
+    }
+  ]
+}</code></pre>
+
+<h2>MS Teams MessageCard</h2>
+<p>Uses the legacy MessageCard format compatible with Teams Incoming Webhooks. Point the URL at a Teams connector webhook URL.</p>
+<pre><code>{
+  "@type":       "MessageCard",
+  "@context":    "https://schema.org/extensions",
+  "summary":     "run_completed",
+  "themeColor":  "0078D4",
+  "title":       "run_completed",
+  "text":        "Acme — Solutions Engineer"
+}</code></pre>
+
+<h2>Loki Push</h2>
+<p>Grafana Loki push API format. Useful for shipping events directly into a Loki log stream for dashboards and alerting.</p>
+<pre><code>{
+  "streams": [{
+    "stream": { "app": "job-apply", "event": "run_completed" },
+    "values": [["&lt;unix-ns&gt;", "&lt;json-event&gt;"]]
+  }]
+}</code></pre>
+
+<h2>Filters & Headers</h2>
+<p>Each webhook also supports:</p>
+<ul>
+  <li><strong>Event filter</strong> — subscribe to specific events or entire categories rather than all events</li>
+  <li><strong>Query parameters</strong> — appended to the URL on every delivery (e.g. for token auth)</li>
+  <li><strong>Custom headers</strong> — arbitrary HTTP headers sent with every request (e.g. <code>Authorization: Bearer …</code>)</li>
+</ul>
+      `
+    },
+    {
+      id: 'wh-setup',
+      category: 'webhooks',
+      title: 'Creating & Testing a Webhook',
+      snippet: 'Step-by-step: Admin → Webhooks tab, creating a webhook, sending a test delivery, and reading the delivery log.',
+      readTime: '3 min',
+      body: `
+<h2>Creating a Webhook</h2>
+<ol>
+  <li>Go to <strong>Admin → Webhooks</strong> tab</li>
+  <li>Click <strong>+ New Webhook</strong></li>
+  <li>Fill in:
+    <ul>
+      <li><strong>Name</strong> — a label for the admin UI (e.g. "Slack #jobs-activity")</li>
+      <li><strong>URL</strong> — the HTTPS endpoint that will receive POSTs</li>
+      <li><strong>Payload format</strong> — Generic, Slack, MS Teams, or Loki</li>
+      <li><strong>Events</strong> — choose categories or individual events to subscribe to</li>
+      <li><strong>Secret</strong> (optional) — enables HMAC-SHA256 signature verification</li>
+      <li><strong>Query params / Headers</strong> (optional) — for auth or routing</li>
+    </ul>
+  </li>
+  <li>Click <strong>Save Webhook</strong></li>
+</ol>
+
+<h2>Sending a Test Delivery</h2>
+<p>After saving, click the <strong>Test</strong> button in the webhook row. This fires a synthetic <code>webhook_tested</code> event to your URL immediately. Check the Delivery Log to confirm the response.</p>
+
+<h2>Reading the Delivery Log</h2>
+<p>Each webhook row shows a <strong>Deliveries</strong> column. Click it to see the last 25 attempts:</p>
+<ul>
+  <li><strong>Status</strong> — HTTP response code (200 = success; anything else = inspect the response body)</li>
+  <li><strong>Latency</strong> — round-trip time in milliseconds</li>
+  <li><strong>Timestamp</strong> — when the delivery fired</li>
+  <li><strong>Response</strong> — first 200 chars of the response body (useful for Slack's "no_service" errors etc.)</li>
+</ul>
+
+<h2>Disabling vs. Deleting</h2>
+<p>You can toggle a webhook active/inactive without deleting it — useful for temporarily pausing deliveries during testing or maintenance. Inactive webhooks appear greyed out in the table and do not receive events.</p>
+      `
+    },
+
+    /* ── Slack Integration ────────────────────────────────────── */
+    {
+      id: 'slack-overview',
+      category: 'slack',
+      title: 'Slack Bot Overview',
+      snippet: 'What the Slack bot does, how it connects to the API, and the environment variables needed to run it.',
+      readTime: '3 min',
+      body: `
+<h2>What the Bot Does</h2>
+<p>The Slack bot (<code>slack_bot.py</code>) is a full Slack app that runs as a separate Fly.io machine (the "bot" machine). It exposes every major workflow via slash commands — running jobs, tracking applications, managing the calendar, and updating your profile — all from Slack.</p>
+
+<h2>Architecture</h2>
+<p>The bot is a Slack Bolt app that talks to the Job Apply API over HTTP using a shared <code>BOT_API_KEY</code>. It runs on port 3000 and handles:</p>
+<ul>
+  <li>Slash command payloads from Slack</li>
+  <li>Interactive component submissions (modals, selects)</li>
+  <li>App Home tab rendering</li>
+  <li>DM messages (for file uploads)</li>
+</ul>
+
+<h2>Required Environment Variables</h2>
+<table>
+  <tr><th>Variable</th><th>Description</th></tr>
+  <tr><td><code>SLACK_BOT_TOKEN</code></td><td><code>xoxb-…</code> token from the Slack app credentials</td></tr>
+  <tr><td><code>SLACK_SIGNING_SECRET</code></td><td>Signing secret from Slack app Basic Information page</td></tr>
+  <tr><td><code>BOT_API_KEY</code></td><td>Must match the <code>BOT_API_KEY</code> secret set on the Fly.io app</td></tr>
+  <tr><td><code>JOB_APPLY_API_URL</code></td><td>Base URL of the deployed app (default: <code>https://job-apply-corey.fly.dev</code>)</td></tr>
+</table>
+
+<h2>Optional Environment Variables</h2>
+<table>
+  <tr><th>Variable</th><th>Description</th></tr>
+  <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Enables model auto-upgrade checks every 6 hours</td></tr>
+  <tr><td><code>SLACK_NOTIFY_CHANNEL</code></td><td>Channel/DM user ID for model upgrade notifications</td></tr>
+  <tr><td><code>SLACK_NOTIFY_USER_ID</code></td><td>Slack user ID for calendar reminder DMs</td></tr>
+</table>
+
+<h2>Running Locally</h2>
+<pre><code>python slack_bot.py</code></pre>
+<p>The bot listens on port 3000. Use <code>ngrok</code> or a similar tunnel to expose it to Slack during local development.</p>
+      `
+    },
+    {
+      id: 'slack-job-commands',
+      category: 'slack',
+      title: 'Job & Run Commands',
+      snippet: '/apply, /prep, /runs, /jobstatus — running document generation and checking status from Slack.',
+      readTime: '3 min',
+      body: `
+<h2>/apply</h2>
+<p>Generates a tailored resume, ATS resume, and cover letter for a job posting.</p>
+<p>Invoking <code>/apply</code> opens a modal where you paste the job posting, company name, and role title. The bot submits the run to the API and polls for completion, posting results back to you in Slack including a link to the Google Drive output folder.</p>
+
+<h2>/prep</h2>
+<p>Generates interview prep materials for a role. Same modal pattern as <code>/apply</code> — paste the job posting, company, and role. The bot polls and posts the prep document link when complete.</p>
+
+<h2>/runs</h2>
+<p>Lists your 10 most recent Drive run folders — company, role, date, and a link to the folder. Quick way to find output files without opening the web app or Drive.</p>
+
+<h2>/jobstatus</h2>
+<p>Pings the API health endpoint and reports whether the app is up. Shows a summary of recent run stats (completed, failed, in-progress). Useful for confirming the bot can reach the API before kicking off a long run.</p>
+
+<h2>Polling Behavior</h2>
+<p>After submitting a run or prep request, the bot polls the API every few seconds (up to a 5-minute timeout). While polling it posts a "Working…" message to Slack that updates in place — you don't get spammed with notifications. If the run times out or fails, the bot posts the error details.</p>
+      `
+    },
+    {
+      id: 'slack-tracker-commands',
+      category: 'slack',
+      title: 'Application Tracker Commands',
+      snippet: '/tracker, /track-list, /track-add, /track-update, /track-view, /track-note, /track-delete — full tracker CRUD from Slack.',
+      readTime: '4 min',
+      body: `
+<h2>/tracker</h2>
+<p>Shows a pipeline summary — counts of applications grouped by status (Applied, Phone Screen, Interviewing, Offer, Rejected, etc.). Quick pulse check on where things stand.</p>
+
+<h2>/track-list</h2>
+<p>Lists active applications (excludes rejected/not-applying) with company, role, current status, and last-updated date. Supports an optional status filter: <code>/track-list interviewing</code>.</p>
+
+<h2>/track-add</h2>
+<p>Opens a modal to add a new application record. Fields include company name (with autocomplete search), role, status, source, recruiter contact, and notes. Submitted records appear immediately in the web tracker.</p>
+
+<h2>/track-update</h2>
+<p>Opens a modal to update an existing application's status, stage, or notes. Select the application from a dropdown (searches by company name), make changes, and submit.</p>
+
+<h2>/track-view</h2>
+<p>Opens a read-only detail modal for a selected application — full field set, comments timeline, and linked run folders.</p>
+
+<h2>/track-note</h2>
+<p>Adds a freetext comment to an application record — useful for logging interview notes, recruiter calls, or follow-up reminders directly from Slack.</p>
+
+<h2>/track-delete</h2>
+<p>Deletes an application record after a confirmation step. The modal shows the application details before asking for confirmation — prevents accidental deletion.</p>
+
+<h2>Company Autocomplete</h2>
+<p>The <code>/track-add</code> and <code>/track-update</code> modals include a company name field with live autocomplete sourced from BrandFetch — searches by name, returns matching companies with logos. Selecting a company populates the domain and logo fields automatically.</p>
+      `
+    },
+    {
+      id: 'slack-calendar-commands',
+      category: 'slack',
+      title: 'Calendar Commands',
+      snippet: '/cal-today, /cal-week, /cal-add, /cal-view, /cal-delete — managing interview calendar events from Slack.',
+      readTime: '4 min',
+      body: `
+<h2>/cal-today</h2>
+<p>Lists all calendar events scheduled for today — title, time, timezone, and type (interview, phone screen, offer call, etc.). Returns a message if nothing is scheduled.</p>
+
+<h2>/cal-week</h2>
+<p>Lists all events in the next 7 days, grouped by date. Good for a weekly prep scan before Monday morning.</p>
+
+<h2>/cal-add</h2>
+<p>Opens a modal to create a new calendar event. Fields include:</p>
+<ul>
+  <li>Event title and type (Interview, Phone Screen, Offer Call, etc.)</li>
+  <li>Date and time</li>
+  <li>Timezone</li>
+  <li>Notes / preparation notes</li>
+  <li>Reminder channels — Email, Slack DM, or both</li>
+  <li>Reminder timing — 1 hour, 3 hours, or 1 day before</li>
+</ul>
+
+<h2>/cal-view</h2>
+<p>Opens a read-only detail modal for a selected event. Shows all fields including reminder configuration and any notes added at creation.</p>
+
+<h2>/cal-delete</h2>
+<p>Select an event from a dropdown, confirm in a second modal, then delete. Two-step confirmation prevents accidental removal of interview slots.</p>
+
+<h2>Reminder DMs</h2>
+<p>If <code>SLACK_NOTIFY_USER_ID</code> is configured and an event has Slack reminders enabled, the bot sends a DM at the configured lead time. The message includes the event title, time, timezone, and a link to the Calendar page.</p>
+<p>Reminders fire from the background scheduler in <code>api.py</code> — not the bot process — so they work even when the bot machine is idle.</p>
+      `
+    },
+    {
+      id: 'slack-profile-utility',
+      category: 'slack',
+      title: 'Profile & Utility Commands',
+      snippet: '/whoami, /activity, /company, /profile-*, /help — account management and utilities from Slack.',
+      readTime: '3 min',
+      body: `
+<h2>/whoami</h2>
+<p>Shows your account details — email, display name, role (admin/user), email verification status, and account creation date.</p>
+
+<h2>/activity</h2>
+<p>Shows your 10 most recent audit events — what action fired, when, and from which source (web, Slack bot, API). Useful for confirming a command went through or debugging unexpected changes.</p>
+
+<h2>/company</h2>
+<p>Searches for company information via BrandFetch. Returns the company name, domain, logo, and a brief description. Run it before an interview to get the logo/domain for a tracker entry, or just to quickly look up a company.</p>
+
+<h2>Profile Commands</h2>
+<table>
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>/profile-name</code></td><td>Update your display name via a modal</td></tr>
+  <tr><td><code>/profile-email</code></td><td>Change email address — triggers re-verification flow</td></tr>
+  <tr><td><code>/profile-password</code></td><td>Change password via a modal (current + new)</td></tr>
+  <tr><td><code>/profile-resume</code></td><td>Instructions for uploading a new master resume by DMing the bot a <code>.docx</code> file</td></tr>
+  <tr><td><code>/profile-guide</code></td><td>Edit your profile &amp; voice guide (the <code>profile.md</code> content) via a large text modal</td></tr>
+</table>
+
+<h2>Uploading a Resume via DM</h2>
+<p>To replace your master resume: DM the bot a <code>.docx</code> file directly in Slack. The bot detects the file upload, downloads it, and calls the API to replace <code>resumes/master.docx</code>. Confirmation is sent in the same DM thread.</p>
+
+<h2>/help</h2>
+<p>Posts the full command reference — every slash command, what it does, and example usage — as a formatted Slack message. Good starting point if you're new to the bot or can't remember a command name.</p>
+      `
+    },
+
+    /* ── Troubleshooting ─────────────────────────────────────── */
+    {
+      id: 'ts-zero-match',
+      category: 'troubleshooting',
+      title: 'Replacement Returns 0 Matches',
+      snippet: 'What to do when a Python string replacement fails silently — debugging the XML source.',
+      readTime: '4 min',
+      body: `
+<h2>The Problem</h2>
+<p>A <code>content.replace(old, new, 1)</code> call returns 0 replacements, meaning the <code>old</code> string was not found in the XML. The document ships with unedited content.</p>
+
+<h2>Root Cause — Almost Always</h2>
+<p>The <code>old</code> search string was derived from pandoc output rather than the raw XML. See <a href="#" onclick="showArticle('res-xml')">XML Editing — How It Works</a> for why pandoc output doesn't match the raw XML.</p>
+
+<h2>Debugging Steps</h2>
+<ol>
+  <li><strong>Grep the raw XML</strong> for a substring you expect to be present:
+    <pre><code>grep -n "text you expect" unpacked/word/document.xml</code></pre>
+  </li>
+  <li>If grep finds a match, the full string just has a different form than expected. Look at what's actually there — it may have an XML entity (<code>&amp;amp;</code>), a smart quote (<code>&amp;#8217;</code>), or a line break between runs (<code>&lt;w:br/&gt;</code>).</li>
+  <li>If grep finds no match at all, the text lives in a different location — check if it's in a text box (<code>mc:AlternateContent</code>), header, or footer rather than <code>document.xml</code>.</li>
+</ol>
+
+<h2>XML Entities to Watch</h2>
+<table>
+  <tr><th>Visible character</th><th>XML entity in raw file</th></tr>
+  <tr><td>&amp;</td><td><code>&amp;amp;</code></td></tr>
+  <tr><td>'</td><td><code>&amp;#8217;</code> or <code>&amp;apos;</code></td></tr>
+  <tr><td>"</td><td><code>&amp;#8220;</code> / <code>&amp;#8221;</code></td></tr>
+  <tr><td>—</td><td><code>&amp;#8212;</code> or literal <code>&#x2014;</code></td></tr>
+</table>
+
+<h2>Text Split Across Runs</h2>
+<p>Word XML sometimes splits text across multiple <code>&lt;w:r&gt;</code> runs with formatting markup in between. If you're searching for a phrase and only part of it appears in any single <code>&lt;w:t&gt;</code> element, you'll need to find a search string that fits within one run — or restructure the search to target surrounding context.</p>
+      `
+    },
+    {
+      id: 'ts-validation',
+      category: 'troubleshooting',
+      title: 'Pack Validation Failures',
+      snippet: 'How to interpret validation errors from the pack script and the most common causes.',
+      readTime: '3 min',
+      body: `
+<h2>The Validation Step</h2>
+<p>After packing, <code>scripts/office/pack.py</code> runs a validation pass against the output file and the original master. A successful pack prints:</p>
+<pre><code>All validations PASSED</code></pre>
+<p>If validation fails, the script prints the specific error before exiting. The run must not continue until validation passes.</p>
+
+<h2>Common Failure: Malformed XML</h2>
+<p>If a Python replacement introduced a literal <code>&lt;</code>, <code>&gt;</code>, or <code>&amp;</code> character (rather than using the XML entity), the resulting XML will fail to parse.</p>
+<p>Fix: use XML-safe entities in replacement strings:</p>
+<ul>
+  <li><code>&amp;</code> → <code>&amp;amp;</code> in the XML text</li>
+  <li><code>&lt;</code> → <code>&amp;lt;</code></li>
+  <li><code>&gt;</code> → <code>&amp;gt;</code></li>
+</ul>
+
+<h2>Common Failure: Content Type Mismatch</h2>
+<p>If a file was accidentally deleted or renamed during the unpack/edit phase, the pack script may report a missing relationship or content type. Fix: unpack from master again and re-apply the edits cleanly.</p>
+
+<h2>Common Failure: ZIP Structure</h2>
+<p>The <code>pack.py</code> script must preserve the original ZIP structure — directory entries, file order, and compression method. If the pack script is replaced or modified, verify it doesn't create a flat ZIP that breaks Word's ability to open the file.</p>
+
+<h2>The Safe Recovery Path</h2>
+<ol>
+  <li>Delete the <code>unpacked/</code> directory</li>
+  <li>Re-run the unpack from master</li>
+  <li>Re-apply all edits using the Python script</li>
+  <li>Re-run the pack and validation</li>
+</ol>
+<p>Never try to patch a broken output <code>.docx</code> directly — always start from the unpack.</p>
+      `
+    },
+    {
+      id: 'ts-drive-auth',
+      category: 'troubleshooting',
+      title: 'Google Drive Auth Errors',
+      snippet: 'Token expiry, credential file issues, and how to re-authorize the Drive integration.',
+      readTime: '2 min',
+      body: `
+<h2>Token Expired</h2>
+<p>The token at <code>~/.config/job-apply/gdrive_token.json</code> is automatically refreshed if the OAuth client credentials are valid. If you see a <code>401 Unauthorized</code> or <code>invalid_grant</code> error, the refresh token has been revoked (usually because the Google Cloud project's OAuth consent screen was republished or the authorized users list changed).</p>
+<p>Fix: delete the token file and re-run to trigger a fresh authorization flow:</p>
+<pre><code>rm ~/.config/job-apply/gdrive_token.json
+python3 apply.py --job jobs/job.txt --company "Test" --role "Test"</code></pre>
+
+<h2>Missing gdrive_credentials.json</h2>
+<p>If the credentials file is absent, Drive upload is silently skipped with a warning. To restore it:</p>
+<pre><code>python3 setup_gdrive.py</code></pre>
+<p>Follow the instructions to download the credentials JSON from Google Cloud Console OAuth 2.0 client configuration.</p>
+
+<h2>Folder ID Changed</h2>
+<p>The parent folder ID (<code>1JneTCux_wjhhU_TIPWZifO7UtCPb7Ppy</code>) is hardcoded in <code>apply.py</code>. If the <em>Job Applications</em> folder was deleted and recreated in Drive, the ID will have changed. Update the constant in <code>apply.py</code> with the new folder ID from the Drive URL.</p>
+      `
+    },
+
+  ]
+};
+
+/* ─────────────────────────────────────────────────────────────
+   State
+───────────────────────────────────────────────────────────── */
+let currentView = 'home'; // 'home' | 'category' | 'article' | 'search'
+let currentCat  = null;
+let currentArt  = null;
+
+/* ─────────────────────────────────────────────────────────────
+   Boot
+───────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  buildSidebar();
+  buildHomeCards();
+  setupSearch();
+  setupTheme();
+
+  // Deep-link via hash
+  const hash = location.hash.slice(1);
+  if (hash) {
+    const art = KB.articles.find(a => a.id === hash);
+    if (art) { showArticle(hash); return; }
+    const cat = KB.categories.find(c => c.id === hash);
+    if (cat) { showCategory(hash); return; }
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Sidebar
+───────────────────────────────────────────────────────────── */
+function buildSidebar() {
+  const el = document.getElementById('sidebarCats');
+  KB.categories.forEach(cat => {
+    const count = KB.articles.filter(a => a.category === cat.id).length;
+    const sec = document.createElement('div');
+    sec.className = 'sidebar-section';
+    sec.innerHTML = `<div class="sidebar-heading">${cat.label}</div>`;
+    const btn = document.createElement('button');
+    btn.className = 'sidebar-item';
+    btn.textContent = `${cat.icon} All articles (${count})`;
+    btn.dataset.cat = cat.id;
+    btn.onclick = () => showCategory(cat.id);
+    sec.appendChild(btn);
+
+    KB.articles.filter(a => a.category === cat.id).forEach(art => {
+      const ab = document.createElement('button');
+      ab.className = 'sidebar-item';
+      ab.textContent = art.title;
+      ab.dataset.art = art.id;
+      ab.onclick = () => showArticle(art.id);
+      sec.appendChild(ab);
+    });
+    el.appendChild(sec);
+  });
+}
+
+function setSidebarActive(type, id) {
+  document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+  if (type === 'home') {
+    document.querySelector('.sidebar-item[data-view="home"]').classList.add('active');
+  } else if (type === 'cat') {
+    const btn = document.querySelector(`.sidebar-item[data-cat="${id}"]`);
+    if (btn) btn.classList.add('active');
+  } else if (type === 'art') {
+    const btn = document.querySelector(`.sidebar-item[data-art="${id}"]`);
+    if (btn) btn.classList.add('active');
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Home
+───────────────────────────────────────────────────────────── */
+function buildHomeCards() {
+  const el = document.getElementById('catCards');
+  KB.categories.forEach(cat => {
+    const count = KB.articles.filter(a => a.category === cat.id).length;
+    const card = document.createElement('div');
+    card.className = 'cat-card';
+    card.innerHTML = `
+      <div class="cat-card-icon">${cat.icon}</div>
+      <div class="cat-card-title">${cat.label}</div>
+      <div class="cat-card-count">${count} article${count !== 1 ? 's' : ''}</div>
+    `;
+    card.onclick = () => showCategory(cat.id);
+    el.appendChild(card);
+  });
+}
+
+function showHome() {
+  hideAll();
+  document.getElementById('homeView').classList.add('visible');
+  setSidebarActive('home');
+  location.hash = '';
+  currentView = 'home';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Category
+───────────────────────────────────────────────────────────── */
+function showCategory(catId) {
+  const cat = KB.categories.find(c => c.id === catId);
+  if (!cat) return;
+  const articles = KB.articles.filter(a => a.category === catId);
+
+  document.getElementById('catViewTitle').textContent = `${cat.icon}  ${cat.label}`;
+  document.getElementById('catViewDesc').textContent  = cat.desc;
+
+  const grid = document.getElementById('articleGrid');
+  grid.innerHTML = '';
+  articles.forEach(art => {
+    const card = document.createElement('div');
+    card.className = 'article-card';
+    card.innerHTML = `
+      <div class="article-card-title">${art.title}</div>
+      <p class="article-card-snippet">${art.snippet}</p>
+    `;
+    card.onclick = () => showArticle(art.id);
+    grid.appendChild(card);
+  });
+
+  hideAll();
+  document.getElementById('categoryView').classList.add('visible');
+  setSidebarActive('cat', catId);
+  location.hash = catId;
+  currentCat = catId;
+  currentView = 'category';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Article
+───────────────────────────────────────────────────────────── */
+function showArticle(artId) {
+  const art = KB.articles.find(a => a.id === artId);
+  if (!art) return;
+  const cat = KB.categories.find(c => c.id === art.category);
+
+  // Breadcrumb
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = `
+    <button onclick="showHome()">All Categories</button>
+    <span>›</span>
+    <button onclick="showCategory('${cat.id}')">${cat.label}</button>
+    <span>›</span>
+    <span>${art.title}</span>
+  `;
+
+  document.getElementById('articleTitle').textContent = art.title;
+  document.getElementById('articleMeta').innerHTML    = `<span>${cat.label}</span><span>${art.readTime} read</span>`;
+  document.getElementById('articleBody').innerHTML    = art.body;
+
+  hideAll();
+  document.getElementById('articleView').classList.add('visible');
+  setSidebarActive('art', artId);
+  location.hash = artId;
+  currentArt = artId;
+  currentView = 'article';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Search
+───────────────────────────────────────────────────────────── */
+function setupSearch() {
+  const input = document.getElementById('globalSearch');
+  let debounce;
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => runSearch(input.value.trim()), 150);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { input.value = ''; runSearch(''); }
+  });
+}
+
+function runSearch(q) {
+  if (!q) {
+    // Restore previous view
+    hideAll();
+    document.getElementById('searchResults').classList.remove('visible');
+    if (currentView === 'article') { showArticle(currentArt); return; }
+    if (currentView === 'category') { showCategory(currentCat); return; }
+    showHome();
+    return;
+  }
+
+  const ql = q.toLowerCase();
+  const matches = KB.articles.filter(a =>
+    a.title.toLowerCase().includes(ql) ||
+    a.snippet.toLowerCase().includes(ql) ||
+    stripHtml(a.body).toLowerCase().includes(ql)
+  );
+
+  const list = document.getElementById('searchList');
+  const meta = document.getElementById('searchMeta');
+  list.innerHTML = '';
+  meta.textContent = matches.length
+    ? `${matches.length} result${matches.length !== 1 ? 's' : ''} for "${q}"`
+    : '';
+
+  if (!matches.length) {
+    list.innerHTML = `<div class="no-results">No articles found for "<strong>${escHtml(q)}</strong>"</div>`;
+  } else {
+    const cat = id => KB.categories.find(c => c.id === id);
+    matches.forEach(art => {
+      const item = document.createElement('div');
+      item.className = 'result-item';
+      const snippet = highlight(art.snippet, q);
+      item.innerHTML = `
+        <div class="result-cat">${cat(art.category)?.icon} ${cat(art.category)?.label}</div>
+        <div class="result-title">${highlight(art.title, q)}</div>
+        <div class="result-snippet">${snippet}</div>
+      `;
+      item.onclick = () => {
+        document.getElementById('globalSearch').value = '';
+        showArticle(art.id);
+      };
+      list.appendChild(item);
+    });
+  }
+
+  hideAll();
+  document.getElementById('searchResults').classList.add('visible');
+}
+
+function highlight(text, q) {
+  if (!q) return escHtml(text);
+  const re = new RegExp(`(${escRe(q)})`, 'gi');
+  return escHtml(text).replace(re, '<mark>$1</mark>');
+}
+
+function stripHtml(h) { return h.replace(/<[^>]+>/g, ' '); }
+function escHtml(s)   { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escRe(s)     { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+/* ─────────────────────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────────────────────── */
+function hideAll() {
+  document.getElementById('searchResults').classList.remove('visible');
+  document.getElementById('homeView').classList.remove('visible');
+  document.getElementById('categoryView').classList.remove('visible');
+  document.getElementById('articleView').classList.remove('visible');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Theme
+───────────────────────────────────────────────────────────── */
+function setupTheme() {
+  const btn  = document.getElementById('themeToggle');
+  const setT = t => {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('theme', t);
+    btn.textContent = t === 'dark' ? '☀' : '🌙';
+  };
+  const cur = localStorage.getItem('theme') ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setT(cur);
+  btn.onclick = () => setT(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+}
+
+// Allow sidebar buttons to link to articles from article bodies
+window.showArticle  = showArticle;
+window.showCategory = showCategory;
+window.showHome     = showHome;
+</script>
+</body>
+</html>
