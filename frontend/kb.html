@@ -332,7 +332,7 @@
     <!-- Home view -->
     <div class="home-view visible" id="homeView">
       <p class="home-title">Welcome to the Knowledge Base</p>
-      <p class="home-sub">Everything you need to run great job applications — from role framing to workflow troubleshooting.</p>
+      <p class="home-sub" id="homeSub">Everything you need to run great job applications — from role framing to workflow.</p>
       <div class="cat-cards" id="catCards"></div>
     </div>
 
@@ -363,15 +363,14 @@
 ───────────────────────────────────────────────────────────── */
 const KB = {
   categories: [
-    { id: 'getting-started',  label: 'Getting Started',         icon: '🚀', desc: 'First steps, workflow overview, and how the agent produces your documents.' },
-    { id: 'role-types',       label: 'Role Types & Framing',    icon: '🎯', desc: 'Framing angles and strategy for each role category the agent supports.' },
-    { id: 'resume',           label: 'Resume Tailoring',        icon: '📄', desc: 'How the agent customizes the master resume — XML editing, competencies, and bullets.' },
-    { id: 'cover-letter',     label: 'Cover Letter',            icon: '✉️',  desc: 'Structure, tone rules, opening hooks, and evidence paragraph strategy.' },
-    { id: 'ats',              label: 'ATS Optimization',        icon: '🤖', desc: 'How the ATS resume is built and what makes it parser-friendly.' },
-    { id: 'workflow',         label: 'Workflow & Automation',   icon: '⚙️',  desc: 'CLI usage, web app, Google Drive upload, and scheduling prep.' },
-    { id: 'troubleshooting',  label: 'Troubleshooting',         icon: '🔧', desc: 'Common failures, XML debugging, pack/unpack errors, and fixes.' },
-    { id: 'webhooks',         label: 'Webhooks',                icon: '🔗', desc: 'Outbound webhook configuration, event types, payload formats, and HMAC signing.' },
-    { id: 'slack',            label: 'Slack Integration',       icon: '💬', desc: 'All slash commands, calendar DMs, notification setup, and the Slack bot reference.' },
+    { id: 'getting-started',  label: 'Getting Started',       icon: '🚀', desc: 'First steps, workflow overview, and how the agent produces your documents.' },
+    { id: 'role-types',       label: 'Role Types & Framing',  icon: '🎯', desc: 'Framing angles and strategy for each role category the agent supports.' },
+    { id: 'resume',           label: 'Resume Tailoring',      icon: '📄', desc: 'How the agent customizes the master resume — competencies, bullets, and structure.' },
+    { id: 'cover-letter',     label: 'Cover Letter',          icon: '✉️',  desc: 'Structure, tone rules, opening hooks, and evidence paragraph strategy.' },
+    { id: 'ats',              label: 'ATS Optimization',      icon: '🤖', desc: 'How the ATS resume is built and what makes it parser-friendly.' },
+    { id: 'workflow',         label: 'Workflow & Web App',    icon: '⚙️',  desc: 'Using the web interface, running the agent, and the interview prep workflow.' },
+    { id: 'slack',            label: 'Slack Integration',     icon: '💬', desc: 'Slash commands for running the agent, tracking applications, and calendar management.' },
+    { id: 'admin',            label: 'Admin',                 icon: '🔐', desc: 'Webhooks, system architecture, Drive integration, XML editing, and troubleshooting.', adminOnly: true },
   ],
 
   articles: [
@@ -785,7 +784,7 @@ const KB = {
     },
     {
       id: 'res-xml',
-      category: 'resume',
+      category: 'admin',
       title: 'XML Editing — How It Works',
       snippet: 'How the agent reads and edits document.xml — Python string replacement, XML entities, and the no-pandoc rule.',
       readTime: '5 min',
@@ -1107,7 +1106,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'wf-drive',
-      category: 'workflow',
+      category: 'admin',
       title: 'Google Drive Integration',
       snippet: 'How the automatic Drive upload works, OAuth setup, and the folder structure.',
       readTime: '3 min',
@@ -1142,7 +1141,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'wf-architecture',
-      category: 'workflow',
+      category: 'admin',
       title: 'System Architecture',
       snippet: 'How the web app is deployed — Fly.io machines, Tigris S3, FastAPI backend, and SSE state.',
       readTime: '3 min',
@@ -1179,7 +1178,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     /* ── Webhooks ────────────────────────────────────────────── */
     {
       id: 'wh-overview',
-      category: 'webhooks',
+      category: 'admin',
       title: 'Webhooks Overview',
       snippet: 'How outbound webhooks work — event-driven HTTP POSTs, HMAC signing, and the delivery log.',
       readTime: '4 min',
@@ -1209,7 +1208,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'wh-events',
-      category: 'webhooks',
+      category: 'admin',
       title: 'Event Types & Categories',
       snippet: 'Every event the webhook system can fire — organized by category: auth, profile, applications, runs, admin.',
       readTime: '4 min',
@@ -1272,7 +1271,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'wh-formats',
-      category: 'webhooks',
+      category: 'admin',
       title: 'Payload Formats',
       snippet: 'Generic JSON, Slack Incoming Webhook, MS Teams MessageCard, and Loki push — payload shape for each format.',
       readTime: '4 min',
@@ -1338,7 +1337,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'wh-setup',
-      category: 'webhooks',
+      category: 'admin',
       title: 'Creating & Testing a Webhook',
       snippet: 'Step-by-step: Admin → Webhooks tab, creating a webhook, sending a test delivery, and reading the delivery log.',
       readTime: '3 min',
@@ -1380,7 +1379,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     /* ── Slack Integration ────────────────────────────────────── */
     {
       id: 'slack-overview',
-      category: 'slack',
+      category: 'admin',
       title: 'Slack Bot Overview',
       snippet: 'What the Slack bot does, how it connects to the API, and the environment variables needed to run it.',
       readTime: '3 min',
@@ -1547,7 +1546,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     /* ── Troubleshooting ─────────────────────────────────────── */
     {
       id: 'ts-zero-match',
-      category: 'troubleshooting',
+      category: 'admin',
       title: 'Replacement Returns 0 Matches',
       snippet: 'What to do when a Python string replacement fails silently — debugging the XML source.',
       readTime: '4 min',
@@ -1582,7 +1581,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'ts-validation',
-      category: 'troubleshooting',
+      category: 'admin',
       title: 'Pack Validation Failures',
       snippet: 'How to interpret validation errors from the pack script and the most common causes.',
       readTime: '3 min',
@@ -1619,7 +1618,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     },
     {
       id: 'ts-drive-auth',
-      category: 'troubleshooting',
+      category: 'admin',
       title: 'Google Drive Auth Errors',
       snippet: 'Token expiry, credential file issues, and how to re-authorize the Drive integration.',
       readTime: '2 min',
@@ -1653,7 +1652,17 @@ let currentArt  = null;
 /* ─────────────────────────────────────────────────────────────
    Boot
 ───────────────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
+let _isAdmin = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include' });
+    if (res.ok) {
+      const me = await res.json();
+      _isAdmin = me.role === 'admin';
+    }
+  } catch (_) {}
+
   buildHomeCards();
   setupSearch();
   setupTheme();
@@ -1673,7 +1682,7 @@ document.addEventListener('DOMContentLoaded', () => {
 ───────────────────────────────────────────────────────────── */
 function buildHomeCards() {
   const el = document.getElementById('catCards');
-  KB.categories.forEach(cat => {
+  KB.categories.filter(cat => !cat.adminOnly || _isAdmin).forEach(cat => {
     const count = KB.articles.filter(a => a.category === cat.id).length;
     const card = document.createElement('div');
     card.className = 'cat-card';
@@ -1699,7 +1708,7 @@ function showHome() {
 ───────────────────────────────────────────────────────────── */
 function showCategory(catId) {
   const cat = KB.categories.find(c => c.id === catId);
-  if (!cat) return;
+  if (!cat || (cat.adminOnly && !_isAdmin)) return;
   const articles = KB.articles.filter(a => a.category === catId);
 
   document.getElementById('catViewTitle').textContent = `${cat.icon}  ${cat.label}`;
@@ -1732,6 +1741,7 @@ function showArticle(artId) {
   const art = KB.articles.find(a => a.id === artId);
   if (!art) return;
   const cat = KB.categories.find(c => c.id === art.category);
+  if (cat?.adminOnly && !_isAdmin) return;
 
   // Breadcrumb
   const bc = document.getElementById('breadcrumb');
@@ -1783,7 +1793,11 @@ function runSearch(q) {
   }
 
   const ql = q.toLowerCase();
-  const matches = KB.articles.filter(a =>
+  const visibleArticles = KB.articles.filter(a => {
+    const cat = KB.categories.find(c => c.id === a.category);
+    return !cat?.adminOnly || _isAdmin;
+  });
+  const matches = visibleArticles.filter(a =>
     a.title.toLowerCase().includes(ql) ||
     a.snippet.toLowerCase().includes(ql) ||
     stripHtml(a.body).toLowerCase().includes(ql)
