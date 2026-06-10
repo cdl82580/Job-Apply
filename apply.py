@@ -1026,18 +1026,45 @@ _MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 _SCOPES    = ["https://www.googleapis.com/auth/drive.file"]
 
 
-def _seed_gdrive_token() -> None:
-    """Write the GDRIVE_TOKEN_JSON env var to disk if the token file isn't there yet.
+_GDRIVE_TOKEN_TIGRIS_KEY = "system/gdrive_token.json"
 
-    On the server the OAuth browser flow can't run, so we store the token as a
-    Fly.io secret (GDRIVE_TOKEN_JSON) and materialize it at runtime.  The token
-    includes client_id + client_secret, so the Google SDK can refresh it
-    automatically without needing the original gdrive_credentials.json file.
+
+def _seed_gdrive_token() -> None:
+    """Materialize the Drive token to disk, preferring the Tigris-persisted copy.
+
+    Priority: Tigris (always up-to-date after refreshes) → GDRIVE_TOKEN_JSON
+    env var (set at deploy time, may have a stale access token but valid
+    refresh token) → nothing (Drive disabled).
     """
+    if GDRIVE_TOKEN_PATH.exists():
+        return
+    GDRIVE_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Try Tigris first — it has the latest refreshed token
+    try:
+        from scripts import storage
+        tigris_token = storage.get_text(_GDRIVE_TOKEN_TIGRIS_KEY)
+        if tigris_token:
+            GDRIVE_TOKEN_PATH.write_text(tigris_token)
+            return
+    except Exception:
+        pass
+    # Fall back to the env var set at deploy time; persist it to Tigris immediately
+    # so future restarts use Tigris (and get refreshes) rather than the stale secret.
     token_json = os.environ.get("GDRIVE_TOKEN_JSON", "").strip()
-    if token_json and not GDRIVE_TOKEN_PATH.exists():
-        GDRIVE_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if token_json:
         GDRIVE_TOKEN_PATH.write_text(token_json)
+        _persist_gdrive_token()
+
+
+def _persist_gdrive_token() -> None:
+    """Write the current on-disk token back to Tigris so it survives restarts."""
+    try:
+        if not GDRIVE_TOKEN_PATH.exists():
+            return
+        from scripts import storage
+        storage.put_text(_GDRIVE_TOKEN_TIGRIS_KEY, GDRIVE_TOKEN_PATH.read_text())
+    except Exception:
+        pass
 
 
 def _gdrive_service(config: WorkflowConfig):
@@ -1061,6 +1088,7 @@ def _gdrive_service(config: WorkflowConfig):
             try:
                 creds.refresh(Request())
                 GDRIVE_TOKEN_PATH.write_text(creds.to_json())
+                _persist_gdrive_token()
             except Exception as refresh_err:
                 # invalid_grant means the token is permanently revoked — remove it
                 # so the next run doesn't hit the same error, and tell the user.
