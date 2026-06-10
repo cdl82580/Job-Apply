@@ -1313,7 +1313,11 @@ async function setupFolder(id, btn) {
 }
 
 // Run (or re-run) the resume<->JD match analysis for one application.
+const _scoringInProgress = new Set();
+
 async function scoreApplication(id, btn) {
+  if (_scoringInProgress.has(id)) return;
+  _scoringInProgress.add(id);
   if (btn) { btn.classList.add('scoring'); btn.textContent = 'Scoring…'; }
   try {
     const res = await apiFetch(`/api/applications/${id}/score`, { method: 'POST' });
@@ -1328,6 +1332,8 @@ async function scoreApplication(id, btn) {
   } catch (e) {
     if (e.message !== '401') alert(e.message || 'Scoring failed — please try again.');
     else return;
+  } finally {
+    _scoringInProgress.delete(id);
   }
   // applyFilters() re-renders (and resets the button); nothing further to clean up.
 }
