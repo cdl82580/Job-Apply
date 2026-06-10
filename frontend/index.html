@@ -613,7 +613,7 @@
       <!-- App picker -->
       <div class="app-picker-wrap" id="runAppPickerWrap">
         <div class="app-picker-label">
-          Fill from Tracker <span class="opt">(optional — auto-fills fields &amp; loads saved JD when available)</span>
+          Select Application <span class="opt">(required — choose an existing tracker application)</span>
         </div>
         <!-- selected state -->
         <div class="app-picker-selected hidden" id="runAppSelected">
@@ -1220,6 +1220,12 @@
     e.preventDefault();
 
     const raw = Object.fromEntries(new FormData(e.target));
+    if (!_runAppId) {
+      const pickerWrap = document.getElementById('runAppPickerWrap');
+      pickerWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('runAppSearch').focus();
+      return;
+    }
     const jobPosting = document.getElementById('job_posting').value;
     if (!jobPosting.trim() && !_runJdFolderId) {
       document.getElementById('job_posting').focus();
