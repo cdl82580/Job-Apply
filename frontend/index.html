@@ -880,9 +880,20 @@
     if (jdFolderId) {
       _runJdFolderId = jdFolderId;
       if (jdStatusEl) {
+        jdStatusEl.innerHTML = '<span class="spin-xs"></span> Loading saved job description from Drive…';
+        jdStatusEl.className = 'jd-status';
+        jdStatusEl.classList.remove('hidden');
+      }
+      try {
+        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(jdFolderId)}/job_posting`);
+        if (r.ok) {
+          const body = await r.json();
+          if (body.job_posting) document.getElementById('job_posting').value = body.job_posting;
+        }
+      } catch (_) {}
+      if (jdStatusEl) {
         jdStatusEl.innerHTML = '✓ Using saved job description from Drive';
         jdStatusEl.className = 'jd-status loaded';
-        jdStatusEl.classList.remove('hidden');
       }
       form.requestSubmit();
       return;
