@@ -1398,10 +1398,10 @@ async def gdrive_get_job_posting(folder_id: str, request: Request):
     # This is fast (Tigris lookup) and handles all linked_run folder types without
     # the 100-folder cap that the Drive listing has.
     from scripts import applications as app_store
-    apps = app_store.list_applications(user_id)
+    apps_result = app_store.list_applications(user_id)
     allowed_ids = {
         run.get("gdrive_folder_id")
-        for app in apps
+        for app in (apps_result.get("items") or [])
         for run in (app.get("linked_runs") or [])
         if run.get("gdrive_folder_id")
     }
