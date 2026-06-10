@@ -435,6 +435,23 @@ async def list_all_runs(request: Request):
         norm = _re.sub(r"[^a-z0-9]", "", name.lower())
         return "interview_prep" if any(kw in norm for kw in PREP_KEYWORDS) else "resume"
 
+    # Build folder_id → run_type map from application tracker records so JD
+    # folders (same naming pattern as resume folders) can be typed correctly.
+    folder_type_map: dict[str, str] = {}
+    try:
+        for uid in storage.list_all_users():
+            for app in app_store.list_applications(uid.get("user_id", "")).get("items", []):
+                full = app_store.get_application(uid["user_id"], app["id"])
+                if not full:
+                    continue
+                for run in full.get("linked_runs", []):
+                    fid = run.get("gdrive_folder_id")
+                    rtype = run.get("type")
+                    if fid and rtype:
+                        folder_type_map[fid] = rtype
+    except Exception:
+        pass  # degraded gracefully — fall back to name inference
+
     config  = WorkflowConfig(progress=lambda _: None, user_label="admin")
     service = _gdrive_service(config)
 
@@ -472,7 +489,7 @@ async def list_all_runs(request: Request):
                         all_runs.append({
                             "id":            child["id"],
                             "name":          child["name"],
-                            "type":          _infer_type(child["name"]),
+                            "type":          folder_type_map.get(child["id"]) or _infer_type(child["name"]),
                             "web_view_link": child.get("webViewLink", ""),
                             "created_at":    child.get("createdTime", ""),
                             "user_email":    user_email,
@@ -486,7 +503,7 @@ async def list_all_runs(request: Request):
                     all_runs.append({
                         "id":            item["id"],
                         "name":          name,
-                        "type":          _infer_type(name),
+                        "type":          folder_type_map.get(item["id"]) or _infer_type(name),
                         "web_view_link": item.get("webViewLink", ""),
                         "created_at":    item.get("createdTime", ""),
                         "user_email":    "",
