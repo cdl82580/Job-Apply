@@ -1392,7 +1392,7 @@ async def gdrive_list_runs(request: Request):
 async def gdrive_get_job_posting(folder_id: str, request: Request):
     """Fetch job_posting from a specific Drive folder (by Drive folder ID)."""
     user_data = _require_user(request)
-    user_id   = user_data["id"]
+    user_id   = user_data["user_id"]
     user_label = user_data["email"]
     # Verify the folder belongs to this user by checking their application records.
     # This is fast (Tigris lookup) and handles all linked_run folder types without
