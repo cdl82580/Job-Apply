@@ -1705,7 +1705,7 @@ async function saveDrawer() {
     company_logo_url: dLogoUrlInput.value || '',
     role_title:      role,
     status:          document.getElementById('dStatus').value,
-    date_applied:    document.getElementById('dDateApplied').value || null,
+    ...(document.getElementById('dDateApplied').value ? { date_applied: document.getElementById('dDateApplied').value } : {}),
     dua:             document.getElementById('dDua').checked,
     job_source:      document.getElementById('dJobSource').value.trim(),
     location:        document.getElementById('dLocation').value.trim(),
