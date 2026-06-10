@@ -220,7 +220,7 @@
       } else {
         // Admins go straight to the admin dashboard
         const me = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({}));
-        window.location.href = me.role === 'admin' ? '/admin.html' : '/';
+        window.location.href = me.role === 'admin' ? '/admin.html' : '/tracking.html';
       }
     } catch (ex) {
       err.textContent = 'Network error — please try again.';
