@@ -264,8 +264,8 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
     record.update(updates)
     # Auto-set applied_date when status transitions to Applied
     if updates.get("status") == "Applied" and (changes or {}).get("status", {}).get("from") != "Applied":
-        if not record.get("applied_date"):
-            record["applied_date"] = _now()[:10]  # YYYY-MM-DD
+        if not record.get("date_applied"):
+            record["date_applied"] = _now()[:10]  # YYYY-MM-DD
     record["updated_at"] = _now()
     record["updated_by"] = actor
 
