@@ -435,155 +435,189 @@ async def delete_comment(user_id: str, app_id: str, comment_id: str, request: Re
 
 @router.get("/runs")
 async def list_all_runs(request: Request):
-    """Return ALL agent run folders from Google Drive (with createdTime) across all
-    users, plus any still-active in-memory runs not yet uploaded."""
+    """Return ALL agent runs across all users, sourced from the audit log.
+    Includes resume runs, interview prep runs, and scoring runs. Each audit
+    event corresponds to one actual run attempt (no Drive folder deduplication)."""
     _admin(request)
-    import re as _re  # noqa: PLC0415
-    from apply import GDRIVE_PARENT_FOLDER_ID, WorkflowConfig, _gdrive_service, _FOLDER_MIME  # noqa: PLC0415
 
-    PREP_KEYWORDS = {"phonescreen", "hiringmanager", "technical", "executive", "panel", "peer"}
-
-    def _infer_type(name: str) -> str:
-        norm = _re.sub(r"[^a-z0-9]", "", name.lower())
-        return "interview_prep" if any(kw in norm for kw in PREP_KEYWORDS) else "resume"
-
-    # Build folder_id → {type, app_id, app_company, app_role} from application
-    # tracker records. Needed to: (a) classify JD folders correctly, and
-    # (b) surface the associated job application in the runs table.
-    folder_meta_map: dict[str, dict] = {}
+    # Build (user_id, app_id) → {company, role} for enriching match_scored rows
+    app_cache: dict[tuple[str, str], dict] = {}
     try:
-        for uid in storage.list_all_users():
-            for app in app_store.list_applications(uid.get("user_id", "")).get("items", []):
-                full = app_store.get_application(uid["user_id"], app["id"])
+        for uid_rec in storage.list_all_users():
+            uid = uid_rec.get("user_id", "")
+            for app_sum in app_store.list_applications(uid).get("items", []):
+                full = app_store.get_application(uid, app_sum["id"])
                 if not full:
                     continue
-                for run in full.get("linked_runs", []):
-                    fid = run.get("gdrive_folder_id")
-                    if fid:
-                        folder_meta_map[fid] = {
-                            "type":        run.get("type", ""),
-                            "app_id":      full["id"],
-                            "app_company": full.get("company", ""),
-                            "app_role":    full.get("role_title", ""),
-                        }
+                app_cache[(uid, full["id"])] = {
+                    "company": full.get("company", ""),
+                    "role":    full.get("role_title", ""),
+                }
     except Exception:
-        pass  # degraded gracefully — fall back to name inference
+        pass
 
-    config  = WorkflowConfig(progress=lambda _: None, user_label="admin")
-    service = _gdrive_service(config)
+    users = storage.list_all_users()
 
-    all_runs:  list[dict] = []
-    seen_ids:  set[str]   = set()
+    # run_id / prep_id / "score_<event_id>" → run record
+    runs_by_key: dict[str, dict] = {}
 
-    if service and GDRIVE_PARENT_FOLDER_ID:
-        try:
-            # Fetch all direct children of the root Job Applications folder
-            top_items: list[dict] = []
-            page_token = None
-            while True:
-                kwargs: dict = dict(
-                    q=f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and trashed=false",
-                    fields="nextPageToken, files(id, name, mimeType, webViewLink, createdTime)",
-                    orderBy="createdTime desc",
-                    pageSize=1000,
-                )
-                if page_token:
-                    kwargs["pageToken"] = page_token
-                resp = service.files().list(**kwargs).execute()
-                top_items.extend(resp.get("files", []))
-                page_token = resp.get("nextPageToken")
-                if not page_token:
-                    break
+    for uid_rec in users:
+        uid        = uid_rec.get("user_id", "")
+        user_email = uid_rec.get("email", "")
+        events     = user_audit.get_events(uid)
 
-            for item in top_items:
-                if item.get("mimeType") != _FOLDER_MIME:
+        for event in events:
+            action  = event.get("action", "")
+            details = event.get("details") or {}
+            ts      = event.get("timestamp", "")
+
+            if action == "run_started":
+                run_id = details.get("run_id", "")
+                if not run_id or run_id in runs_by_key:
                     continue
-                name = item["name"]
+                runs_by_key[run_id] = {
+                    "id":           run_id,
+                    "type":         "resume",
+                    "company":      details.get("company", ""),
+                    "role":         details.get("role", ""),
+                    "user_id":      uid,
+                    "user_email":   user_email,
+                    "created_at":   ts,
+                    "status":       "running",
+                    "web_view_link": "",
+                    "app_id":       "",
+                    "app_company":  "",
+                    "app_role":     "",
+                }
 
-                if "@" in name:
-                    # Per-user subfolder — scan its run subfolders
-                    user_email = name
-                    children: list[dict] = []
-                    child_token = None
-                    while True:
-                        ckwargs: dict = dict(
-                            q=f"'{item['id']}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
-                            fields="nextPageToken, files(id, name, webViewLink, createdTime)",
-                            orderBy="createdTime desc",
-                            pageSize=1000,
-                        )
-                        if child_token:
-                            ckwargs["pageToken"] = child_token
-                        cresp = service.files().list(**ckwargs).execute()
-                        children.extend(cresp.get("files", []))
-                        child_token = cresp.get("nextPageToken")
-                        if not child_token:
-                            break
-                    for child in children:
-                        if child["id"] in seen_ids:
-                            continue
-                        seen_ids.add(child["id"])
-                        meta = folder_meta_map.get(child["id"], {})
-                        all_runs.append({
-                            "id":            child["id"],
-                            "name":          child["name"],
-                            "type":          meta.get("type") or _infer_type(child["name"]),
-                            "app_id":        meta.get("app_id", ""),
-                            "app_company":   meta.get("app_company", ""),
-                            "app_role":      meta.get("app_role", ""),
-                            "web_view_link": child.get("webViewLink", ""),
-                            "created_at":    child.get("createdTime", ""),
-                            "user_email":    user_email,
-                            "status":        "complete",
-                        })
+            elif action == "prep_started":
+                prep_id = details.get("prep_id", "")
+                if not prep_id or prep_id in runs_by_key:
+                    continue
+                runs_by_key[prep_id] = {
+                    "id":           prep_id,
+                    "type":         "interview_prep",
+                    "company":      details.get("company", ""),
+                    "role":         details.get("role", ""),
+                    "round_type":   details.get("round_type", ""),
+                    "user_id":      uid,
+                    "user_email":   user_email,
+                    "created_at":   ts,
+                    "status":       "running",
+                    "web_view_link": "",
+                    "app_id":       "",
+                    "app_company":  "",
+                    "app_role":     "",
+                }
+
+            elif action == "match_scored":
+                score_key = f"score_{event['id']}"
+                app_id    = details.get("app_id", "")
+                app_info  = app_cache.get((uid, app_id), {})
+                runs_by_key[score_key] = {
+                    "id":             event["id"],
+                    "type":           "scoring",
+                    "company":        app_info.get("company", ""),
+                    "role":           app_info.get("role", ""),
+                    "user_id":        uid,
+                    "user_email":     user_email,
+                    "created_at":     ts,
+                    "status":         "complete",
+                    "web_view_link":  "",
+                    "app_id":         app_id,
+                    "app_company":    app_info.get("company", ""),
+                    "app_role":       app_info.get("role", ""),
+                    "score":          details.get("score"),
+                    "score_category": details.get("category", ""),
+                }
+
+            elif action in ("run_completed", "run_failed"):
+                run_id = details.get("run_id", "")
+                if not run_id:
+                    continue
+                status = "complete" if action == "run_completed" else "error"
+                if run_id in runs_by_key:
+                    runs_by_key[run_id]["status"] = status
+                    if details.get("folder_url"):
+                        runs_by_key[run_id]["web_view_link"] = details["folder_url"]
+                    if details.get("error"):
+                        runs_by_key[run_id]["error"] = details["error"]
                 else:
-                    # Legacy flat-root run folder
-                    if item["id"] in seen_ids:
-                        continue
-                    seen_ids.add(item["id"])
-                    meta = folder_meta_map.get(item["id"], {})
-                    all_runs.append({
-                        "id":            item["id"],
-                        "name":          name,
-                        "type":          meta.get("type") or _infer_type(name),
-                        "app_id":        meta.get("app_id", ""),
-                        "app_company":   meta.get("app_company", ""),
-                        "app_role":      meta.get("app_role", ""),
-                        "web_view_link": item.get("webViewLink", ""),
-                        "created_at":    item.get("createdTime", ""),
-                        "user_email":    "",
-                        "status":        "complete",
-                    })
-        except Exception as exc:
-            logger.warning("Admin runs Drive scan failed: %s", exc)
+                    # run_started evicted from capped audit log — reconstruct from end event
+                    runs_by_key[run_id] = {
+                        "id":           run_id,
+                        "type":         "resume",
+                        "company":      details.get("company", ""),
+                        "role":         details.get("role", ""),
+                        "user_id":      uid,
+                        "user_email":   user_email,
+                        "created_at":   ts,
+                        "status":       status,
+                        "web_view_link": details.get("folder_url", ""),
+                        "app_id":       "",
+                        "app_company":  "",
+                        "app_role":     "",
+                        "error":        details.get("error", ""),
+                    }
 
-    # Surface any still-active in-memory runs not yet in Drive
+            elif action in ("prep_completed", "prep_failed"):
+                prep_id = details.get("prep_id", "")
+                if not prep_id:
+                    continue
+                status = "complete" if action == "prep_completed" else "error"
+                if prep_id in runs_by_key:
+                    runs_by_key[prep_id]["status"] = status
+                    if details.get("folder_url"):
+                        runs_by_key[prep_id]["web_view_link"] = details["folder_url"]
+                    if details.get("error"):
+                        runs_by_key[prep_id]["error"] = details["error"]
+                else:
+                    runs_by_key[prep_id] = {
+                        "id":           prep_id,
+                        "type":         "interview_prep",
+                        "company":      details.get("company", ""),
+                        "role":         details.get("role", ""),
+                        "user_id":      uid,
+                        "user_email":   user_email,
+                        "created_at":   ts,
+                        "status":       status,
+                        "web_view_link": details.get("folder_url", ""),
+                        "app_id":       "",
+                        "app_company":  "",
+                        "app_role":     "",
+                        "error":        details.get("error", ""),
+                    }
+
+    # Override status for still-active in-memory runs; surface any not yet in audit
     from api import _runs, _preps  # noqa: PLC0415
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    for rid, r in list(_runs.items()):
-        user = storage.get_user_by_id(r.get("user_id", "")) or {}
-        all_runs.append({
-            "id":            rid,
-            "name":          "",
-            "type":          "resume",
-            "web_view_link": "",
-            "created_at":    now_iso,
-            "user_email":    user.get("email", ""),
-            "status":        r.get("status", "running"),
-        })
-    for pid, p in list(_preps.items()):
-        user = storage.get_user_by_id(p.get("user_id", "")) or {}
-        all_runs.append({
-            "id":            pid,
-            "name":          "",
-            "type":          "interview_prep",
-            "web_view_link": "",
-            "created_at":    now_iso,
-            "user_email":    user.get("email", ""),
-            "status":        p.get("status", "running"),
-        })
+    runs_by_run_id = {r["id"]: r for r in runs_by_key.values()}
 
-    # Default sort: newest first
+    for rid, r in list(_runs.items()):
+        if rid in runs_by_run_id:
+            runs_by_run_id[rid]["status"] = r.get("status", "running")
+        else:
+            user = storage.get_user_by_id(r.get("user_id", "")) or {}
+            runs_by_key[rid] = {
+                "id": rid, "type": "resume", "company": "", "role": "",
+                "user_id": r.get("user_id", ""), "user_email": user.get("email", ""),
+                "created_at": now_iso, "status": r.get("status", "running"),
+                "web_view_link": "", "app_id": "", "app_company": "", "app_role": "",
+            }
+
+    for pid, p in list(_preps.items()):
+        if pid in runs_by_run_id:
+            runs_by_run_id[pid]["status"] = p.get("status", "running")
+        else:
+            user = storage.get_user_by_id(p.get("user_id", "")) or {}
+            runs_by_key[pid] = {
+                "id": pid, "type": "interview_prep", "company": "", "role": "",
+                "user_id": p.get("user_id", ""), "user_email": user.get("email", ""),
+                "created_at": now_iso, "status": p.get("status", "running"),
+                "web_view_link": "", "app_id": "", "app_company": "", "app_role": "",
+            }
+
+    all_runs = list(runs_by_key.values())
     all_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     return all_runs
 

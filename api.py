@@ -737,7 +737,8 @@ def _worker_thread(
                 store[entry_id]["result"]       = result
                 store[entry_id]["status"]       = "done"
                 store[entry_id]["_finished_at"] = time.time()
-                user_audit.log(user_id, audit_success, user_email, **audit_kwargs)
+                kw = audit_kwargs(result) if callable(audit_kwargs) else audit_kwargs
+                user_audit.log(user_id, audit_success, user_email, **kw)
                 payload = {"type": "done", entry_id.split("_")[0] + "_id": entry_id}
                 payload.update(done_payload_fn(result))
                 q.put(payload)
@@ -745,8 +746,9 @@ def _worker_thread(
                 store[entry_id]["status"]       = "error"
                 store[entry_id]["error"]        = str(exc)
                 store[entry_id]["_finished_at"] = time.time()
+                kw = audit_kwargs(None) if callable(audit_kwargs) else audit_kwargs
                 user_audit.log(user_id, audit_failure, user_email,
-                               error=str(exc), **audit_kwargs)
+                               error=str(exc), **kw)
                 q.put({"type": "error", "message": str(exc)})
             except Exception as exc:
                 msg = f"Unexpected error: {type(exc).__name__}: {exc}"
@@ -754,8 +756,9 @@ def _worker_thread(
                 store[entry_id]["status"]       = "error"
                 store[entry_id]["error"]        = msg
                 store[entry_id]["_finished_at"] = time.time()
+                kw = audit_kwargs(None) if callable(audit_kwargs) else audit_kwargs
                 user_audit.log(user_id, audit_failure, user_email,
-                               error=msg, **audit_kwargs)
+                               error=msg, **kw)
                 q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
             finally:
                 q.put(None)
@@ -1316,8 +1319,10 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         args=(_runs, run_id, user_id, user_data["email"], resume_bytes,
               _run_fn, _done_payload,
               "run_completed", "run_failed",
-              {"run_id": run_id, "company": req.company, "role": req.role,
-               "folder_url": ""}),
+              lambda result, _rid=run_id, _co=req.company, _ro=req.role: {
+                  "run_id": _rid, "company": _co, "role": _ro,
+                  "folder_url": (result.folder_url if result else "") or "",
+              }),
         daemon=True,
     ).start()
     return {"run_id": run_id, "machine_id": FLY_MACHINE_ID or None}
@@ -1568,8 +1573,10 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
         args=(_preps, prep_id, user_id, user_data["email"], resume_bytes,
               _prep_fn, _prep_done_payload,
               "prep_completed", "prep_failed",
-              {"prep_id": prep_id, "company": req.company, "role": req.role,
-               "round_type": req.round_type, "folder_url": ""}),
+              lambda result, _pid=prep_id, _co=req.company, _ro=req.role, _rt=req.round_type: {
+                  "prep_id": _pid, "company": _co, "role": _ro, "round_type": _rt,
+                  "folder_url": (result.folder_url if result else "") or "",
+              }),
         daemon=True,
     ).start()
     return {"prep_id": prep_id, "machine_id": FLY_MACHINE_ID or None}

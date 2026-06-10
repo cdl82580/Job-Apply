@@ -529,6 +529,7 @@
         <option value="resume">Resume</option>
         <option value="interview_prep">Interview Prep</option>
         <option value="job_description">Job Description</option>
+        <option value="scoring">Scoring</option>
       </select>
       <select id="runsUserFilter"><option value="">All users</option></select>
       <select id="runsStatusFilter">
@@ -1323,7 +1324,7 @@ function renderApps() {
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
-const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching', job_description: 's-onhold' };
+const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching', job_description: 's-onhold', scoring: 's-offer' };
 
 function filterAndRenderRuns() {
   const type     = document.getElementById('runsTypeFilter').value;
@@ -1363,7 +1364,9 @@ function renderRuns(runs) {
   for (const r of runs) {
     const tr        = document.createElement('tr');
     const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
-                    : r.type === 'job_description' ? 'Job Description' : 'Resume';
+                    : r.type === 'job_description' ? 'Job Description'
+                    : r.type === 'scoring'         ? 'Scoring'
+                    : 'Resume';
     const typeClass = RUN_TYPE_CLASS[r.type] || '';
     const statusColor = (r.status === 'running' || r.status === 'queued')
       ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
