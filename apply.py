@@ -1618,9 +1618,12 @@ slightly over- or under-leveled; penalize heavily for a large mismatch)
 - differentiators (15%): whether the JD calls out things the candidate \
 specifically excels at or has unusual proof points for
 
-Be honest and calibrated — most real-world matches land in the 40-75 range. \
-Reserve 80+ for postings that are a clear, specific fit, and use the low end for \
-postings that share little beyond the same general industry.
+Be honest and calibrated against this specific candidate — someone intentionally \
+applying to roles that match their background. A posting where the candidate's \
+experience directly addresses the JD's core requirements should score 75-90. \
+Reserve 90+ for an unusually tight fit (rare). Use the low end (below 50) when \
+there is a genuine mismatch in role type, required skills, or seniority — not \
+just because some preferred qualifications are missing.
 
 Return ONLY a JSON object with exactly these keys:
 {
