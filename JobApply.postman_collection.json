@@ -378,7 +378,7 @@
     },
     {
       "name": "Application Tracker",
-      "description": "Full CRUD for job applications. All data is scoped to the authenticated user. Index fields returned by the list endpoint; full records include `comments`, `audit_log`, and `linked_runs`.\n\n**Valid statuses:** Not Applying, Researching, Applied, Phone Screen, Interviewing, On Hold, Offer, Rejected\n\n**Valid priorities:** Low, Medium, High",
+      "description": "Full CRUD for job applications. All data is scoped to the authenticated user. Index fields returned by the list endpoint; full records include `comments`, `audit_log`, and `linked_runs`.\n\n**Valid statuses:** Not Applying, Researching, Applied, Phone Screen, Interviewing, On Hold, Offer, Rejected\n\n**Valid priorities:** Low, Medium, High\n\n**Auto-behaviours on PUT:**\n- `status → Applied`: sets `date_applied` to today (YYYY-MM-DD) if not already set\n- `url` changed: re-runs background JD extraction and saves `job_description.md` to Drive",
       "item": [
         {
           "name": "GET /api/applications",
@@ -442,7 +442,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/api/applications/{{app_id}}",
-            "description": "Partial update \u2014 send only changed fields. Diffs are recorded in the application `audit_log`.",
+            "description": "Partial update \u2014 send only changed fields. Diffs are recorded in the application `audit_log`.\n\n**Side effects:**\n- Setting `status: Applied` auto-sets `date_applied` to today if not already present\n- Changing `url` triggers background JD extraction: creates/updates the Drive folder and saves `job_description.md`",
             "header": [
               {
                 "key": "Content-Type",
@@ -451,7 +451,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"Interviewing\",\n  \"recruiter_name\": \"Jane Smith\",\n  \"recruiter_email\": \"jane@salesforce.com\"\n}"
+              "raw": "{\n  \"status\": \"Applied\",\n  \"recruiter_name\": \"Jane Smith\",\n  \"recruiter_email\": \"jane@salesforce.com\"\n}"
             }
           }
         },
@@ -540,6 +540,30 @@
             "url": "{{base_url}}/api/applications/{{app_id}}/runs/{{link_id}}",
             "description": "Unlink a Drive run from an application. Returns 204."
           }
+        },
+        {
+          "name": "POST /api/applications/{app_id}/score",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/applications/{{app_id}}/score",
+            "description": "Run (or re-run) Claude-based resume↔JD match scoring. Synchronous — waits for the result. Requires a job description resolvable from the app's linked Drive folder or posting URL, plus an uploaded master resume and profile guide.\n\nReturns `{score, category, dimensions, rationale}`:\n- `score`: 0–100\n- `category`: `Strong Match` (≥80) | `Good Match` (≥60) | `Stretch` (≥40) | `Long Shot`\n- `dimensions`: `{skills, role_type, seniority, differentiators}` (each 0–100)\n- `rationale`: 1–2 sentence summary of strongest alignment and biggest gap\n\nScoring result is persisted to the application record."
+          }
+        },
+        {
+          "name": "POST /api/applications/{app_id}/extract-jd",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/applications/{{app_id}}/extract-jd",
+            "description": "Extract job description text from the application's posting URL via Claude. Requires `url` to be set on the application. Returns `{job_posting: \"...\"}`. Returns 400 if no URL, 422 if extraction fails."
+          }
+        },
+        {
+          "name": "POST /api/applications/{app_id}/setup-folder",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/applications/{{app_id}}/setup-folder",
+            "description": "Create a Google Drive folder for this application and attempt to capture `job_description.md` from the posting URL — all in the background. Returns 202 immediately with `{status: \"started\"}`. The folder is linked to the application record once created. JD extraction is best-effort: LinkedIn and other login-walled URLs will create the folder but not capture a JD."
+          }
         }
       ]
     },
@@ -567,7 +591,31 @@
                 }
               ]
             },
-            "description": "BrandFetch company search. Public endpoint \u2014 no auth required. Returns up to 5 results: `{name, domain, logo_url, description}`. Used by the tracker and Slack `/track-add` command."
+            "description": "BrandFetch company search. Returns up to 5 results: `{name, domain, logo_url, description}`. `logo_url` is a short-lived signed CDN URL suitable for immediate `<img>` display. Used by the tracker and Slack `/track-add` command."
+          }
+        },
+        {
+          "name": "GET /api/companies/logo",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/companies/logo?domain=salesforce.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "logo"
+              ],
+              "query": [
+                {
+                  "key": "domain",
+                  "value": "salesforce.com"
+                }
+              ]
+            },
+            "description": "Fetch a fresh logo for a domain by running a BrandFetch search and redirecting (302) to the signed icon CDN URL. Returns 404 if no logo found. Returns 503 if BRANDFETCH_API_KEY is not configured. Used by the tracker list view for per-row logo loading with fallback."
           }
         }
       ]
@@ -581,7 +629,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/run",
-            "description": "Start a resume generation run. Returns {run_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream to ensure the stream hits the same Fly.io machine.",
+            "description": "Start a resume generation run. Returns {run_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream to ensure the stream hits the same Fly.io machine.\n\n**JD source (mutually exclusive):**\n- `job_posting`: paste the full JD text directly\n- `jd_folder_id`: Google Drive folder ID \u2014 server loads `job_description.md` from the folder server-side (preferred when re-running from tracker)\n\nIf `app_id` is set and `job_posting` was pasted (not loaded via `jd_folder_id`), the server saves `job_description.md` to the run's Drive output folder and registers a `job_description` linked run on the application.",
             "header": [
               {
                 "key": "Content-Type",
@@ -590,7 +638,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_posting\": \"Paste full JD here\u2026\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"model\": null\n}"
+              "raw": "{\n  \"job_posting\": \"Paste full JD here\u2026\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"jd_folder_id\": null,\n  \"model\": null\n}"
             }
           }
         },
@@ -682,7 +730,7 @@
     },
     {
       "name": "Google Drive",
-      "description": "Proxy endpoints for listing run folders and fetching saved job descriptions. Drive is configured server-side via GDRIVE_TOKEN_JSON secret.\n\nFolder ownership is verified before fetching job postings \u2014 the API fails closed (503) if listing fails, rather than allowing arbitrary folder reads.",
+      "description": "Proxy endpoints for listing run folders and fetching/saving job descriptions. Drive is configured server-side via GDRIVE_TOKEN_JSON secret (refreshed token persisted to Tigris so it survives container restarts).\n\nFolder ownership is verified against the user's Tigris application records (fast, no Drive API call, no page-size cap).",
       "item": [
         {
           "name": "GET /api/gdrive/runs",
@@ -697,7 +745,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/gdrive/runs/{{folder_id}}/job_posting",
-            "description": "Fetch `job_posting.txt` from a Drive folder. Returns 404 if not saved. Returns 403 if the folder is not in the user's run folder list. Returns 503 if Drive listing fails (fail-closed ownership check)."
+            "description": "Fetch `job_description.md` (or `job_posting.txt` fallback) from a Drive folder. Returns `{job_posting: \"...\"}`. Returns 404 if no file found. Returns 403 if the folder ID is not linked to any of the user's applications in Tigris."
           }
         },
         {
