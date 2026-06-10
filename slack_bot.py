@@ -446,16 +446,6 @@ def _track_add_blocks(prefill: dict | None = None) -> list:
                 "options": [_sel_opt(s) for s in VALID_STATUSES],
             },
         },
-        {
-            "type": "input",
-            "block_id": "priority",
-            "label": {"type": "plain_text", "text": "Priority"},
-            "element": {
-                "type": "static_select", "action_id": "value",
-                "initial_option": _sel_opt("Medium"),
-                "options": [_sel_opt(p) for p in VALID_PRIORITIES],
-            },
-        },
         # ── Details ──────────────────────────────────────────────────
         {
             "type": "input",
@@ -594,7 +584,6 @@ def track_add_view_submit(ack, body, client, view):
 
     role_title     = _txt("role_title")
     status         = _sel("status", "Researching")
-    priority       = _sel("priority", "Medium")
     date_applied   = _date("date_applied")
     job_source     = _txt("job_source")
     location       = _txt("location")
@@ -614,7 +603,6 @@ def track_add_view_submit(ack, body, client, view):
             "domain":          domain,
             "role_title":      role_title,
             "status":          status,
-            "priority":        priority,
             "date_applied":    date_applied,
             "job_source":      job_source,
             "location":        location,
@@ -630,7 +618,7 @@ def track_add_view_submit(ack, body, client, view):
             channel=channel,
             text=(
                 f":white_check_mark: Added *{role_title}* at *{company}* "
-                f"({status}, {priority} priority)\n"
+                f"({status})\n"
                 f"<{TRACKER_URL}?app={record['id']}|View in Tracker →>"
             ),
         )
@@ -712,16 +700,6 @@ def track_update_select_submit(ack, body, client, view):
                 "type": "static_select", "action_id": "value",
                 **( {"initial_option": _sel_opt(a["status"])} if a.get("status") in VALID_STATUSES else {} ),
                 "options": [_sel_opt(s) for s in VALID_STATUSES],
-            },
-        },
-        # Priority
-        {
-            "type": "input", "block_id": "priority",
-            "label": {"type": "plain_text", "text": "Priority"},
-            "element": {
-                "type": "static_select", "action_id": "value",
-                **( {"initial_option": _sel_opt(a["priority"])} if a.get("priority") in VALID_PRIORITIES else {} ),
-                "options": [_sel_opt(p) for p in VALID_PRIORITIES],
             },
         },
         # Date Applied
@@ -855,7 +833,6 @@ def track_update_edit_submit(ack, body, client, view):
 
     updates = {
         "status":          _sel("status"),
-        "priority":        _sel("priority"),
         "date_applied":    date_applied,
         "job_source":      _txt("job_source") or None,
         "location":        _txt("location") or None,
@@ -1519,7 +1496,7 @@ def track_view_view_submit(ack, body, client, view):
         a = _get_app(app_id)
         lines = [
             f":briefcase: *{a.get('company')} — {a.get('role_title')}*",
-            f"• Status: `{a.get('status')}` | Priority: `{a.get('priority')}`",
+            f"• Status: `{a.get('status')}`",
         ]
         if a.get("date_applied"):
             lines.append(f"• Applied: {a['date_applied'][:10]}")
