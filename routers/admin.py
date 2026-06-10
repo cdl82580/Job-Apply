@@ -550,6 +550,10 @@ AUDIT_ACTION_TYPES = sorted([
     "created", "updated", "deleted",
     "comment_added", "comment_edited", "comment_deleted",
     "run_linked", "run_unlinked",
+    "match_scored",
+    "jd_extracted", "setup_folder_started",
+    # Calendar
+    "calendar_event_created", "calendar_event_updated", "calendar_event_deleted",
     # Admin application management
     "admin_updated", "admin_deleted",
     "admin_comment_added", "admin_comment_edited", "admin_comment_deleted",

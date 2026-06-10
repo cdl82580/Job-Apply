@@ -272,9 +272,32 @@ async def upcoming_events(request: Request):
     return {"events": events[:20]}  # cap at 20 for Slack display
 
 
+def _actor(request: Request) -> str:
+    return request.state.user.get("email", request.state.user.get("user_id", "unknown"))
+
+
+def _audit_entry(action: str, actor: str, changes: dict | None = None) -> dict[str, Any]:
+    return {"id": str(uuid.uuid4()), "action": action, "actor": actor,
+            "timestamp": _now_iso(), "changes": changes}
+
+
+def _write_app_audit(user_id: str, app_id: str | None, entry: dict[str, Any]) -> None:
+    """Best-effort: append an audit entry to the linked application record."""
+    if not app_id:
+        return
+    try:
+        record = app_store.get_application(user_id, app_id)
+        if record:
+            record.setdefault("audit_log", []).append(entry)
+            app_store.save_application(user_id, record)
+    except Exception:
+        pass
+
+
 @router.post("")
 async def create_calendar_event(req: EventCreate, request: Request):
     user_id = _user_id_from_request(request)
+    actor   = _actor(request)
 
     # Check per-user cap
     existing = cal_store.list_events(user_id)
@@ -298,7 +321,11 @@ async def create_calendar_event(req: EventCreate, request: Request):
         "run_ids":          req.run_ids,
         "reminders":        reminder_list,
     }
-    return cal_store.create_event(user_id, record)
+    result = cal_store.create_event(user_id, record)
+    _write_app_audit(user_id, req.app_id, _audit_entry("calendar_event_created", actor, {
+        "event_id": event_id, "title": req.title, "event_type": req.event_type, "datetime": req.datetime,
+    }))
+    return result
 
 
 @router.get("/{event_id}")
@@ -315,6 +342,7 @@ async def get_calendar_event(event_id: str, request: Request):
 async def update_calendar_event(event_id: str, req: EventUpdate, request: Request):
     _validate_event_id(event_id)
     user_id = _user_id_from_request(request)
+    actor   = _actor(request)
     existing = cal_store.get_event(user_id, event_id)
     if not existing:
         raise HTTPException(404, "Event not found")
@@ -346,6 +374,13 @@ async def update_calendar_event(event_id: str, req: EventUpdate, request: Reques
     record = cal_store.update_event(user_id, event_id, updates)
     if not record:
         raise HTTPException(404, "Event not found")
+
+    linked_app = record.get("app_id") or existing.get("app_id")
+    changed = {k: {"from": existing.get(k), "to": v} for k, v in updates.items()
+               if k not in ("reminders",) and existing.get(k) != v}
+    _write_app_audit(user_id, linked_app, _audit_entry("calendar_event_updated", actor, {
+        "event_id": event_id, "title": record.get("title"), **changed,
+    }))
     return record
 
 
@@ -353,9 +388,14 @@ async def update_calendar_event(event_id: str, req: EventUpdate, request: Reques
 async def delete_calendar_event(event_id: str, request: Request):
     _validate_event_id(event_id)
     user_id = _user_id_from_request(request)
+    actor   = _actor(request)
     existing = cal_store.get_event(user_id, event_id)
     if not existing:
         raise HTTPException(404, "Event not found")
+    linked_app = existing.get("app_id")
     cal_store.delete_event_reminders(user_id, event_id)
     cal_store.delete_event(user_id, event_id)
+    _write_app_audit(user_id, linked_app, _audit_entry("calendar_event_deleted", actor, {
+        "event_id": event_id, "title": existing.get("title"), "event_type": existing.get("event_type"),
+    }))
     return {"ok": True}

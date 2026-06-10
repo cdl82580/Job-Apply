@@ -521,6 +521,7 @@ async def score_application(app_id: str, request: Request):
 async def extract_application_jd(app_id: str, request: Request):
     """Fetch the application's posting URL and extract the job description via Claude."""
     user_id = request.state.user["user_id"]
+    actor   = _actor(request)
     record  = _get_or_404(user_id, app_id)
     url = (record.get("url") or "").strip()
     if not url:
@@ -530,6 +531,10 @@ async def extract_application_jd(app_id: str, request: Request):
     text = extract_job_description_from_url(url, config)
     if not text:
         raise HTTPException(422, "Could not extract job description from that URL")
+    record.setdefault("audit_log", []).append(
+        _audit_entry("jd_extracted", actor, {"url": url})
+    )
+    app_store.save_application(user_id, record)
     return {"job_posting": text}
 
 
@@ -540,6 +545,10 @@ async def setup_folder(app_id: str, request: Request):
     user_id = request.state.user["user_id"]
     actor   = _actor(request)
     record  = _get_or_404(user_id, app_id)
+    record.setdefault("audit_log", []).append(
+        _audit_entry("setup_folder_started", actor, {"url": record.get("url") or ""})
+    )
+    app_store.save_application(user_id, record)
     _trigger_job_description_capture(
         user_id, app_id,
         record["company"], record["role_title"],

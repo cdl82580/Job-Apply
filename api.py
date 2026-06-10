@@ -213,17 +213,30 @@ def _link_run_to_app(
 ) -> None:
     """Best-effort: link a completed run to an application tracker record."""
     try:
-        from scripts.applications import link_run as _link
+        from scripts.applications import link_run as _link, get_application, save_application
         gdrive_id = folder_url.rstrip("/").split("/")[-1] if folder_url else ""
+        run_id = str(uuid.uuid4())
+        folder_name = result_dir.name if result_dir else ""
         _link(user_id, app_id, {
-            "id":               str(uuid.uuid4()),
+            "id":               run_id,
             "type":             run_type,
-            "folder_name":      result_dir.name if result_dir else "",
+            "folder_name":      folder_name,
             "folder_url":       folder_url,
             "gdrive_folder_id": gdrive_id,
             "linked_at":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "linked_by":        "system",
         })
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        record = get_application(user_id, app_id)
+        if record:
+            record.setdefault("audit_log", []).append({
+                "id":        str(uuid.uuid4()),
+                "action":    "run_linked",
+                "actor":     "system",
+                "timestamp": now,
+                "changes":   {"run_id": run_id, "type": run_type, "folder_name": folder_name},
+            })
+            save_application(user_id, record)
     except Exception:
         pass  # never let linking failure break the run response
 
