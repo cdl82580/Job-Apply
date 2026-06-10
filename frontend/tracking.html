@@ -1228,7 +1228,7 @@ function renderTable() {
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
         ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
-        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : `<button class="icon-btn" data-id="${a.id}" data-action="setup-folder" title="Create Drive folder${a.url ? ' &amp; capture job description' : ''}">&#x2295;</button>`}
+        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : `<button class="icon-btn" data-id="${a.id}" data-action="setup-folder" title="Create Drive folder${a.url ? ' (attempts JD capture from URL)' : ''}">&#x2295;</button>`}
         <button class="icon-btn" data-id="${a.id}" data-action="run" title="Run resume agent">&#x25B6;</button>
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
         <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
