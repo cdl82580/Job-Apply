@@ -786,12 +786,13 @@ class ProfileUpdateRequest(BaseModel):
     profile_text: str | None = None
 
 class RunRequest(BaseModel):
-    job_posting: str
+    job_posting: str = ""
     company: str
     role: str
     contact: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
+    jd_folder_id: str | None = None  # load JD from this Drive folder instead of job_posting
 
 class PrepRequest(BaseModel):
     job_posting: str
@@ -1257,8 +1258,11 @@ async def create_run(req: RunRequest, request: Request, response: Response):
             user_id=user_id,
             user_label=user_data["email"],
         )
+        job_posting = req.job_posting
+        if req.jd_folder_id and not job_posting:
+            job_posting = get_gdrive_job_posting(req.jd_folder_id, config) or ""
         result = run_workflow(
-            job_posting=req.job_posting,
+            job_posting=job_posting,
             company=req.company,
             role=req.role,
             contact=req.contact,
@@ -1267,7 +1271,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         if req.app_id:
             _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="resume",
                              result_dir=result.run_dir, folder_url=result.folder_url or "")
-            _trigger_match_scoring(user_id=user_id, app_id=req.app_id, job_posting=req.job_posting,
+            _trigger_match_scoring(user_id=user_id, app_id=req.app_id, job_posting=job_posting,
                                    resume_path=resume_path, profile_text=profile_text,
                                    user_label=user_data["email"])
         return result

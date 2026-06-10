@@ -868,50 +868,39 @@
 
     await selectApp(app, runPicker);
 
+    // If selectApp already loaded a JD from Drive, submit immediately
     if (document.getElementById('job_posting').value.trim()) {
       form.requestSubmit();
       return;
     }
 
-    // Check all linked run folders for an existing job posting before extracting
-    if (jdStatusEl) {
-      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Looking for saved job description…';
-      jdStatusEl.className = 'jd-status';
-      jdStatusEl.classList.remove('hidden');
-    }
-    const allFolderIds = (app.linked_runs || []).map(r => r.gdrive_folder_id).filter(Boolean);
-    for (const folderId of allFolderIds) {
-      try {
-        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
-        if (r.ok) {
-          const { job_posting } = await r.json();
-          if (job_posting && job_posting.trim()) {
-            document.getElementById('job_posting').value = job_posting;
-            _runLinkedFolderId = folderId;
-            if (jdStatusEl) { jdStatusEl.innerHTML = '✓ Job description loaded from Drive'; jdStatusEl.className = 'jd-status loaded'; }
-            form.requestSubmit();
-            return;
-          }
-        }
-      } catch (_) {}
+    // Pass the JD folder ID directly to the backend — skip all frontend fetching
+    const jdRun = (app.linked_runs || []).find(r => r.type === 'job_description');
+    const jdFolderId = jdRun?.gdrive_folder_id;
+    if (jdFolderId) {
+      _runJdFolderId = jdFolderId;
+      if (jdStatusEl) {
+        jdStatusEl.innerHTML = '✓ Using saved job description from Drive';
+        jdStatusEl.className = 'jd-status loaded';
+        jdStatusEl.classList.remove('hidden');
+      }
+      form.requestSubmit();
+      return;
     }
 
+    // No JD folder — extract from the posting URL
     if (jdStatusEl) {
       jdStatusEl.innerHTML = '<span class="spin-xs"></span> Extracting job description from the posting URL…';
       jdStatusEl.className = 'jd-status';
       jdStatusEl.classList.remove('hidden');
     }
-
     try {
       const r = await apiFetch(`/api/applications/${encodeURIComponent(appId)}/extract-jd`, { method: 'POST' });
       if (r.ok) {
         const { job_posting } = await r.json();
         if (job_posting && job_posting.trim()) {
           document.getElementById('job_posting').value = job_posting;
-          if (jdStatusEl) {
-            jdStatusEl.innerHTML = '✓ Job description extracted';
-            jdStatusEl.className = 'jd-status loaded';
-          }
+          if (jdStatusEl) { jdStatusEl.innerHTML = '✓ Job description extracted'; jdStatusEl.className = 'jd-status loaded'; }
           form.requestSubmit();
           return;
         }
@@ -1221,13 +1210,14 @@
 
     const raw = Object.fromEntries(new FormData(e.target));
     const jobPosting = document.getElementById('job_posting').value;
-    if (!jobPosting.trim()) {
+    if (!jobPosting.trim() && !_runJdFolderId) {
       document.getElementById('job_posting').focus();
       return;
     }
     const body = { job_posting: jobPosting, company: raw.company, role: raw.role };
     if (raw.contact && raw.contact.trim()) body.contact = raw.contact.trim();
-    if (_runAppId) body.app_id = _runAppId;
+    if (_runAppId)      body.app_id       = _runAppId;
+    if (_runJdFolderId) body.jd_folder_id = _runJdFolderId;
     _company = raw.company;
     _role    = raw.role;
 
@@ -1452,6 +1442,7 @@
   let _prepFolderMap    = {};   // Drive folder_id → {name, source, web_view_link}
   let _prepLinkedFolderId = null;  // gdrive folder ID from selected tracker app
   let _runLinkedFolderId  = null;  // gdrive folder ID from selected tracker app (run form)
+  let _runJdFolderId      = null;  // gdrive folder ID to load JD from server-side
 
   // Collapsible toggle
   document.getElementById('prepToggle').addEventListener('click', async () => {
