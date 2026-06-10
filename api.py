@@ -1633,6 +1633,18 @@ async def get_prep_file(prep_id: str, filename: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Postman collection — serve live JSON for the API docs page
+# ---------------------------------------------------------------------------
+@app.get("/api/postman")
+async def get_postman_collection():
+    import json as _json
+    path = Path("JobApply.postman_collection.json")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return JSONResponse(content=_json.loads(path.read_text()))
+
+
+# ---------------------------------------------------------------------------
 # Static frontend — mounted last; auth middleware handles redirects
 # ---------------------------------------------------------------------------
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
