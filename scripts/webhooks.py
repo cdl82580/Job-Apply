@@ -116,6 +116,7 @@ CATEGORY_ACTIONS: dict[str, set[str]] = {
         "admin_updated", "admin_deleted",
         "admin_comment_added", "admin_comment_edited", "admin_comment_deleted",
         "match_scored", "jd_extracted", "setup_folder_started",
+        "jd_capture_started", "jd_capture_completed", "jd_capture_failed",
     },
     "calendar": {
         "calendar_event_created", "calendar_event_updated", "calendar_event_deleted",

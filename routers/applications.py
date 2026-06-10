@@ -151,6 +151,11 @@ def _trigger_job_description_capture(
     try:
         from apply import auto_capture_job_description, safe_filename, WorkflowConfig
 
+        run_id = str(uuid.uuid4())
+        user_audit.log(user_id, "jd_capture_started", actor,
+                       run_id=run_id, company=company, role=role_title,
+                       app_id=app_id)
+
         def _run():
             try:
                 config = WorkflowConfig(progress=lambda _: None, user_label=actor)
@@ -174,8 +179,20 @@ def _trigger_job_description_capture(
                             })
                         )
                         app_store.save_application(user_id, record)
-            except Exception:
-                pass
+                    user_audit.log(user_id, "jd_capture_completed", actor,
+                                   run_id=run_id, company=company, role=role_title,
+                                   app_id=app_id, folder_url=folder_url if folder else "")
+                else:
+                    user_audit.log(user_id, "jd_capture_failed", actor,
+                                   run_id=run_id, company=company, role=role_title,
+                                   app_id=app_id)
+            except Exception as exc:
+                try:
+                    user_audit.log(user_id, "jd_capture_failed", actor,
+                                   run_id=run_id, company=company, role=role_title,
+                                   app_id=app_id, error=str(exc))
+                except Exception:
+                    pass
 
         threading.Thread(target=_run, daemon=True).start()
     except Exception:

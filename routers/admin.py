@@ -617,6 +617,138 @@ async def list_all_runs(request: Request):
                 "web_view_link": "", "app_id": "", "app_company": "", "app_role": "",
             }
 
+    # ── Drive fallback: pick up historical / JD-capture runs not in audit log ──
+    # Drive folder names are {safe_filename(company)}_{safe_filename(role)}.
+    # We normalize both sides the same way for matching: strip non-alphanumeric.
+    import re as _re  # noqa: PLC0415
+    from apply import GDRIVE_PARENT_FOLDER_ID, WorkflowConfig, _gdrive_service, _FOLDER_MIME  # noqa: PLC0415
+
+    def _norm(s: str) -> str:
+        return _re.sub(r"[^a-z0-9]", "", s.lower())
+
+    # Set of (user_email_norm, folder_name_norm) already covered by audit events
+    covered: set[tuple[str, str]] = set()
+    for run in runs_by_key.values():
+        ue = _norm(run.get("user_email", ""))
+        co = run.get("company", "")
+        ro = run.get("role", "")
+        if co or ro:
+            covered.add((ue, _norm(f"{co}_{ro}")))
+
+    # Build folder_id → app info from linked_runs (for JD folder enrichment)
+    folder_meta_map: dict[str, dict] = {}
+    try:
+        for uid_rec in users:
+            uid = uid_rec.get("user_id", "")
+            for app_sum in app_store.list_applications(uid).get("items", []):
+                full = app_store.get_application(uid, app_sum["id"])
+                if not full:
+                    continue
+                for lrun in full.get("linked_runs", []):
+                    fid = lrun.get("gdrive_folder_id")
+                    if fid:
+                        folder_meta_map[fid] = {
+                            "type":        lrun.get("type", ""),
+                            "app_id":      full["id"],
+                            "app_company": full.get("company", ""),
+                            "app_role":    full.get("role_title", ""),
+                        }
+    except Exception:
+        pass
+
+    PREP_KW = {"phonescreen", "hiringmanager", "technical", "executive", "panel", "peer"}
+
+    def _infer_type(name: str) -> str:
+        norm = _norm(name)
+        return "interview_prep" if any(kw in norm for kw in PREP_KW) else "resume"
+
+    try:
+        config  = WorkflowConfig(progress=lambda _: None, user_label="admin")
+        service = _gdrive_service(config)
+        if service and GDRIVE_PARENT_FOLDER_ID:
+            top_items: list[dict] = []
+            page_token = None
+            while True:
+                kwargs: dict = dict(
+                    q=f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and trashed=false",
+                    fields="nextPageToken, files(id, name, mimeType, webViewLink, createdTime)",
+                    orderBy="createdTime desc",
+                    pageSize=1000,
+                )
+                if page_token:
+                    kwargs["pageToken"] = page_token
+                resp = service.files().list(**kwargs).execute()
+                top_items.extend(resp.get("files", []))
+                page_token = resp.get("nextPageToken")
+                if not page_token:
+                    break
+
+            for item in top_items:
+                if item.get("mimeType") != _FOLDER_MIME:
+                    continue
+                name = item["name"]
+                if "@" not in name:
+                    # Legacy flat-root folder — user email unknown
+                    meta    = folder_meta_map.get(item["id"], {})
+                    fn_norm = _norm(name)
+                    if not any(fn == fn_norm for (_, fn) in covered):
+                        runs_by_key[f"drive_{item['id']}"] = {
+                            "id":           item["id"],
+                            "type":         meta.get("type") or _infer_type(name),
+                            "company":      meta.get("app_company", ""),
+                            "role":         meta.get("app_role", ""),
+                            "user_id":      "",
+                            "user_email":   "",
+                            "created_at":   item.get("createdTime", ""),
+                            "status":       "complete",
+                            "web_view_link": item.get("webViewLink", ""),
+                            "app_id":       meta.get("app_id", ""),
+                            "app_company":  meta.get("app_company", ""),
+                            "app_role":     meta.get("app_role", ""),
+                        }
+                    continue
+
+                user_email = name
+                ue_norm    = _norm(user_email)
+                children: list[dict] = []
+                child_token = None
+                while True:
+                    ckwargs: dict = dict(
+                        q=f"'{item['id']}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
+                        fields="nextPageToken, files(id, name, webViewLink, createdTime)",
+                        orderBy="createdTime desc",
+                        pageSize=1000,
+                    )
+                    if child_token:
+                        ckwargs["pageToken"] = child_token
+                    cresp = service.files().list(**ckwargs).execute()
+                    children.extend(cresp.get("files", []))
+                    child_token = cresp.get("nextPageToken")
+                    if not child_token:
+                        break
+
+                for child in children:
+                    fn_norm = _norm(child["name"])
+                    if (ue_norm, fn_norm) in covered:
+                        continue  # already represented by one or more audit events
+                    meta = folder_meta_map.get(child["id"], {})
+                    runs_by_key[f"drive_{child['id']}"] = {
+                        "id":           child["id"],
+                        "type":         meta.get("type") or _infer_type(child["name"]),
+                        "company":      meta.get("app_company", ""),
+                        "role":         meta.get("app_role", ""),
+                        "user_id":      "",
+                        "user_email":   user_email,
+                        "created_at":   child.get("createdTime", ""),
+                        "status":       "complete",
+                        "web_view_link": child.get("webViewLink", ""),
+                        "app_id":       meta.get("app_id", ""),
+                        "app_company":  meta.get("app_company", ""),
+                        "app_role":     meta.get("app_role", ""),
+                    }
+    except Exception as exc:
+        logger.warning("Admin runs Drive fallback failed: %s", exc)
+
     all_runs = list(runs_by_key.values())
     all_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     return all_runs
