@@ -1228,7 +1228,7 @@ function renderTable() {
       <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
       <td><div class="actions-cell">
         ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
-        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : ''}
+        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : `<button class="icon-btn" data-id="${a.id}" data-action="setup-folder" title="Create Drive folder${a.url ? ' &amp; capture job description' : ''}">&#x1F4C2;</button>`}
         <button class="icon-btn" data-id="${a.id}" data-action="run" title="Run resume agent">&#x25B6;</button>
         <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
         <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
@@ -1274,10 +1274,42 @@ function handleRowAction(e) {
   if (!btn) return;
   const id     = btn.dataset.id;
   const action = btn.dataset.action;
-  if (action === 'run')    window.location.href = `/?app_id=${encodeURIComponent(id)}&autorun=1`;
-  if (action === 'edit')   openDrawer(id);
-  if (action === 'delete') confirmDelete(id);
-  if (action === 'score')  scoreApplication(id, btn);
+  if (action === 'run')          window.location.href = `/?app_id=${encodeURIComponent(id)}&autorun=1`;
+  if (action === 'edit')         openDrawer(id);
+  if (action === 'delete')       confirmDelete(id);
+  if (action === 'score')        scoreApplication(id, btn);
+  if (action === 'setup-folder') setupFolder(id, btn);
+}
+
+async function setupFolder(id, btn) {
+  if (btn) { btn.disabled = true; btn.title = 'Setting up…'; }
+  try {
+    const res = await apiFetch(`/api/applications/${id}/setup-folder`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Failed (${res.status})`);
+    }
+    // Poll until a gdrive folder appears on the app (up to ~90s)
+    const app = _apps.find(a => a.id === id);
+    for (let i = 0; i < 18; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const r = await apiFetch(`/api/applications/${id}`);
+      if (r.ok) {
+        const updated = await r.json();
+        if ((updated.linked_runs || []).some(r => r.gdrive_folder_id)) {
+          if (app) Object.assign(app, updated);
+          applyFilters();
+          return;
+        }
+      }
+    }
+    // Timed out — refresh anyway so button state is consistent
+    const r = await apiFetch(`/api/applications/${id}`);
+    if (r.ok && app) { Object.assign(app, await r.json()); applyFilters(); }
+  } catch (e) {
+    if (e.message !== '401') alert(e.message || 'Setup failed — please try again.');
+    if (btn) { btn.disabled = false; btn.title = 'Create Drive folder'; }
+  }
 }
 
 // Run (or re-run) the resume<->JD match analysis for one application.

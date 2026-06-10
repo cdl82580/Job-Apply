@@ -529,6 +529,21 @@ async def extract_application_jd(app_id: str, request: Request):
     return {"job_posting": text}
 
 
+@router.post("/{app_id}/setup-folder", status_code=202)
+async def setup_folder(app_id: str, request: Request):
+    """Create a Drive folder for this application and capture job_description.md
+    from the posting URL in the background. Returns immediately."""
+    user_id = request.state.user["user_id"]
+    actor   = _actor(request)
+    record  = _get_or_404(user_id, app_id)
+    _trigger_job_description_capture(
+        user_id, app_id,
+        record["company"], record["role_title"],
+        (record.get("url") or ""), actor,
+    )
+    return {"status": "started"}
+
+
 @router.delete("/{app_id}/comments/{comment_id}", status_code=204)
 async def delete_comment(app_id: str, comment_id: str, request: Request):
     user_id = request.state.user["user_id"]
