@@ -2247,17 +2247,25 @@ let _editingWh  = null;  // null = create, string = edit ID
 
 // All known event types (reuse AUDIT_ACTION_TYPES populated at runtime, or hardcode)
 const ALL_EVENT_TYPES = [
+  // auth
   'login_success','login_google','login_failed','logout',
   'user_registered','user_registered_google','google_account_linked',
-  'email_verified','verification_email_resent','profile_updated',
-  'resume_uploaded','password_changed',
-  'run_started','run_completed','run_failed',
-  'prep_started','prep_completed','prep_failed','file_downloaded',
+  'email_verified','verification_email_resent',
+  // profile
+  'profile_updated','resume_uploaded','password_changed','email_changed',
+  // applications
   'created','updated','deleted',
   'comment_added','comment_edited','comment_deleted',
   'run_linked','run_unlinked','imported',
   'admin_updated','admin_deleted',
   'admin_comment_added','admin_comment_edited','admin_comment_deleted',
+  'match_scored','jd_extracted','setup_folder_started',
+  // calendar
+  'calendar_event_created','calendar_event_updated','calendar_event_deleted',
+  // runs
+  'run_started','run_completed','run_failed',
+  'prep_started','prep_completed','prep_failed','file_downloaded',
+  // admin
   'admin_user_updated','admin_verification_resent','role_changed',
   'admin_csv_export',
   'webhook_created','webhook_updated','webhook_deleted','webhook_tested',

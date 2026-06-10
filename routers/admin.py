@@ -309,6 +309,8 @@ async def update_application(user_id: str, app_id: str, body: AppUpdate, request
     })
 
     record = app_store.save_application(user_id, record)
+    user_audit.log(user_id, "admin_updated", admin["email"],
+                   app_id=app_id, fields=list(updates.keys()))
     return record
 
 
@@ -329,6 +331,9 @@ async def delete_application(user_id: str, app_id: str, request: Request):
     })
     app_store.save_deleted_tombstone(user_id, record)
     app_store.delete_application(user_id, app_id)
+    user_audit.log(user_id, "admin_deleted", admin["email"],
+                   app_id=app_id, company=record.get("company"),
+                   role_title=record.get("role_title"))
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +372,9 @@ async def add_comment(user_id: str, app_id: str, body: CommentCreate, request: R
     record["updated_at"] = now
     record["updated_by"] = admin["email"]
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "admin_comment_added", admin["email"],
+                   app_id=app_id, comment_id=comment["id"],
+                   preview=comment["text"][:60])
     return comment
 
 
@@ -392,6 +400,8 @@ async def update_comment(user_id: str, app_id: str, comment_id: str,
             record["updated_at"] = _now()
             record["updated_by"] = admin["email"]
             app_store.save_application(user_id, record)
+            user_audit.log(user_id, "admin_comment_edited", admin["email"],
+                           app_id=app_id, comment_id=comment_id)
             return c
 
     raise HTTPException(404, "Comment not found")
@@ -415,6 +425,8 @@ async def delete_comment(user_id: str, app_id: str, comment_id: str, request: Re
     record["updated_at"] = _now()
     record["updated_by"] = admin["email"]
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "admin_comment_deleted", admin["email"],
+                   app_id=app_id, comment_id=comment_id)
 
 
 # ---------------------------------------------------------------------------
@@ -466,12 +478,22 @@ async def list_all_runs(request: Request):
     if service and GDRIVE_PARENT_FOLDER_ID:
         try:
             # Fetch all direct children of the root Job Applications folder
-            top_items = service.files().list(
-                q=f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and trashed=false",
-                fields="files(id, name, mimeType, webViewLink, createdTime)",
-                orderBy="createdTime desc",
-                pageSize=200,
-            ).execute().get("files", [])
+            top_items: list[dict] = []
+            page_token = None
+            while True:
+                kwargs: dict = dict(
+                    q=f"'{GDRIVE_PARENT_FOLDER_ID}' in parents and trashed=false",
+                    fields="nextPageToken, files(id, name, mimeType, webViewLink, createdTime)",
+                    orderBy="createdTime desc",
+                    pageSize=1000,
+                )
+                if page_token:
+                    kwargs["pageToken"] = page_token
+                resp = service.files().list(**kwargs).execute()
+                top_items.extend(resp.get("files", []))
+                page_token = resp.get("nextPageToken")
+                if not page_token:
+                    break
 
             for item in top_items:
                 if item.get("mimeType") != _FOLDER_MIME:
@@ -481,12 +503,22 @@ async def list_all_runs(request: Request):
                 if "@" in name:
                     # Per-user subfolder — scan its run subfolders
                     user_email = name
-                    children = service.files().list(
-                        q=f"'{item['id']}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
-                        fields="files(id, name, webViewLink, createdTime)",
-                        orderBy="createdTime desc",
-                        pageSize=200,
-                    ).execute().get("files", [])
+                    children: list[dict] = []
+                    child_token = None
+                    while True:
+                        ckwargs: dict = dict(
+                            q=f"'{item['id']}' in parents and mimeType='{_FOLDER_MIME}' and trashed=false",
+                            fields="nextPageToken, files(id, name, webViewLink, createdTime)",
+                            orderBy="createdTime desc",
+                            pageSize=1000,
+                        )
+                        if child_token:
+                            ckwargs["pageToken"] = child_token
+                        cresp = service.files().list(**ckwargs).execute()
+                        children.extend(cresp.get("files", []))
+                        child_token = cresp.get("nextPageToken")
+                        if not child_token:
+                            break
                     for child in children:
                         if child["id"] in seen_ids:
                             continue
@@ -949,7 +981,7 @@ async def test_webhook(webhook_id: str, request: Request):
         raise HTTPException(404, "Webhook not found")
     test_event = {
         "id":         str(uuid.uuid4()),
-        "action":     "webhook_test",
+        "action":     "webhook_tested",
         "actor":      admin["email"],
         "timestamp":  _now(),
         "ip":         None,
@@ -967,6 +999,8 @@ async def test_webhook(webhook_id: str, request: Request):
         if fresh and fresh.get("recent_deliveries"):
             result["delivery"] = fresh["recent_deliveries"][0]
     t = _th.Thread(target=_run); t.start(); t.join(timeout=15)
+    user_audit.log(admin["user_id"], "webhook_tested", admin["email"],
+                   webhook_id=webhook_id, webhook_name=w.get("name"))
     return result.get("delivery", {"success": None, "error": "timeout"})
 
 

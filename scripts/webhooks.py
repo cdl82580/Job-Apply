@@ -107,7 +107,7 @@ CATEGORY_ACTIONS: dict[str, set[str]] = {
         "email_verified", "verification_email_resent", "password_changed",
     },
     "profile": {
-        "profile_updated", "resume_uploaded",
+        "profile_updated", "resume_uploaded", "email_changed",
     },
     "applications": {
         "created", "updated", "deleted",
@@ -115,6 +115,10 @@ CATEGORY_ACTIONS: dict[str, set[str]] = {
         "run_linked", "run_unlinked", "imported",
         "admin_updated", "admin_deleted",
         "admin_comment_added", "admin_comment_edited", "admin_comment_deleted",
+        "match_scored", "jd_extracted", "setup_folder_started",
+    },
+    "calendar": {
+        "calendar_event_created", "calendar_event_updated", "calendar_event_deleted",
     },
     "runs": {
         "run_started", "run_completed", "run_failed",

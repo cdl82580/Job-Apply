@@ -24,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from scripts import applications as app_store
+from scripts import user_audit
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
@@ -227,6 +228,8 @@ async def create_application(body: ApplicationCreate, request: Request):
     }
     record["audit_log"].append(_audit_entry("created", actor))
     record = app_store.save_application(user_id, record)
+    user_audit.log(user_id, "created", actor, app_id=record["id"],
+                   company=record["company"], role_title=record["role_title"])
 
     if record.get("url"):
         _trigger_job_description_capture(
@@ -276,6 +279,11 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
 
     record = app_store.save_application(user_id, record)
 
+    if changes:
+        user_audit.log(user_id, "updated", actor, app_id=app_id,
+                       company=record["company"], role_title=record["role_title"],
+                       fields=list(changes.keys()))
+
     # If the URL was updated, re-capture the job description in the background
     if "url" in updates and updates["url"] and updates["url"] != (changes or {}).get("url", {}).get("from"):
         _trigger_job_description_capture(
@@ -298,6 +306,8 @@ async def delete_application(app_id: str, request: Request):
     app_store.save_deleted_tombstone(user_id, record)
 
     app_store.delete_application(user_id, app_id)
+    user_audit.log(user_id, "deleted", actor, app_id=app_id,
+                   company=record.get("company"), role_title=record.get("role_title"))
 
 
 @router.get("/{app_id}/audit")
@@ -334,6 +344,8 @@ async def add_comment(app_id: str, body: CommentCreate, request: Request):
     record["updated_at"] = now
     record["updated_by"] = actor
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "comment_added", actor, app_id=app_id,
+                   comment_id=comment["id"], preview=comment["text"][:60])
     return comment
 
 
@@ -363,6 +375,8 @@ async def update_comment(
             record["updated_at"] = _now()
             record["updated_by"] = actor
             app_store.save_application(user_id, record)
+            user_audit.log(user_id, "comment_edited", actor, app_id=app_id,
+                           comment_id=comment_id)
             return c  # comment object, not record — no need to reassign
 
     raise HTTPException(404, "Comment not found")
@@ -405,6 +419,8 @@ async def link_run(app_id: str, body: RunLinkCreate, request: Request):
         })
     )
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "run_linked", actor, app_id=app_id,
+                   run_id=run_info["id"], type=body.type, folder_name=body.folder_name)
     return run_info
 
 
@@ -424,6 +440,7 @@ async def unlink_run(app_id: str, link_id: str, request: Request):
             _audit_entry("run_unlinked", actor, {"link_id": link_id})
         )
         app_store.save_application(user_id, record)
+        user_audit.log(user_id, "run_unlinked", actor, app_id=app_id, link_id=link_id)
 
 
 def _resolve_jd_text(record: dict, config) -> str | None:
@@ -513,6 +530,8 @@ async def score_application(app_id: str, request: Request):
         })
     )
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "match_scored", actor, app_id=app_id,
+                   score=match_score["score"], category=match_score["category"])
 
     return match_score
 
@@ -535,6 +554,7 @@ async def extract_application_jd(app_id: str, request: Request):
         _audit_entry("jd_extracted", actor, {"url": url})
     )
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "jd_extracted", actor, app_id=app_id, url=url)
     return {"job_posting": text}
 
 
@@ -549,6 +569,8 @@ async def setup_folder(app_id: str, request: Request):
         _audit_entry("setup_folder_started", actor, {"url": record.get("url") or ""})
     )
     app_store.save_application(user_id, record)
+    user_audit.log(user_id, "setup_folder_started", actor, app_id=app_id,
+                   company=record.get("company"), role_title=record.get("role_title"))
     _trigger_job_description_capture(
         user_id, app_id,
         record["company"], record["role_title"],
@@ -577,3 +599,6 @@ async def delete_comment(app_id: str, comment_id: str, request: Request):
     record["updated_at"] = _now()
     record["updated_by"] = actor
     app_store.save_application(user_id, record)
+    if deleted:
+        user_audit.log(user_id, "comment_deleted", actor, app_id=app_id,
+                       comment_id=comment_id)

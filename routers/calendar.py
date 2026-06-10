@@ -32,6 +32,7 @@ def _validate_event_id(event_id: str) -> None:
 
 from scripts import calendar as cal_store
 from scripts import applications as app_store
+from scripts import user_audit
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -325,6 +326,9 @@ async def create_calendar_event(req: EventCreate, request: Request):
     _write_app_audit(user_id, req.app_id, _audit_entry("calendar_event_created", actor, {
         "event_id": event_id, "title": req.title, "event_type": req.event_type, "datetime": req.datetime,
     }))
+    user_audit.log(user_id, "calendar_event_created", actor,
+                   event_id=event_id, title=req.title, event_type=req.event_type,
+                   app_id=req.app_id)
     return result
 
 
@@ -381,6 +385,9 @@ async def update_calendar_event(event_id: str, req: EventUpdate, request: Reques
     _write_app_audit(user_id, linked_app, _audit_entry("calendar_event_updated", actor, {
         "event_id": event_id, "title": record.get("title"), **changed,
     }))
+    user_audit.log(user_id, "calendar_event_updated", actor,
+                   event_id=event_id, title=record.get("title"), app_id=linked_app,
+                   fields=list(changed.keys()) if changed else [])
     return record
 
 
@@ -398,4 +405,7 @@ async def delete_calendar_event(event_id: str, request: Request):
     _write_app_audit(user_id, linked_app, _audit_entry("calendar_event_deleted", actor, {
         "event_id": event_id, "title": existing.get("title"), "event_type": existing.get("event_type"),
     }))
+    user_audit.log(user_id, "calendar_event_deleted", actor,
+                   event_id=event_id, title=existing.get("title"),
+                   event_type=existing.get("event_type"), app_id=linked_app)
     return {"ok": True}
