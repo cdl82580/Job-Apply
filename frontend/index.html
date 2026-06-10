@@ -493,7 +493,6 @@
     }
 
     #prepFocus  { min-height: 60px; }
-    #prepJdText { min-height: 130px; }
 
     /* ── Past Runs list ──────────────────────────────────────────── */
     .run-row {
@@ -715,14 +714,8 @@
     </div>
     <div class="card-body hidden" id="prepBody">
       <div class="field">
-        <label>Job</label>
-        <div class="src-toggle">
-          <button type="button" class="src-btn" id="srcTrackerBtn">From Tracker</button>
-          <button type="button" class="src-btn active" id="srcDropBtn">From existing run</button>
-          <button type="button" class="src-btn" id="srcPasteBtn">Paste JD</button>
-        </div>
-        <!-- Tracker picker (hidden by default) -->
-        <div class="app-picker-wrap hidden" id="prepAppPickerWrap" style="margin-bottom:.75rem">
+        <label>Application <span class="opt">(required — must have a saved job description)</span></label>
+        <div class="app-picker-wrap" id="prepAppPickerWrap" style="margin-bottom:.75rem">
           <div class="app-picker-selected hidden" id="prepAppSelected">
             <img class="sel-logo" id="prepSelLogo" alt="">
             <span class="sel-name" id="prepSelName"></span>
@@ -734,11 +727,6 @@
           </div>
           <div class="jd-status hidden" id="prepJdStatus"></div>
         </div>
-        <select id="prepRunSel">
-          <option value="">— select a job —</option>
-        </select>
-        <textarea id="prepJdText" class="hidden" rows="5"
-          placeholder="Paste the full job description here…"></textarea>
       </div>
       <div class="row">
         <div class="field">
@@ -1164,17 +1152,13 @@
         _prepLinkedFolderId = (app.linked_runs || [])[0]?.gdrive_folder_id || null;
         document.getElementById('prepCompany').value = app.company;
         document.getElementById('prepRole').value    = app.role_title;
-        if (jd) {
-          _prepJobPosting = jd;
-          document.getElementById('prepJdText').value = jd;
-        }
+        if (jd) _prepJobPosting = jd;
       },
       onClear: () => {
         _prepAppId = null;
         _prepLinkedFolderId = null;
         document.getElementById('prepCompany').value = '';
         document.getElementById('prepRole').value    = '';
-        document.getElementById('prepJdText').value  = '';
         _prepJobPosting = '';
       },
     });
@@ -1456,7 +1440,6 @@
   let _prepCompanyCtx   = '';
   let _prepRoleCtx      = '';
   let _prepRoundCtx     = '';
-  let _prepFolderMap    = {};   // Drive folder_id → {name, source, web_view_link}
   let _prepLinkedFolderId = null;  // gdrive folder ID from selected tracker app
   let _runLinkedFolderId  = null;  // gdrive folder ID from selected tracker app (run form)
   let _runJdFolderId      = null;  // gdrive folder ID to load JD from server-side
@@ -1472,92 +1455,7 @@
     } else {
       body.classList.remove('hidden');
       chevron.classList.add('open');
-      if (document.getElementById('prepRunSel').options.length <= 1) {
-        await loadPrepRuns();
-      }
     }
-  });
-
-  // Load run folders from Google Drive into the prep dropdown
-  async function loadPrepRuns() {
-    _prepFolderMap = {};
-    const sel = document.getElementById('prepRunSel');
-    sel.innerHTML = '<option value="">— loading from Drive… —</option>';
-    try {
-      const res  = await apiFetch('/api/gdrive/runs');
-      const data = await res.json();
-      sel.innerHTML = '<option value="">— select a job —</option>';
-      if (!data.runs || data.runs.length === 0) {
-        sel.innerHTML = '<option value="" disabled>No runs found in Drive — paste JD instead</option>';
-        return;
-      }
-      for (const r of data.runs) {
-        _prepFolderMap[r.id] = r;
-        const opt   = document.createElement('option');
-        opt.value   = r.id;
-        const idx   = r.name.indexOf('_');
-        const label = idx > 0
-          ? `${r.name.slice(0, idx)} · ${r.name.slice(idx + 1)}`
-          : r.name;
-        opt.textContent = r.source === 'legacy' ? label + '  ↩' : label;
-        sel.appendChild(opt);
-      }
-    } catch (e) {
-      sel.innerHTML = '<option value="" disabled>Could not load from Drive</option>';
-    }
-  }
-
-  // Source mode toggle
-  let prepSrcMode = 'dropdown';
-
-  function setPrepSrcMode(mode) {
-    prepSrcMode = mode;
-    document.getElementById('srcTrackerBtn').classList.toggle('active', mode === 'tracker');
-    document.getElementById('srcDropBtn').classList.toggle('active',    mode === 'dropdown');
-    document.getElementById('srcPasteBtn').classList.toggle('active',   mode === 'paste');
-    document.getElementById('prepAppPickerWrap').classList.toggle('hidden', mode !== 'tracker');
-    document.getElementById('prepRunSel').classList.toggle('hidden',    mode !== 'dropdown');
-    // Tracker/paste mode: show the JD textarea so the user can paste the JD in
-    document.getElementById('prepJdText').classList.toggle('hidden', mode === 'dropdown');
-    if (mode !== 'tracker') { _prepAppId = null; }
-  }
-
-  document.getElementById('srcTrackerBtn').addEventListener('click', () => setPrepSrcMode('tracker'));
-  document.getElementById('srcDropBtn').addEventListener('click',    () => setPrepSrcMode('dropdown'));
-  document.getElementById('srcPasteBtn').addEventListener('click',   () => setPrepSrcMode('paste'));
-
-  // Folder selection → autofill company/role + fetch JD from Drive
-  document.getElementById('prepRunSel').addEventListener('change', async (e) => {
-    const folderId = e.target.value;
-    _prepJobPosting = '';
-    document.getElementById('prepFormErr').style.display = 'none';
-    if (!folderId) return;
-
-    const meta = _prepFolderMap[folderId] || {};
-    const name = meta.name || '';
-    const idx  = name.indexOf('_');
-    if (idx > 0) {
-      document.getElementById('prepCompany').value = name.slice(0, idx);
-      document.getElementById('prepRole').value    = name.slice(idx + 1);
-    }
-
-    try {
-      const res = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
-      if (res.ok) {
-        const jd = (await res.json()).job_posting;
-        _prepJobPosting = jd;
-        document.getElementById('prepJdText').value = jd;
-        document.getElementById('prepJdText').classList.remove('hidden');
-        _prepLinkedFolderId = folderId;
-      } else {
-        // No saved JD — show textarea so user can paste
-        document.getElementById('prepJdText').classList.remove('hidden');
-        _prepLinkedFolderId = folderId;
-        const errEl = document.getElementById('prepFormErr');
-        errEl.textContent = 'No saved JD for this run — paste the job description in the field below.';
-        errEl.style.display = 'block';
-      }
-    } catch (err) { console.error('loadJD', err); }
   });
 
   // Submit prep
@@ -1570,34 +1468,18 @@
     const round   = document.getElementById('prepRound').value;
     const focus   = document.getElementById('prepFocus').value.trim();
 
-    let jd = '';
-    if (prepSrcMode === 'tracker') {
-      if (!_prepAppId) {
-        errEl.textContent = 'Select an application from the tracker.';
-        errEl.style.display = 'block';
-        return;
-      }
-      // Use Drive JD if loaded, otherwise fall back to the visible textarea
-      jd = _prepJobPosting || document.getElementById('prepJdText').value.trim();
-      if (!jd) {
-        errEl.textContent = 'Open the job posting, copy the description, and paste it in the field below.';
-        errEl.style.display = 'block';
-        return;
-      }
-    } else if (prepSrcMode === 'dropdown') {
-      jd = _prepJobPosting || document.getElementById('prepJdText').value.trim();
-      if (!jd) {
-        errEl.textContent = 'Select a run with a saved job posting, or paste the JD in the field below.';
-        errEl.style.display = 'block';
-        return;
-      }
-    } else {
-      jd = document.getElementById('prepJdText').value.trim();
-      if (!jd) {
-        errEl.textContent = 'Please paste a job description.';
-        errEl.style.display = 'block';
-        return;
-      }
+    if (!_prepAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('prepAppSearch').focus();
+      return;
+    }
+
+    const jd = _prepJobPosting;
+    if (!jd) {
+      errEl.textContent = 'No job description found for this application. Run the resume agent first to save one.';
+      errEl.style.display = 'block';
+      return;
     }
 
     if (!company || !role) {
@@ -1662,8 +1544,7 @@
         btn.textContent = 'Generate Prep Doc';
         showPrepResults(prep_id, msg);
         // Save JD to Drive so it auto-loads next time (tracker mode with known folder)
-        const jdToSave = _prepJobPosting || document.getElementById('prepJdText').value.trim();
-        if (_prepLinkedFolderId && jdToSave) saveJdToDrive(_prepLinkedFolderId, jdToSave);
+        if (_prepLinkedFolderId && _prepJobPosting) saveJdToDrive(_prepLinkedFolderId, _prepJobPosting);
 
       } else if (msg.type === 'error') {
         es.close();

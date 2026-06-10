@@ -1274,6 +1274,14 @@ async def create_run(req: RunRequest, request: Request, response: Response):
             _trigger_match_scoring(user_id=user_id, app_id=req.app_id, job_posting=job_posting,
                                    resume_path=resume_path, profile_text=profile_text,
                                    user_label=user_data["email"])
+            # If the JD was pasted (not loaded from a Drive folder), persist it as
+            # job_description.md in the run's output folder and register a jd run link.
+            if job_posting and not req.jd_folder_id and result.folder_url:
+                run_folder_id = result.folder_url.rstrip("/").split("/")[-1]
+                if run_folder_id:
+                    save_gdrive_job_posting(run_folder_id, job_posting, config)
+                    _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="job_description",
+                                     result_dir=result.run_dir, folder_url=result.folder_url)
         return result
 
     def _done_payload(result: WorkflowResult) -> dict:
