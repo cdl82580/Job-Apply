@@ -129,43 +129,10 @@
 
     /* ── Layout ── */
     .layout {
-      max-width: 1200px;
+      max-width: 900px;
       margin: 0 auto;
-      padding: 0 1rem 3rem;
-      display: grid;
-      grid-template-columns: 220px 1fr;
-      gap: 2rem;
-      padding-top: 1.5rem;
+      padding: 1.5rem 1rem 3rem;
     }
-
-    /* ── Sidebar ── */
-    .sidebar { position: sticky; top: 72px; height: fit-content; }
-    .sidebar-section { margin-bottom: 1.5rem; }
-    .sidebar-heading {
-      font-size: .7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .07em;
-      color: var(--muted);
-      margin: 0 0 .5rem;
-      padding: 0 .5rem;
-    }
-    .sidebar-item {
-      display: block;
-      padding: .4rem .5rem;
-      border-radius: 6px;
-      font-size: .85rem;
-      color: var(--muted);
-      text-decoration: none;
-      cursor: pointer;
-      transition: color .12s, background .12s;
-      border: none;
-      background: none;
-      width: 100%;
-      text-align: left;
-    }
-    .sidebar-item:hover { color: var(--text); background: var(--fill); }
-    .sidebar-item.active { color: var(--primary); background: var(--fill); font-weight: 600; }
 
     /* ── Main content ── */
     .main { min-width: 0; }
@@ -316,8 +283,6 @@
 
     /* ── Responsive ── */
     @media (max-width: 700px) {
-      .layout { grid-template-columns: 1fr; }
-      .sidebar { position: static; border-bottom: 1px solid var(--card-border); padding-bottom: 1rem; margin-bottom: .5rem; }
       .header-search { max-width: 180px; }
     }
   </style>
@@ -356,16 +321,6 @@
 </header>
 
 <div class="layout">
-  <!-- Sidebar -->
-  <nav class="sidebar" id="sidebar">
-    <div class="sidebar-section">
-      <div class="sidebar-heading">Browse</div>
-      <button class="sidebar-item active" data-view="home">All Categories</button>
-    </div>
-    <div id="sidebarCats"></div>
-  </nav>
-
-  <!-- Main -->
   <main class="main" id="main">
 
     <!-- Search results -->
@@ -1699,7 +1654,6 @@ let currentArt  = null;
    Boot
 ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  buildSidebar();
   buildHomeCards();
   setupSearch();
   setupTheme();
@@ -1713,48 +1667,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cat) { showCategory(hash); return; }
   }
 });
-
-/* ─────────────────────────────────────────────────────────────
-   Sidebar
-───────────────────────────────────────────────────────────── */
-function buildSidebar() {
-  const el = document.getElementById('sidebarCats');
-  KB.categories.forEach(cat => {
-    const count = KB.articles.filter(a => a.category === cat.id).length;
-    const sec = document.createElement('div');
-    sec.className = 'sidebar-section';
-    sec.innerHTML = `<div class="sidebar-heading">${cat.label}</div>`;
-    const btn = document.createElement('button');
-    btn.className = 'sidebar-item';
-    btn.textContent = `${cat.icon} All articles (${count})`;
-    btn.dataset.cat = cat.id;
-    btn.onclick = () => showCategory(cat.id);
-    sec.appendChild(btn);
-
-    KB.articles.filter(a => a.category === cat.id).forEach(art => {
-      const ab = document.createElement('button');
-      ab.className = 'sidebar-item';
-      ab.textContent = art.title;
-      ab.dataset.art = art.id;
-      ab.onclick = () => showArticle(art.id);
-      sec.appendChild(ab);
-    });
-    el.appendChild(sec);
-  });
-}
-
-function setSidebarActive(type, id) {
-  document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
-  if (type === 'home') {
-    document.querySelector('.sidebar-item[data-view="home"]').classList.add('active');
-  } else if (type === 'cat') {
-    const btn = document.querySelector(`.sidebar-item[data-cat="${id}"]`);
-    if (btn) btn.classList.add('active');
-  } else if (type === 'art') {
-    const btn = document.querySelector(`.sidebar-item[data-art="${id}"]`);
-    if (btn) btn.classList.add('active');
-  }
-}
 
 /* ─────────────────────────────────────────────────────────────
    Home
@@ -1778,7 +1690,6 @@ function buildHomeCards() {
 function showHome() {
   hideAll();
   document.getElementById('homeView').classList.add('visible');
-  setSidebarActive('home');
   location.hash = '';
   currentView = 'home';
 }
@@ -1809,7 +1720,6 @@ function showCategory(catId) {
 
   hideAll();
   document.getElementById('categoryView').classList.add('visible');
-  setSidebarActive('cat', catId);
   location.hash = catId;
   currentCat = catId;
   currentView = 'category';
@@ -1839,7 +1749,6 @@ function showArticle(artId) {
 
   hideAll();
   document.getElementById('articleView').classList.add('visible');
-  setSidebarActive('art', artId);
   location.hash = artId;
   currentArt = artId;
   currentView = 'article';
