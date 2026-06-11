@@ -624,6 +624,34 @@
     .modal p  { font-size: .875rem; color: var(--muted); margin: 0 0 1.25rem; }
     .modal-footer { display: flex; gap: .5rem; justify-content: flex-end; }
 
+    /* ── Application setup pipeline modal ───────────────────────── */
+    .pipe-modal { max-width: 460px; }
+    .pipe-steps { display: flex; flex-direction: column; gap: .65rem; margin: 0 0 1rem; }
+    .pipe-step { display: flex; align-items: center; gap: .6rem; font-size: .875rem; color: var(--text); }
+    .pipe-step .pipe-msg { color: var(--muted); font-size: .775rem; margin-left: auto; text-align: right; max-width: 55%; }
+    .pipe-icon {
+      width: 18px; height: 18px; flex: 0 0 18px; border-radius: 50%; box-sizing: border-box;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .65rem; font-weight: 700; color: #fff;
+    }
+    .pipe-step.pending .pipe-icon { border: 2px solid var(--card-border); }
+    .pipe-step.running .pipe-icon { border: 2px solid var(--card-border); border-top-color: #2563EB; animation: pipeSpin .7s linear infinite; }
+    .pipe-step.done    .pipe-icon { background: #16A34A; }
+    .pipe-step.failed  .pipe-icon { background: #DC2626; }
+    .pipe-step.skipped { opacity: .5; }
+    .pipe-step.skipped .pipe-icon { border: 2px dashed var(--card-border); }
+    @keyframes pipeSpin { to { transform: rotate(360deg); } }
+    .pipe-score { font-size: .9rem; font-weight: 600; color: var(--text); margin: 0 0 1rem; }
+    .pipe-score:empty { display: none; }
+    .pipe-score .pipe-rationale { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+    .pipe-log {
+      background: var(--bg-page); border: 1px solid var(--card-border); border-radius: 6px;
+      padding: .5rem .65rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .72rem; color: var(--muted); max-height: 110px; overflow-y: auto;
+      margin-bottom: 1rem; white-space: pre-wrap; word-break: break-word;
+    }
+    .pipe-log:empty { display: none; }
+
     .hidden { display: none !important; }
     .verify-banner {
       background: #FEF3C7; border: 1px solid #FCD34D; border-radius: var(--radius);
@@ -916,6 +944,25 @@
   <div class="drawer-footer hidden" id="drawerFooterEdit">
     <button class="btn" id="drawerSaveBtn">Save</button>
     <button class="btn btn-ghost" id="drawerDiscardBtn">Discard Changes</button>
+  </div>
+</div>
+
+<!-- ── Application setup pipeline modal ─────────────────────────── -->
+<div class="modal-wrap" id="pipelineModal">
+  <div class="modal pipe-modal">
+    <h3>Setting up application</h3>
+    <p>Creating the Drive folder, capturing the job description, and scoring the match.</p>
+    <div class="pipe-steps">
+      <div class="pipe-step pending" id="pipeStep-folder"><span class="pipe-icon"></span><span>Google Drive folder</span><span class="pipe-msg"></span></div>
+      <div class="pipe-step pending" id="pipeStep-jd"><span class="pipe-icon"></span><span>Job description</span><span class="pipe-msg"></span></div>
+      <div class="pipe-step pending" id="pipeStep-score"><span class="pipe-icon"></span><span>Match score</span><span class="pipe-msg"></span></div>
+    </div>
+    <div class="pipe-score" id="pipeScore"></div>
+    <div class="pipe-log" id="pipeLog"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="pipeBackgroundBtn">Continue in background</button>
+      <button class="btn btn-sm hidden" id="pipeDoneBtn">Done</button>
+    </div>
   </div>
 </div>
 
@@ -1279,25 +1326,10 @@ async function setupFolder(id, btn) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `Failed (${res.status})`);
     }
-    // Poll until a gdrive folder appears on the app (up to ~90s)
-    const app = _apps.find(a => a.id === id);
-    for (let i = 0; i < 18; i++) {
-      await new Promise(r => setTimeout(r, 5000));
-      const r = await apiFetch(`/api/applications/${id}`);
-      if (r.ok) {
-        const updated = await r.json();
-        if ((updated.linked_runs || []).some(r => r.gdrive_folder_id)) {
-          if (app) Object.assign(app, updated);
-          applyFilters();
-          return;
-        }
-      }
-    }
-    // Timed out — refresh anyway so button state is consistent
-    const r = await apiFetch(`/api/applications/${id}`);
-    if (r.ok && app) { Object.assign(app, await r.json()); applyFilters(); }
+    openPipelineModal(id);
   } catch (e) {
     if (e.message !== '401') alert(e.message || 'Setup failed — please try again.');
+  } finally {
     if (btn) { btn.disabled = false; btn.title = 'Create Drive folder'; }
   }
 }
@@ -1724,7 +1756,8 @@ async function saveDrawer() {
     }
 
     const wasNew = !_editId;
-    const created = wasNew ? await res.clone().json().catch(() => null) : null;
+    const saved  = await res.json().catch(() => null);
+    const created = wasNew ? saved : null;
 
     // Handle any pending new comment
     const commentText = document.getElementById('newCommentText').value.trim();
@@ -1739,8 +1772,10 @@ async function saveDrawer() {
       // Reload updated data and return to view mode
       await loadAndFillDrawer(_editId);
       setDrawerMode('view');
+      if (saved?.pipeline_started) openPipelineModal(_editId);
     } else {
       closeDrawer();
+      if (created?.id && created.pipeline_started) openPipelineModal(created.id);
     }
   } catch (e) {
     if (e.message !== '401') {
@@ -1879,6 +1914,98 @@ document.getElementById('addCommentBtn').addEventListener('click', async () => {
   if (!text || !_editId) return;
   await addComment(_editId, text);
 });
+
+// ── Application setup pipeline modal (Drive folder → JD → score) ─────
+const pipelineModal = document.getElementById('pipelineModal');
+let _pipeES = null;
+
+function _pipeSetStep(step, state, message) {
+  const el = document.getElementById(`pipeStep-${step}`);
+  if (!el) return;
+  el.classList.remove('pending', 'running', 'done', 'failed', 'skipped');
+  el.classList.add(state);
+  el.querySelector('.pipe-icon').textContent =
+    state === 'done' ? '✓' : state === 'failed' ? '✕' : '';
+  el.querySelector('.pipe-msg').textContent = message || '';
+}
+
+function _pipeLog(line) {
+  const logEl = document.getElementById('pipeLog');
+  logEl.textContent += (logEl.textContent ? '\n' : '') + line;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function _pipeFinish() {
+  document.getElementById('pipeBackgroundBtn').classList.add('hidden');
+  document.getElementById('pipeDoneBtn').classList.remove('hidden');
+}
+
+function openPipelineModal(appId) {
+  ['folder', 'jd', 'score'].forEach(s => _pipeSetStep(s, 'pending', ''));
+  document.getElementById('pipeLog').textContent = '';
+  document.getElementById('pipeScore').textContent = '';
+  document.getElementById('pipeDoneBtn').classList.add('hidden');
+  document.getElementById('pipeBackgroundBtn').classList.remove('hidden');
+  pipelineModal.classList.add('open');
+
+  if (_pipeES) { _pipeES.close(); _pipeES = null; }
+  let finished = false;
+  const es = new EventSource(`/api/applications/${encodeURIComponent(appId)}/pipeline/stream`);
+  _pipeES = es;
+
+  es.onmessage = async (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+
+    if (msg.log) { _pipeLog(msg.log); return; }
+
+    if (msg.step && msg.state) {
+      _pipeSetStep(msg.step, msg.state, msg.message || '');
+      if (msg.step === 'score' && msg.state === 'done') {
+        const scoreEl = document.getElementById('pipeScore');
+        scoreEl.textContent = `Match score: ${msg.score} — ${msg.category}`;
+        if (msg.rationale) {
+          const r = document.createElement('span');
+          r.className = 'pipe-rationale';
+          r.textContent = msg.rationale;
+          scoreEl.appendChild(r);
+        }
+      }
+      return;
+    }
+
+    if (msg.fatal) {
+      ['folder', 'jd', 'score'].forEach(s => {
+        const el = document.getElementById(`pipeStep-${s}`);
+        if (el.classList.contains('running')) _pipeSetStep(s, 'failed', msg.fatal);
+      });
+      return;
+    }
+
+    if (msg.done) {
+      finished = true;
+      es.close(); _pipeES = null;
+      _pipeFinish();
+      await loadApps();
+    }
+  };
+
+  es.onerror = () => {
+    if (finished) return;
+    es.close();
+    if (_pipeES === es) _pipeES = null;
+    _pipeLog('⚠ Connection lost — setup continues in the background.');
+    _pipeFinish();
+  };
+}
+
+function closePipelineModal() {
+  pipelineModal.classList.remove('open');
+  if (_pipeES) { _pipeES.close(); _pipeES = null; }
+  loadApps();
+}
+document.getElementById('pipeBackgroundBtn').addEventListener('click', closePipelineModal);
+document.getElementById('pipeDoneBtn').addEventListener('click', closePipelineModal);
 
 // ── Delete ────────────────────────────────────────────────────────────
 const deleteModal   = document.getElementById('deleteModal');

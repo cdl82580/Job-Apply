@@ -15,18 +15,25 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
 import threading
 import time
 import uuid
+from queue import Empty, Queue
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from scripts import applications as app_store
 from scripts import user_audit
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
+
+FLY_MACHINE_ID = os.environ.get("FLY_MACHINE_ID", "")
 
 VALID_STATUSES = {
     "Not Applying", "Researching", "Applied", "Phone Screen",
@@ -141,58 +148,185 @@ def _actor(request: Request) -> str:
     return request.state.user.get("email", request.state.user.get("user_id", "unknown"))
 
 
-def _trigger_job_description_capture(
+def _run_match_scoring(
+    user_id: str, app_id: str, jd_text: str, actor: str, scored_by: str,
+) -> dict:
+    """Score the user's resume/profile against jd_text, persist the result on the
+    application record, and write audit entries. Returns the match_score dict.
+    Raises ValueError when the user has no resume/profile, LookupError when the
+    application record is gone."""
+    import tempfile
+    from pathlib import Path
+
+    from apply import WorkflowConfig, extract_resume_text, score_application_match
+    from scripts import storage
+
+    resume_bytes = storage.get_resume(user_id)
+    if not resume_bytes:
+        raise ValueError("No master resume uploaded. Add one in your profile.")
+    profile_text = storage.get_profile(user_id)
+    if not profile_text:
+        raise ValueError("No profile guide saved. Add one in your profile.")
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+    try:
+        tmp.write(resume_bytes)
+        tmp.close()
+        resume_config = WorkflowConfig(progress=lambda _: None, user_label=actor,
+                                       master_resume=Path(tmp.name))
+        resume_text = extract_resume_text(resume_config)
+    finally:
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
+
+    config = WorkflowConfig(progress=lambda _: None, user_label=actor)
+    match_score = score_application_match(jd_text, resume_text, profile_text, config)
+    match_score["scored_at"] = _now()
+    match_score["scored_by"] = scored_by
+
+    record = app_store.save_match_score(user_id, app_id, match_score)
+    if not record:
+        raise LookupError("Application not found")
+    record.setdefault("audit_log", []).append(
+        _audit_entry("match_scored", scored_by, {
+            "score": match_score["score"], "category": match_score["category"],
+        })
+    )
+    app_store.save_application(user_id, record)
+    user_audit.log(user_id, "match_scored", actor, app_id=app_id,
+                   score=match_score["score"], category=match_score["category"])
+    return match_score
+
+
+# In-memory post-create pipeline state, keyed by app_id (single web machine —
+# the create/update response pins the browser via fly-force-instance-id).
+_pipelines: dict[str, dict[str, Any]] = {}
+_PIPELINE_TTL_SECS = 3600
+
+
+def _evict_stale_pipelines() -> None:
+    cutoff = time.time() - _PIPELINE_TTL_SECS
+    for app_id in [k for k, v in _pipelines.items() if v["started_at"] < cutoff]:
+        _pipelines.pop(app_id, None)
+
+
+def _start_application_pipeline(
     user_id: str, app_id: str, company: str, role_title: str, url: str, actor: str,
 ) -> None:
-    """Best-effort, async: ensure the application's Drive folder exists, link it
-    to the application record (so the UI can find the JD before any resume run
-    has happened), and auto-capture its job description from `url` via Claude.
-    Never raises — failures here must never affect the application-create response."""
+    """Best-effort, async post-create/update pipeline:
+      1. ensure the application's Drive folder exists and link it to the record
+      2. extract the job description from `url` via Claude, save job_description.md
+      3. score the user's resume/profile against the extracted JD
+    Streams structured progress events to GET /{app_id}/pipeline/stream.
+    Never raises — failures here must never affect the create/update response."""
     try:
-        from apply import auto_capture_job_description, safe_filename, WorkflowConfig
+        from apply import (WorkflowConfig, ensure_application_gdrive_folder,
+                           extract_job_description_from_url, safe_filename,
+                           save_gdrive_job_posting)
+
+        _evict_stale_pipelines()
+        q: Queue[dict | None] = Queue()
+        _pipelines[app_id] = {"queue": q, "user_id": user_id, "started_at": time.time()}
 
         run_id = str(uuid.uuid4())
         user_audit.log(user_id, "jd_capture_started", actor,
                        run_id=run_id, company=company, role=role_title,
                        app_id=app_id)
 
+        def emit(step: str, state: str, message: str = "", **extra: Any) -> None:
+            q.put({"step": step, "state": state, "message": message, **extra})
+
         def _run():
+            folder_url = ""
+            score_payload = None
             try:
-                config = WorkflowConfig(progress=lambda _: None, user_label=actor)
-                folder = auto_capture_job_description(company, role_title, url, config)
-                if folder:
-                    folder_id, folder_url = folder
-                    folder_name = f"{safe_filename(company)}_{safe_filename(role_title)}"
-                    record = app_store.link_run(user_id, app_id, {
-                        "id":               str(uuid.uuid4()),
-                        "type":             "job_description",
-                        "folder_name":      folder_name,
-                        "folder_url":       folder_url,
-                        "gdrive_folder_id": folder_id,
-                        "linked_at":        _now(),
-                        "linked_by":        "system",
-                    })
-                    if record:
-                        record.setdefault("audit_log", []).append(
-                            _audit_entry("run_linked", "system", {
-                                "type": "job_description", "folder_name": folder_name,
-                            })
-                        )
-                        app_store.save_application(user_id, record)
-                    user_audit.log(user_id, "jd_capture_completed", actor,
+                config = WorkflowConfig(
+                    progress=lambda line: q.put({"log": str(line).strip()}),
+                    user_label=actor,
+                )
+
+                # Stage 1 — Drive folder
+                emit("folder", "running", "Creating Google Drive folder…")
+                folder = ensure_application_gdrive_folder(company, role_title, config)
+                if not folder:
+                    emit("folder", "failed", "Could not create or find the Drive folder")
+                    emit("jd", "skipped", "Skipped — no Drive folder")
+                    emit("score", "skipped", "Skipped — no job description")
+                    user_audit.log(user_id, "jd_capture_failed", actor,
                                    run_id=run_id, company=company, role=role_title,
-                                   app_id=app_id, folder_url=folder_url if folder else "")
-                else:
+                                   app_id=app_id, error="drive folder unresolved")
+                    return
+                folder_id, folder_url = folder
+                folder_name = f"{safe_filename(company)}_{safe_filename(role_title)}"
+                record = app_store.link_run(user_id, app_id, {
+                    "id":               str(uuid.uuid4()),
+                    "type":             "job_description",
+                    "folder_name":      folder_name,
+                    "folder_url":       folder_url,
+                    "gdrive_folder_id": folder_id,
+                    "linked_at":        _now(),
+                    "linked_by":        "system",
+                })
+                if record:
+                    record.setdefault("audit_log", []).append(
+                        _audit_entry("run_linked", "system", {
+                            "type": "job_description", "folder_name": folder_name,
+                        })
+                    )
+                    app_store.save_application(user_id, record)
+                emit("folder", "done", folder_name, folder_url=folder_url)
+
+                # Stage 2 — job_description.md
+                if not url:
+                    emit("jd", "skipped", "No posting URL on this application")
+                    emit("score", "skipped", "No job description to score against")
+                    return
+                emit("jd", "running", "Extracting the job description…")
+                jd_text = extract_job_description_from_url(url, config)
+                if not jd_text:
+                    emit("jd", "failed", "Could not extract a job description from the posting URL")
+                    emit("score", "skipped", "No job description to score against")
                     user_audit.log(user_id, "jd_capture_failed", actor,
                                    run_id=run_id, company=company, role=role_title,
                                    app_id=app_id)
+                    return
+                if save_gdrive_job_posting(folder_id, jd_text, config):
+                    emit("jd", "done", "job_description.md saved to Drive")
+                else:
+                    emit("jd", "failed", "Could not save job_description.md to Drive")
+                user_audit.log(user_id, "jd_capture_completed", actor,
+                               run_id=run_id, company=company, role=role_title,
+                               app_id=app_id, folder_url=folder_url)
+
+                # Stage 3 — match scoring (only once a JD exists)
+                emit("score", "running", "Scoring your resume against the posting…")
+                try:
+                    score_payload = _run_match_scoring(
+                        user_id, app_id, jd_text, actor, scored_by="system")
+                except Exception as exc:
+                    emit("score", "failed", f"Scoring failed: {exc}")
+                else:
+                    emit("score", "done",
+                         f"{score_payload['score']} — {score_payload['category']}",
+                         score=score_payload["score"],
+                         category=score_payload["category"],
+                         rationale=score_payload.get("rationale", ""))
             except Exception as exc:
                 try:
+                    q.put({"fatal": str(exc)})
                     user_audit.log(user_id, "jd_capture_failed", actor,
                                    run_id=run_id, company=company, role=role_title,
                                    app_id=app_id, error=str(exc))
                 except Exception:
                     pass
+            finally:
+                done: dict[str, Any] = {"done": True, "folder_url": folder_url}
+                if score_payload:
+                    done["score"] = score_payload
+                q.put(done)
+                q.put(None)
 
         threading.Thread(target=_run, daemon=True).start()
     except Exception:
@@ -218,7 +352,7 @@ async def list_applications(
 
 
 @router.post("", status_code=201)
-async def create_application(body: ApplicationCreate, request: Request):
+async def create_application(body: ApplicationCreate, request: Request, response: Response):
     user_id = request.state.user["user_id"]
     actor   = _actor(request)
 
@@ -248,12 +382,18 @@ async def create_application(body: ApplicationCreate, request: Request):
     user_audit.log(user_id, "created", actor, app_id=record["id"],
                    company=record["company"], role_title=record["role_title"])
 
+    pipeline_started = False
     if record.get("url"):
-        _trigger_job_description_capture(
+        _start_application_pipeline(
             user_id, record["id"], record["company"], record["role_title"], record["url"], actor,
         )
+        pipeline_started = True
+        # Pin this browser to the machine holding the pipeline's in-memory queue
+        if FLY_MACHINE_ID:
+            response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,
+                                path="/", samesite="lax", httponly=True)
 
-    return record
+    return {**record, "pipeline_started": pipeline_started}
 
 
 @router.get("/{app_id}")
@@ -262,7 +402,7 @@ async def get_application(app_id: str, request: Request):
 
 
 @router.put("/{app_id}")
-async def update_application(app_id: str, body: ApplicationUpdate, request: Request):
+async def update_application(app_id: str, body: ApplicationUpdate, request: Request, response: Response):
     user_id = request.state.user["user_id"]
     actor   = _actor(request)
     record  = _get_or_404(user_id, app_id)
@@ -301,14 +441,19 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
                        company=record["company"], role_title=record["role_title"],
                        fields=list(changes.keys()))
 
-    # If the URL was updated, re-capture the job description in the background
-    if "url" in updates and updates["url"] and updates["url"] != (changes or {}).get("url", {}).get("from"):
-        _trigger_job_description_capture(
+    # If the URL actually changed, re-capture the job description and re-score
+    pipeline_started = False
+    if updates.get("url") and "url" in (changes or {}):
+        _start_application_pipeline(
             user_id, app_id,
             record["company"], record["role_title"], updates["url"], actor,
         )
+        pipeline_started = True
+        if FLY_MACHINE_ID:
+            response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,
+                                path="/", samesite="lax", httponly=True)
 
-    return record
+    return {**record, "pipeline_started": pipeline_started}
 
 
 @router.delete("/{app_id}", status_code=204)
@@ -494,10 +639,7 @@ async def score_application(app_id: str, request: Request):
     actor   = _actor(request)
     record  = _get_or_404(user_id, app_id)
 
-    from apply import score_application_match, extract_resume_text, WorkflowConfig
-    from scripts import storage
-    import tempfile
-    from pathlib import Path
+    from apply import WorkflowConfig
 
     config = WorkflowConfig(progress=lambda _: None, user_label=actor)
 
@@ -509,48 +651,14 @@ async def score_application(app_id: str, request: Request):
             "or link a job description to this application first.",
         )
 
-    resume_bytes = storage.get_resume(user_id)
-    if not resume_bytes:
-        raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
-    profile_text = storage.get_profile(user_id)
-    if not profile_text:
-        raise HTTPException(400, "No profile guide saved. Add one in your profile.")
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
     try:
-        tmp.write(resume_bytes)
-        tmp.close()
-        resume_config = WorkflowConfig(progress=lambda _: None, user_label=actor,
-                                       master_resume=Path(tmp.name))
-        resume_text = extract_resume_text(resume_config)
-    finally:
-        try:
-            Path(tmp.name).unlink()
-        except OSError:
-            pass
-
-    try:
-        match_score = score_application_match(jd_text, resume_text, profile_text, config)
+        return _run_match_scoring(user_id, app_id, jd_text, actor, scored_by=actor)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except LookupError:
+        raise HTTPException(404, "Application not found")
     except Exception as e:
         raise HTTPException(500, f"Scoring failed: {e}")
-
-    match_score["scored_at"] = _now()
-    match_score["scored_by"] = actor
-
-    record = app_store.save_match_score(user_id, app_id, match_score)
-    if not record:
-        raise HTTPException(404, "Application not found")
-
-    record.setdefault("audit_log", []).append(
-        _audit_entry("match_scored", actor, {
-            "score": match_score["score"], "category": match_score["category"],
-        })
-    )
-    app_store.save_application(user_id, record)
-    user_audit.log(user_id, "match_scored", actor, app_id=app_id,
-                   score=match_score["score"], category=match_score["category"])
-
-    return match_score
 
 
 @router.post("/{app_id}/extract-jd")
@@ -576,7 +684,7 @@ async def extract_application_jd(app_id: str, request: Request):
 
 
 @router.post("/{app_id}/setup-folder", status_code=202)
-async def setup_folder(app_id: str, request: Request):
+async def setup_folder(app_id: str, request: Request, response: Response):
     """Create a Drive folder for this application and capture job_description.md
     from the posting URL in the background. Returns immediately."""
     user_id = request.state.user["user_id"]
@@ -588,12 +696,47 @@ async def setup_folder(app_id: str, request: Request):
     app_store.save_application(user_id, record)
     user_audit.log(user_id, "setup_folder_started", actor, app_id=app_id,
                    company=record.get("company"), role_title=record.get("role_title"))
-    _trigger_job_description_capture(
+    _start_application_pipeline(
         user_id, app_id,
         record["company"], record["role_title"],
         (record.get("url") or ""), actor,
     )
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,
+                            path="/", samesite="lax", httponly=True)
     return {"status": "started"}
+
+
+@router.get("/{app_id}/pipeline/stream")
+async def stream_pipeline(app_id: str, request: Request):
+    """SSE stream of post-create pipeline progress (Drive folder → JD capture →
+    match scoring). 404 once the pipeline has been evicted or never started."""
+    user_id = request.state.user["user_id"]
+    pipe = _pipelines.get(app_id)
+    if not pipe:
+        raise HTTPException(404, "No pipeline for this application")
+    if pipe["user_id"] != user_id and request.state.user.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    q    = pipe["queue"]
+    loop = asyncio.get_running_loop()
+
+    async def generate():
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: q.get(timeout=30))
+            except Empty:
+                yield ": keepalive\n\n"
+                continue
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.delete("/{app_id}/comments/{comment_id}", status_code=204)
