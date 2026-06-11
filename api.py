@@ -5,21 +5,73 @@ Auth:    Session cookie (HMAC-signed JWT-style token, stateless — works across
 Storage: Tigris S3 for user accounts, resumes, and profiles (see scripts/storage.py).
 
 Public endpoints (no session required):
-  POST /api/auth/register   Create account + upload resume + profile
-  POST /api/auth/login      Returns session cookie
+  POST /api/auth/register              Create account + upload resume + profile
+  POST /api/auth/login                 Returns session cookie
   GET  /api/health
 
-Protected endpoints:
+Auth endpoints:
   POST /api/auth/logout
-  GET  /api/auth/me
+  GET  /api/auth/verify-email          Email verification link handler
+  POST /api/auth/resend-verification   Re-send verification email
+  GET  /api/auth/me                    Current user info
+  GET  /api/audit/me                   Caller's own audit log
+
+Profile:
   GET  /api/profile
   PUT  /api/profile
-  POST /api/profile/resume
-  POST /api/profile/password
-  POST /api/run
-  GET  /api/run/{id}/stream
-  GET  /api/run/{id}/status
-  GET  /api/run/{id}/files/{name}
+  POST /api/profile/resume             Upload new master resume
+  POST /api/profile/password           Change password
+  POST /api/profile/email              Change email (triggers re-verification)
+
+Application Runs:
+  POST /api/run                        Start a tailoring run (returns machine_id)
+  GET  /api/run/{id}/stream            SSE event stream for run progress
+  GET  /api/run/{id}/status            Poll run status
+  GET  /api/run/{id}/files/{name}      Download a run output file
+  GET  /api/runs                       List all runs for the current user
+
+Interview Prep Runs:
+  POST /api/prep                       Start a prep run (returns machine_id)
+  GET  /api/prep/{id}/stream           SSE event stream for prep progress
+  GET  /api/prep/{id}/status           Poll prep status
+  GET  /api/prep/{id}/files/{name}     Download a prep output file
+
+Google Drive:
+  GET  /api/gdrive/runs                List run folders from Drive
+  GET  /api/gdrive/runs/{id}/job_posting   Fetch stored job posting from Drive
+  PUT  /api/gdrive/runs/{id}/job_posting   Save job posting to Drive
+
+Job Description:
+  POST /api/jd/format                  AI-format a raw job description
+
+Model Config (admin):
+  GET  /api/config/model               Current active model
+  PUT  /api/config/model               Set active model
+  GET  /api/config/models              List available models
+
+Knowledge Base (KB):
+  GET  /api/kb/articles                List all articles + categories
+  GET  /api/kb/articles/{id}           Get one article
+  GET  /api/kb/categories              List categories only
+
+Admin — KB:
+  POST   /api/admin/kb/articles              Create article
+  PUT    /api/admin/kb/articles/{id}         Update article
+  DELETE /api/admin/kb/articles/{id}         Delete article
+  POST   /api/admin/kb/categories            Create category
+  PUT    /api/admin/kb/categories/{id}       Update category
+  DELETE /api/admin/kb/categories/{id}       Delete category
+  POST   /api/admin/kb/seed                  Replace KB from JSON payload
+  POST   /api/admin/kb/seed-from-file        Re-extract KB from frontend/kb.html via Node.js
+
+Admin — Users, Applications, Runs, Audit Log, Webhooks:
+  (see routers/admin.py)
+
+Calendar:
+  (see routers/calendar.py)
+
+Application Tracker + Companies:
+  (see routers/applications.py, routers/companies.py)
 """
 
 from __future__ import annotations
