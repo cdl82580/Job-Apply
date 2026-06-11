@@ -735,6 +735,24 @@
       </tr></thead>
       <tbody id="kbBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
+
+    <!-- Categories section -->
+    <div style="margin-top:2rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <h3 style="margin:0;font-size:.95rem;font-weight:700;color:var(--primary)">Categories</h3>
+        <button class="btn btn-sm" id="kbNewCatBtn">+ New Category</button>
+      </div>
+      <table id="kbCatTable" style="width:100%">
+        <thead><tr>
+          <th style="width:36px"></th>
+          <th>Label</th>
+          <th style="width:30%">Description</th>
+          <th style="width:80px">Admin only</th>
+          <th style="width:80px"></th>
+        </tr></thead>
+        <tbody id="kbCatBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
 </div><!-- /container -->
@@ -1016,6 +1034,46 @@
     <button class="btn" id="kbSaveBtn">Save Article</button>
     <button class="btn btn-ghost" id="kbCancelBtn">Cancel</button>
     <button class="btn btn-danger btn-sm" id="kbDeleteBtn" style="margin-left:auto">Delete</button>
+  </div>
+</div>
+
+<!-- ── KB category editor drawer ─────────────────────────────── -->
+<div class="overlay" id="kbCatOverlay"></div>
+<div class="drawer" id="kbCatDrawer" style="width:480px">
+  <div class="drawer-header">
+    <div class="drawer-title-row">
+      <div class="drawer-title" id="kbCatDrawerTitle">Category</div>
+      <span class="drawer-mode-badge" id="kbCatDrawerBadge">New</span>
+    </div>
+    <button class="drawer-close" id="kbCatDrawerClose">&#x2715;</button>
+  </div>
+  <div class="drawer-body">
+    <div class="inline-err" id="kbCatDrawerErr" style="display:none"></div>
+    <div class="field">
+      <label>ID <span class="opt">(slug, e.g. "my-category")</span></label>
+      <input type="text" id="kcId" placeholder="my-category">
+    </div>
+    <div class="field">
+      <label>Label</label>
+      <input type="text" id="kcLabel" placeholder="My Category">
+    </div>
+    <div class="field">
+      <label>Icon <span class="opt">(emoji)</span></label>
+      <input type="text" id="kcIcon" placeholder="📁" style="max-width:80px">
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="kcDesc" placeholder="Brief description shown in the KB sidebar">
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="kcAdminOnly" style="width:16px;height:16px;accent-color:var(--primary)">
+      <label for="kcAdminOnly">Admin-only category</label>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn" id="kbCatSaveBtn">Save Category</button>
+    <button class="btn btn-ghost" id="kbCatCancelBtn">Cancel</button>
+    <button class="btn btn-danger btn-sm" id="kbCatDeleteBtn" style="margin-left:auto">Delete</button>
   </div>
 </div>
 
@@ -2756,6 +2814,7 @@ async function _populateKBFromData(data) {
   }
 
   renderKB();
+  renderKBCategories();
 }
 
 async function _autoSeedKB() {
@@ -3011,6 +3070,122 @@ document.getElementById('kbClearFilters').addEventListener('click', () => {
 // Lazy-load KB tab
 document.querySelector('[data-tab="kb"]').addEventListener('click', () => {
   if (!_kbLoaded) { _kbLoaded = true; loadKB(); }
+});
+
+// ── KB Categories ─────────────────────────────────────────────────────
+let _kbEditingCatId = null;
+
+function renderKBCategories() {
+  const tbody = document.getElementById('kbCatBody');
+  if (!tbody) return;
+  if (!_kbCategories.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No categories</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _kbCategories.map(c => `
+    <tr>
+      <td style="font-size:1.2rem;text-align:center">${c.icon || ''}</td>
+      <td><strong>${esc(c.label)}</strong><br><span style="font-size:.75rem;color:var(--muted)">${esc(c.id)}</span></td>
+      <td style="font-size:.8rem;color:var(--muted)">${esc(c.desc || '')}</td>
+      <td style="text-align:center">${c.adminOnly ? '✓' : ''}</td>
+      <td><button class="btn btn-ghost btn-sm" data-catedit="${esc(c.id)}">Edit</button></td>
+    </tr>`).join('');
+}
+
+function openKbCatDrawer(cat) {
+  _kbEditingCatId = cat ? cat.id : null;
+  const isNew = !cat;
+  document.getElementById('kbCatDrawerTitle').textContent = isNew ? 'New Category' : 'Edit Category';
+  document.getElementById('kbCatDrawerBadge').textContent = isNew ? 'New' : 'Edit';
+  document.getElementById('kcId').value        = isNew ? '' : cat.id;
+  document.getElementById('kcId').readOnly     = !isNew;
+  document.getElementById('kcId').style.opacity = isNew ? '' : '.6';
+  document.getElementById('kcLabel').value     = isNew ? '' : (cat.label || '');
+  document.getElementById('kcIcon').value      = isNew ? '' : (cat.icon || '');
+  document.getElementById('kcDesc').value      = isNew ? '' : (cat.desc || '');
+  document.getElementById('kcAdminOnly').checked = isNew ? false : !!cat.adminOnly;
+  document.getElementById('kbCatDeleteBtn').classList.toggle('hidden', isNew);
+  document.getElementById('kbCatDrawerErr').style.display = 'none';
+  document.getElementById('kbCatOverlay').classList.add('open');
+  document.getElementById('kbCatDrawer').classList.add('open');
+}
+
+function closeKbCatDrawer() {
+  document.getElementById('kbCatOverlay').classList.remove('open');
+  document.getElementById('kbCatDrawer').classList.remove('open');
+  _kbEditingCatId = null;
+}
+
+document.getElementById('kbNewCatBtn').addEventListener('click', () => openKbCatDrawer(null));
+document.getElementById('kbCatDrawerClose').addEventListener('click', closeKbCatDrawer);
+document.getElementById('kbCatCancelBtn').addEventListener('click', closeKbCatDrawer);
+document.getElementById('kbCatOverlay').addEventListener('click', closeKbCatDrawer);
+
+document.getElementById('kbCatBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-catedit]');
+  if (btn) { const cat = _kbCategories.find(c => c.id === btn.dataset.catedit); if (cat) openKbCatDrawer(cat); }
+});
+
+document.getElementById('kbCatSaveBtn').addEventListener('click', async () => {
+  const errEl = document.getElementById('kbCatDrawerErr');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('kbCatSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const payload = {
+    id:         document.getElementById('kcId').value.trim(),
+    label:      document.getElementById('kcLabel').value.trim(),
+    icon:       document.getElementById('kcIcon').value.trim(),
+    desc:       document.getElementById('kcDesc').value.trim(),
+    admin_only: document.getElementById('kcAdminOnly').checked,
+  };
+
+  if (!payload.label) { errEl.textContent = 'Label is required.'; errEl.style.display = ''; btn.disabled = false; btn.textContent = 'Save Category'; return; }
+  if (!_kbEditingCatId && !payload.id) { errEl.textContent = 'ID is required for new categories.'; errEl.style.display = ''; btn.disabled = false; btn.textContent = 'Save Category'; return; }
+
+  try {
+    const url    = _kbEditingCatId ? `/api/admin/kb/categories/${_kbEditingCatId}` : '/api/admin/kb/categories';
+    const method = _kbEditingCatId ? 'PUT' : 'POST';
+    const res    = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data   = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Save failed');
+
+    if (_kbEditingCatId) {
+      const idx = _kbCategories.findIndex(c => c.id === _kbEditingCatId);
+      if (idx >= 0) _kbCategories[idx] = data; else _kbCategories.push(data);
+    } else {
+      _kbCategories.push(data);
+    }
+    KB_CAT_LABEL[data.id] = data.label;
+    await _populateKBFromData({ categories: _kbCategories, articles: _kbArticles });
+    closeKbCatDrawer();
+    showAlert('kbAlert', `Category "${payload.label}" ${_kbEditingCatId ? 'updated' : 'created'}.`, 'ok');
+  } catch (err) {
+    errEl.textContent = err.message; errEl.style.display = '';
+  } finally { btn.disabled = false; btn.textContent = 'Save Category'; }
+});
+
+document.getElementById('kbCatDeleteBtn').addEventListener('click', async () => {
+  if (!_kbEditingCatId) return;
+  const cat = _kbCategories.find(c => c.id === _kbEditingCatId);
+  const articleCount = _kbArticles.filter(a => a.category === _kbEditingCatId).length;
+  const warn = articleCount ? ` ${articleCount} article(s) use this category.` : '';
+  if (!confirm(`Delete category "${cat?.label || _kbEditingCatId}"?${warn} This cannot be undone.`)) return;
+
+  const btn = document.getElementById('kbCatDeleteBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const res = await apiFetch(`/api/admin/kb/categories/${_kbEditingCatId}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) { const d = await res.json(); throw new Error(d.detail || 'Delete failed'); }
+    _kbCategories = _kbCategories.filter(c => c.id !== _kbEditingCatId);
+    await _populateKBFromData({ categories: _kbCategories, articles: _kbArticles });
+    closeKbCatDrawer();
+    showAlert('kbAlert', 'Category deleted.', 'ok');
+  } catch (err) {
+    document.getElementById('kbCatDrawerErr').textContent = err.message;
+    document.getElementById('kbCatDrawerErr').style.display = '';
+    btn.disabled = false; btn.textContent = 'Delete';
+  }
 });
 
 // ── Init ─────────────────────────────────────────────────────────────

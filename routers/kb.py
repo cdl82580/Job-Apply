@@ -105,6 +105,14 @@ class ArticleUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class CategoryCreate(BaseModel):
+    id:        str
+    label:     str
+    icon:      str = ""
+    desc:      str = ""
+    admin_only: bool = False
+
+
 class CategoryUpdate(BaseModel):
     label:     str | None = None
     icon:      str | None = None
@@ -330,6 +338,40 @@ console.log(JSON.stringify(KB));
 # ---------------------------------------------------------------------------
 # Admin endpoints — categories
 # ---------------------------------------------------------------------------
+
+@router.post("/api/admin/kb/categories", status_code=201)
+async def create_category(body: CategoryCreate, request: Request):
+    _require_admin(request)
+    data = _load()
+    categories = data.get("categories", list(_SEED_CATEGORIES))
+    cat_id = body.id.strip().lower().replace(" ", "-")
+    if not cat_id:
+        raise HTTPException(400, "Category ID is required")
+    if any(c["id"] == cat_id for c in categories):
+        raise HTTPException(400, f"Category ID '{cat_id}' already exists")
+    cat = {
+        "id":        cat_id,
+        "label":     body.label.strip(),
+        "icon":      body.icon,
+        "desc":      body.desc,
+        "adminOnly": body.admin_only,
+    }
+    categories.append(cat)
+    data["categories"] = categories
+    _save(data)
+    return cat
+
+
+@router.delete("/api/admin/kb/categories/{category_id}", status_code=204)
+async def delete_category(category_id: str, request: Request):
+    _require_admin(request)
+    data = _load()
+    categories = data.get("categories", list(_SEED_CATEGORIES))
+    if not any(c["id"] == category_id for c in categories):
+        raise HTTPException(404, "Category not found")
+    data["categories"] = [c for c in categories if c["id"] != category_id]
+    _save(data)
+
 
 @router.put("/api/admin/kb/categories/{category_id}")
 async def update_category(category_id: str, body: CategoryUpdate, request: Request):
