@@ -253,7 +253,7 @@ async def seed_kb_from_file(request: Request):
 
     # Embed the HTML directly in the script to avoid process.argv index differences
     node_script = (
-        "const html = " + json.dumps(kb_html) + r""";\
+        "const html = " + json.dumps(kb_html) + r""";
 const start = html.indexOf('const KB = {');
 if (start === -1) { console.error('KB const not found'); process.exit(1); }
 const sub = html.slice(start + 'const KB = '.length);
