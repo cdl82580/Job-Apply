@@ -214,10 +214,12 @@ def _evict_stale_pipelines() -> None:
 
 def _start_application_pipeline(
     user_id: str, app_id: str, company: str, role_title: str, url: str, actor: str,
+    jd_text: str = "",
 ) -> None:
     """Best-effort, async post-create/update pipeline:
       1. ensure the application's Drive folder exists and link it to the record
-      2. extract the job description from `url` via Claude, save job_description.md
+      2. extract the job description from `url` via Claude (or use `jd_text` when
+         the user pasted one manually), save job_description.md
       3. score the user's resume/profile against the extracted JD
     Streams structured progress events to GET /{app_id}/pipeline/stream.
     Never raises — failures here must never affect the create/update response."""
@@ -260,39 +262,50 @@ def _start_application_pipeline(
                     return
                 folder_id, folder_url = folder
                 folder_name = f"{safe_filename(company)}_{safe_filename(role_title)}"
-                record = app_store.link_run(user_id, app_id, {
-                    "id":               str(uuid.uuid4()),
-                    "type":             "job_description",
-                    "folder_name":      folder_name,
-                    "folder_url":       folder_url,
-                    "gdrive_folder_id": folder_id,
-                    "linked_at":        _now(),
-                    "linked_by":        "system",
-                })
-                if record:
-                    record.setdefault("audit_log", []).append(
-                        _audit_entry("run_linked", "system", {
-                            "type": "job_description", "folder_name": folder_name,
-                        })
-                    )
-                    app_store.save_application(user_id, record)
+                # Re-runs (manual JD paste, URL edits) must not duplicate the link
+                existing = app_store.get_application(user_id, app_id) or {}
+                already_linked = any(
+                    r.get("type") == "job_description" and r.get("gdrive_folder_id") == folder_id
+                    for r in existing.get("linked_runs", [])
+                )
+                if not already_linked:
+                    record = app_store.link_run(user_id, app_id, {
+                        "id":               str(uuid.uuid4()),
+                        "type":             "job_description",
+                        "folder_name":      folder_name,
+                        "folder_url":       folder_url,
+                        "gdrive_folder_id": folder_id,
+                        "linked_at":        _now(),
+                        "linked_by":        "system",
+                    })
+                    if record:
+                        record.setdefault("audit_log", []).append(
+                            _audit_entry("run_linked", "system", {
+                                "type": "job_description", "folder_name": folder_name,
+                            })
+                        )
+                        app_store.save_application(user_id, record)
                 emit("folder", "done", folder_name, folder_url=folder_url)
 
                 # Stage 2 — job_description.md
-                if not url:
-                    emit("jd", "skipped", "No posting URL on this application")
-                    emit("score", "skipped", "No job description to score against")
-                    return
-                emit("jd", "running", "Extracting the job description…")
-                jd_text = extract_job_description_from_url(url, config)
-                if not jd_text:
+                if jd_text:
+                    emit("jd", "running", "Saving the pasted job description…")
+                    text = jd_text
+                else:
+                    if not url:
+                        emit("jd", "skipped", "No posting URL on this application")
+                        emit("score", "skipped", "No job description to score against")
+                        return
+                    emit("jd", "running", "Extracting the job description…")
+                    text = extract_job_description_from_url(url, config)
+                if not text:
                     emit("jd", "failed", "Could not extract a job description from the posting URL")
                     emit("score", "skipped", "No job description to score against")
                     user_audit.log(user_id, "jd_capture_failed", actor,
                                    run_id=run_id, company=company, role=role_title,
                                    app_id=app_id)
                     return
-                if save_gdrive_job_posting(folder_id, jd_text, config):
+                if save_gdrive_job_posting(folder_id, text, config):
                     emit("jd", "done", "job_description.md saved to Drive")
                 else:
                     emit("jd", "failed", "Could not save job_description.md to Drive")
@@ -304,7 +317,7 @@ def _start_application_pipeline(
                 emit("score", "running", "Scoring your resume against the posting…")
                 try:
                     score_payload = _run_match_scoring(
-                        user_id, app_id, jd_text, actor, scored_by="system")
+                        user_id, app_id, text, actor, scored_by="system")
                 except Exception as exc:
                     emit("score", "failed", f"Scoring failed: {exc}")
                 else:
@@ -700,6 +713,37 @@ async def setup_folder(app_id: str, request: Request, response: Response):
         user_id, app_id,
         record["company"], record["role_title"],
         (record.get("url") or ""), actor,
+    )
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,
+                            path="/", samesite="lax", httponly=True)
+    return {"status": "started"}
+
+
+class PipelineJD(BaseModel):
+    job_posting: str
+
+
+@router.post("/{app_id}/pipeline/jd", status_code=202)
+async def pipeline_with_manual_jd(
+    app_id: str, body: PipelineJD, request: Request, response: Response,
+):
+    """Re-run the setup pipeline with a manually pasted job description —
+    used when automatic extraction from the posting URL fails. Saves the
+    pasted text as job_description.md and re-scores."""
+    user_id = request.state.user["user_id"]
+    actor   = _actor(request)
+    record  = _get_or_404(user_id, app_id)
+
+    text = body.job_posting.strip()
+    if not text:
+        raise HTTPException(400, "job_posting must not be empty")
+
+    _start_application_pipeline(
+        user_id, app_id,
+        record["company"], record["role_title"],
+        (record.get("url") or ""), actor,
+        jd_text=text,
     )
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,

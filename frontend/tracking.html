@@ -651,6 +651,14 @@
       margin-bottom: 1rem; white-space: pre-wrap; word-break: break-word;
     }
     .pipe-log:empty { display: none; }
+    .pipe-paste { margin-bottom: 1rem; }
+    .pipe-paste-hint { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
+    .pipe-paste textarea {
+      width: 100%; min-height: 110px; box-sizing: border-box; resize: vertical;
+      background: var(--bg-page); border: 1px solid var(--card-border); border-radius: 6px;
+      padding: .5rem .65rem; font-size: .8rem; color: var(--text);
+    }
+    .pipe-paste-actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
 
     .hidden { display: none !important; }
     .verify-banner {
@@ -959,6 +967,13 @@
     </div>
     <div class="pipe-score" id="pipeScore"></div>
     <div class="pipe-log" id="pipeLog"></div>
+    <div class="pipe-paste hidden" id="pipePaste">
+      <p class="pipe-paste-hint">Couldn&#8217;t pull the job description automatically &#8212; paste it below and setup will continue.</p>
+      <textarea id="pipePasteText" placeholder="Paste the full job description here&#8230;"></textarea>
+      <div class="pipe-paste-actions">
+        <button class="btn btn-sm" id="pipePasteSubmit">Save &amp; continue</button>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" id="pipeBackgroundBtn">Continue in background</button>
       <button class="btn btn-sm hidden" id="pipeDoneBtn">Done</button>
@@ -1918,6 +1933,7 @@ document.getElementById('addCommentBtn').addEventListener('click', async () => {
 // ── Application setup pipeline modal (Drive folder → JD → score) ─────
 const pipelineModal = document.getElementById('pipelineModal');
 let _pipeES = null;
+let _pipeAppId = null;
 
 function _pipeSetStep(step, state, message) {
   const el = document.getElementById(`pipeStep-${step}`);
@@ -1941,9 +1957,13 @@ function _pipeFinish() {
 }
 
 function openPipelineModal(appId) {
+  _pipeAppId = appId;
   ['folder', 'jd', 'score'].forEach(s => _pipeSetStep(s, 'pending', ''));
   document.getElementById('pipeLog').textContent = '';
   document.getElementById('pipeScore').textContent = '';
+  document.getElementById('pipePaste').classList.add('hidden');
+  document.getElementById('pipePasteText').value = '';
+  document.getElementById('pipePasteSubmit').disabled = false;
   document.getElementById('pipeDoneBtn').classList.add('hidden');
   document.getElementById('pipeBackgroundBtn').classList.remove('hidden');
   pipelineModal.classList.add('open');
@@ -1961,6 +1981,12 @@ function openPipelineModal(appId) {
 
     if (msg.step && msg.state) {
       _pipeSetStep(msg.step, msg.state, msg.message || '');
+      // JD couldn't be extracted (or there was no URL) but the folder exists —
+      // offer manual paste so setup can continue
+      if (msg.step === 'jd' && (msg.state === 'failed' || msg.state === 'skipped') &&
+          document.getElementById('pipeStep-folder').classList.contains('done')) {
+        document.getElementById('pipePaste').classList.remove('hidden');
+      }
       if (msg.step === 'score' && msg.state === 'done') {
         const scoreEl = document.getElementById('pipeScore');
         scoreEl.textContent = `Match score: ${msg.score} — ${msg.category}`;
@@ -2006,6 +2032,32 @@ function closePipelineModal() {
 }
 document.getElementById('pipeBackgroundBtn').addEventListener('click', closePipelineModal);
 document.getElementById('pipeDoneBtn').addEventListener('click', closePipelineModal);
+
+document.getElementById('pipePasteSubmit').addEventListener('click', async () => {
+  const text = document.getElementById('pipePasteText').value.trim();
+  if (!text || !_pipeAppId) return;
+  const btn = document.getElementById('pipePasteSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await apiFetch(`/api/applications/${encodeURIComponent(_pipeAppId)}/pipeline/jd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_posting: text }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Failed (${res.status})`);
+    }
+    // Restart the modal against the new pipeline run
+    openPipelineModal(_pipeAppId);
+  } catch (e) {
+    if (e.message !== '401') alert(e.message || 'Could not save the job description — please try again.');
+    btn.disabled = false;
+  } finally {
+    btn.textContent = 'Save & continue';
+  }
+});
 
 // ── Delete ────────────────────────────────────────────────────────────
 const deleteModal   = document.getElementById('deleteModal');
