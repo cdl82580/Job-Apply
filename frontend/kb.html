@@ -46,8 +46,7 @@
       --input-border: #2B2B2B;
     }
 
-    html { background: #F9FAFB; min-height: 100%; }
-    html[data-theme="dark"] { background: #0A0A0A; }
+    html, body { height: 100%; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg-page);
@@ -55,6 +54,8 @@
       margin: 0;
       padding: 0;
       min-height: 100vh;
+      display: flex;
+      flex-direction: column;
       transition: background .2s, color .2s;
     }
 
@@ -134,6 +135,8 @@
       max-width: 900px;
       margin: 0 auto;
       padding: 1.5rem 1rem 3rem;
+      flex: 1;
+      width: 100%;
     }
 
     /* ── Main content ── */
