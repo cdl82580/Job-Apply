@@ -248,23 +248,25 @@ async def seed_kb_from_file(request: Request):
     if not os.path.exists(kb_path):
         raise HTTPException(500, "frontend/kb.html not found on server")
 
-    node_script = r"""
-const fs = require('fs');
-const html = fs.readFileSync(process.argv[2], 'utf8');
+    with open(kb_path, "r", encoding="utf-8") as f:
+        kb_html = f.read()
+
+    # Embed the HTML directly in the script to avoid process.argv index differences
+    node_script = (
+        "const html = " + json.dumps(kb_html) + r""";\
 const start = html.indexOf('const KB = {');
 if (start === -1) { console.error('KB const not found'); process.exit(1); }
 const sub = html.slice(start + 'const KB = '.length);
-// Find balanced closing brace
 let depth = 0, i = 0, inStr = false, strChar = '', inTemplate = 0;
 for (; i < sub.length; i++) {
   const c = sub[i];
   if (inStr) {
-    if (c === '\\\\') { i++; continue; }
+    if (c === '\\') { i++; continue; }
     if (c === strChar) inStr = false;
     continue;
   }
   if (c === '`') { inTemplate = inTemplate ? 0 : 1; continue; }
-  if (inTemplate) { if (c === '\\\\') { i++; } continue; }
+  if (inTemplate) { if (c === '\\') { i++; } continue; }
   if (c === '"' || c === "'") { inStr = true; strChar = c; continue; }
   if (c === '{') depth++;
   else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
@@ -274,9 +276,10 @@ let KB;
 try { KB = eval('(' + objSrc + ')'); } catch(e) { console.error('eval failed: ' + e.message); process.exit(1); }
 console.log(JSON.stringify(KB));
 """
+    )
     try:
         result = subprocess.run(
-            ["node", "-e", node_script, kb_path],
+            ["node", "-e", node_script],
             capture_output=True, text=True, timeout=15,
         )
     except FileNotFoundError:
