@@ -6,6 +6,9 @@
   <title>Admin — Job Application Agent</title>
   <!-- ExcelJS loaded lazily on first Excel export -->
   <script id="exceljs-placeholder" data-src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+  <!-- Quill WYSIWYG editor (KB article body) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
+  <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
   <link rel="icon" href="/favicon.png" type="image/png">
   <script>
     (function(){
@@ -289,6 +292,21 @@
     .drawer-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
     .drawer-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--card-border);
                      display: flex; gap: .625rem; flex-shrink: 0; }
+    /* Quill theme integration */
+    .ql-toolbar.ql-snow { border-color: var(--input-border); border-radius: 6px 6px 0 0;
+                          background: var(--bg-card); }
+    .ql-container.ql-snow { border-color: var(--input-border); border-radius: 0 0 6px 6px;
+                             background: var(--bg-card); font-size: .9rem; }
+    .ql-editor { min-height: 280px; color: var(--text); }
+    .ql-editor.ql-blank::before { color: var(--muted); font-style: normal; }
+    .ql-snow .ql-stroke { stroke: var(--text); }
+    .ql-snow .ql-fill  { fill:   var(--text); }
+    .ql-snow .ql-picker { color:  var(--text); }
+    .ql-snow .ql-picker-options { background: var(--bg-card); border-color: var(--card-border); }
+    .ql-snow .ql-tooltip { background: var(--bg-card); color: var(--text);
+                           border-color: var(--card-border); box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+    .ql-snow .ql-tooltip input[type=text] { background: var(--input-bg); color: var(--text);
+                                            border-color: var(--input-border); }
 
     /* Form fields */
     .field { margin-bottom: 1.125rem; }
@@ -976,13 +994,20 @@
 
     <div class="field" style="flex:1;display:flex;flex-direction:column;min-height:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-        <label style="margin-bottom:0">Body <span class="opt">(HTML)</span></label>
+        <label style="margin-bottom:0">Body</label>
         <div style="display:flex;gap:.375rem">
+          <button type="button" class="btn btn-ghost btn-sm" id="kbSourceToggle">Source</button>
           <button type="button" class="btn btn-ghost btn-sm" id="kbPreviewToggle">Preview</button>
         </div>
       </div>
-      <textarea id="kdBody" data-kbfield style="flex:1;min-height:320px;font-family:'SF Mono','Fira Code',monospace;font-size:.8rem;resize:vertical;line-height:1.5" placeholder="<h2>Section</h2>&#10;<p>Body content…</p>"></textarea>
-      <div id="kbPreviewPane" class="hidden" style="min-height:320px;border:1px solid var(--input-border);border-radius:6px;padding:1rem;overflow-y:auto;background:var(--bg-card)">
+      <!-- WYSIWYG Quill editor -->
+      <div id="kbQuillWrap" style="display:flex;flex-direction:column;flex:1;min-height:0">
+        <div id="kbQuillEditor" style="min-height:300px;background:var(--bg-card);color:var(--text)"></div>
+      </div>
+      <!-- Raw HTML source textarea (hidden by default) -->
+      <textarea id="kdBody" style="display:none;flex:1;min-height:320px;font-family:'SF Mono','Fira Code',monospace;font-size:.8rem;resize:vertical;line-height:1.5" placeholder="<h2>Section</h2>&#10;<p>Body content…</p>"></textarea>
+      <!-- Preview pane (hidden by default) -->
+      <div id="kbPreviewPane" style="display:none;min-height:320px;border:1px solid var(--input-border);border-radius:6px;padding:1rem;overflow-y:auto;background:var(--bg-card)">
         <div class="article-body" id="kbPreviewBody"></div>
       </div>
     </div>
@@ -2792,9 +2817,63 @@ function renderKB() {
   }
 }
 
+// ── Quill init ────────────────────────────────────────────────
+let _kbQuill = null;
+let _kbEditorMode = 'wysiwyg'; // 'wysiwyg' | 'source' | 'preview'
+
+function _initQuill() {
+  if (_kbQuill) return;
+  _kbQuill = new Quill('#kbQuillEditor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ header: [2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        ['link', 'blockquote', 'code-block'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['clean'],
+      ],
+    },
+  });
+}
+
+function _kbGetHtml() {
+  if (_kbEditorMode === 'wysiwyg') return _kbQuill ? _kbQuill.root.innerHTML : '';
+  return document.getElementById('kdBody').value;
+}
+
+function _kbSetMode(mode) {
+  const quillWrap = document.getElementById('kbQuillWrap');
+  const sourceEl  = document.getElementById('kdBody');
+  const preEl     = document.getElementById('kbPreviewPane');
+  const srcBtn    = document.getElementById('kbSourceToggle');
+  const preBtn    = document.getElementById('kbPreviewToggle');
+
+  // Sync content out of the active mode before switching
+  if (_kbEditorMode === 'wysiwyg' && _kbQuill) {
+    sourceEl.value = _kbQuill.root.innerHTML;
+  } else if (_kbEditorMode === 'source' && _kbQuill && mode === 'wysiwyg') {
+    _kbQuill.clipboard.dangerouslyPasteHTML(sourceEl.value);
+  }
+
+  _kbEditorMode = mode;
+  quillWrap.style.display = mode === 'wysiwyg' ? 'flex' : 'none';
+  sourceEl.style.display  = mode === 'source'  ? 'block' : 'none';
+  preEl.style.display     = mode === 'preview' ? 'block' : 'none';
+
+  if (mode === 'preview') {
+    document.getElementById('kbPreviewBody').innerHTML = sourceEl.value;
+  }
+
+  srcBtn.style.fontWeight = mode === 'source'  ? '700' : '';
+  preBtn.style.fontWeight = mode === 'preview' ? '700' : '';
+}
+
 function openKbDrawer(article) {
+  _initQuill();
   _kbEditingId = article ? article.id : null;
   const isNew  = !article;
+  const html   = isNew ? '' : (article.body || '');
 
   document.getElementById('kbDrawerTitle').textContent = isNew ? 'New Article' : 'Edit Article';
   document.getElementById('kbDrawerBadge').textContent = isNew ? 'New' : 'Edit';
@@ -2806,14 +2885,14 @@ function openKbDrawer(article) {
   document.getElementById('kdSnippet').value   = isNew ? '' : (article.snippet || '');
   document.getElementById('kdReadTime').value  = isNew ? '3 min' : (article.readTime || '3 min');
   document.getElementById('kdAdminOnly').checked = isNew ? false : !!article.adminOnly;
-  document.getElementById('kdBody').value      = isNew ? '' : (article.body || '');
+  document.getElementById('kdBody').value      = html;
+
+  // Load into Quill — set source mode first so _kbSetMode skips the dangerouslyPasteHTML path
+  _kbEditorMode = 'source';
+  _kbQuill.clipboard.dangerouslyPasteHTML(html);
+  _kbSetMode('wysiwyg');
+
   document.getElementById('kbDeleteBtn').classList.toggle('hidden', isNew);
-
-  // Reset preview
-  document.getElementById('kdBody').classList.remove('hidden');
-  document.getElementById('kbPreviewPane').classList.add('hidden');
-  document.getElementById('kbPreviewToggle').textContent = 'Preview';
-
   document.getElementById('kbDrawerErr').style.display = 'none';
   document.getElementById('kbOverlay').classList.add('open');
   document.getElementById('kbDrawer').classList.add('open');
@@ -2835,19 +2914,12 @@ document.getElementById('kbBody').addEventListener('click', e => {
   if (btn) { const art = _kbArticles.find(a => a.id === btn.dataset.kbedit); if (art) openKbDrawer(art); }
 });
 
+document.getElementById('kbSourceToggle').addEventListener('click', () => {
+  _kbSetMode(_kbEditorMode === 'source' ? 'wysiwyg' : 'source');
+});
+
 document.getElementById('kbPreviewToggle').addEventListener('click', () => {
-  const bodyEl   = document.getElementById('kdBody');
-  const preEl    = document.getElementById('kbPreviewPane');
-  const togBtn   = document.getElementById('kbPreviewToggle');
-  const showing  = !preEl.classList.contains('hidden');
-  if (showing) {
-    preEl.classList.add('hidden'); bodyEl.classList.remove('hidden');
-    togBtn.textContent = 'Preview';
-  } else {
-    document.getElementById('kbPreviewBody').innerHTML = bodyEl.value;
-    preEl.classList.remove('hidden'); bodyEl.classList.add('hidden');
-    togBtn.textContent = 'Edit';
-  }
+  _kbSetMode(_kbEditorMode === 'preview' ? 'wysiwyg' : 'preview');
 });
 
 document.getElementById('kbSaveBtn').addEventListener('click', async () => {
@@ -2863,7 +2935,7 @@ document.getElementById('kbSaveBtn').addEventListener('click', async () => {
     snippet:    document.getElementById('kdSnippet').value.trim(),
     read_time:  document.getElementById('kdReadTime').value.trim(),
     admin_only: document.getElementById('kdAdminOnly').checked,
-    body:       document.getElementById('kdBody').value,
+    body:       _kbGetHtml(),
   };
 
   if (!payload.title) { errEl.textContent = 'Title is required.'; errEl.style.display = ''; btn.disabled = false; btn.textContent = 'Save Article'; return; }
