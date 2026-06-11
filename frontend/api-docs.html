@@ -104,6 +104,16 @@
       transition: border-color .15s, color .15s;
     }
     .theme-toggle:hover { border-color: var(--border); color: var(--text); }
+    .btn-download {
+      font-size: .8rem;
+      color: var(--primary);
+      text-decoration: none;
+      padding: .35rem .7rem;
+      border: 1px solid var(--primary);
+      border-radius: var(--radius);
+      transition: background .15s, color .15s;
+    }
+    .btn-download:hover { background: var(--primary); color: #fff; }
 
     /* ── Layout ── */
     .layout {
@@ -386,6 +396,7 @@
     <div class="header-spacer"></div>
     <div class="header-actions">
       <a href="/admin.html" class="nav-link">← Admin</a>
+      <a href="/api/postman" download="JobApply.postman_collection.json" class="btn-download" title="Download Postman collection">⬇ Postman</a>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">◑</button>
     </div>
   </div>
