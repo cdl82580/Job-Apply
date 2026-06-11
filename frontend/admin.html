@@ -2709,33 +2709,70 @@ let _kbEditingId   = null;   // null = new article
 
 const KB_CAT_LABEL = {};   // id → label (populated after load)
 
+async function _populateKBFromData(data) {
+  _kbCategories = data.categories || [];
+  _kbArticles   = data.articles   || [];
+  _kbCategories.forEach(c => { KB_CAT_LABEL[c.id] = c.label; });
+
+  const sel = document.getElementById('kbCatFilter');
+  sel.innerHTML = '<option value="">All categories</option>';
+  for (const c of _kbCategories) {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.label;
+    sel.appendChild(o);
+  }
+
+  const kdSel = document.getElementById('kdCat');
+  kdSel.innerHTML = '';
+  for (const c of _kbCategories) {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.label;
+    kdSel.appendChild(o);
+  }
+
+  renderKB();
+}
+
+async function _autoSeedKB() {
+  try {
+    const kbRes  = await fetch('/kb.html');
+    const kbText = await kbRes.text();
+    const match  = kbText.match(/const KB\s*=\s*(\{[\s\S]*?\n\});/);
+    if (!match) return false;
+    const kbData    = (new Function(`return ${match[1]}`))(  );
+    const articles  = (kbData.articles || []).map(a => ({
+      id: a.id, category: a.category, title: a.title,
+      snippet: a.snippet || '', readTime: a.readTime || '3 min',
+      body: a.body || '', adminOnly: !!a.adminOnly,
+    }));
+    const categories = (kbData.categories || []).map(c => ({
+      id: c.id, label: c.label, icon: c.icon || '',
+      desc: c.desc || '', adminOnly: !!c.adminOnly,
+    }));
+    const res = await apiFetch('/api/admin/kb/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories, articles }),
+    });
+    return res.ok;
+  } catch (_) { return false; }
+}
+
 async function loadKB() {
   try {
     const res  = await apiFetch('/api/kb/articles');
     const data = await res.json();
-    _kbCategories = data.categories || [];
-    _kbArticles   = data.articles   || [];
-    _kbCategories.forEach(c => { KB_CAT_LABEL[c.id] = c.label; });
 
-    // Populate category filter drop-down
-    const sel = document.getElementById('kbCatFilter');
-    sel.innerHTML = '<option value="">All categories</option>';
-    for (const c of _kbCategories) {
-      const o = document.createElement('option');
-      o.value = c.id; o.textContent = c.label;
-      sel.appendChild(o);
+    if ((!data.articles || data.articles.length === 0) && !_kbLoaded) {
+      // First open, nothing stored — auto-seed from frontend data silently
+      document.getElementById('kbBody').innerHTML = '<tr><td colspan="6" class="empty">Loading articles…</td></tr>';
+      await _autoSeedKB();
+      const res2  = await apiFetch('/api/kb/articles');
+      const data2 = await res2.json();
+      await _populateKBFromData(data2);
+    } else {
+      await _populateKBFromData(data);
     }
-
-    // Populate category select inside editor drawer
-    const kdSel = document.getElementById('kdCat');
-    kdSel.innerHTML = '';
-    for (const c of _kbCategories) {
-      const o = document.createElement('option');
-      o.value = c.id; o.textContent = c.label;
-      kdSel.appendChild(o);
-    }
-
-    renderKB();
   } catch (e) { if (e.message !== '401') showAlert('kbAlert', 'Failed to load KB articles.'); }
 }
 
