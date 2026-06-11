@@ -64,6 +64,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **All Agent Runs** — full Drive-backed run history across all users with type detection, filters, sort, export
 - **Audit Log** — unified event log across user and application events; server-side pagination, filter by event ID, action, actor, source, date range
 - **Webhooks** — create and manage outbound webhooks for event streaming to Slack, MS Teams, Grafana Loki, and custom endpoints
+- **Knowledge Base** — create, edit, and delete KB articles and categories; Quill WYSIWYG editor with Source/Preview toggle; seed KB from frontend constants; filter by category or search
 
 ### Webhooks
 - Event-driven delivery for every audit action
@@ -72,6 +73,14 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - HMAC-SHA256 signing (`X-Hub-Signature-256`) for receiver verification; secret encrypted at rest
 - Per-webhook delivery history (last 25), stats, test button
 - SSRF guard re-applied at delivery time (DNS rebinding protection)
+
+### Knowledge Base
+- Public KB at `/kb.html` — searchable article library with category sidebar; articles rendered from HTML body (Quill output)
+- Admin-managed via the Knowledge Base tab in `/admin.html`
+- Quill WYSIWYG editor with Source/Preview toggle in the article drawer
+- Categories with icon (emoji), label, description, and optional `adminOnly` flag
+- Seed endpoint (`POST /api/admin/kb/seed-from-file`) re-extracts the built-in article set from `frontend/kb.html` via Node.js
+- Stored as a single JSON blob in Tigris (`kb/data.json`); seed data auto-applied if no blob exists yet
 
 ### Slack Bot
 See [Slack Commands](#slack-commands) section below.
@@ -93,7 +102,9 @@ job-apply/
 │   ├── index.html             ← Agent SPA (run form, prep form, progress, results)
 │   ├── tracking.html          ← Application tracker
 │   ├── calendar.html          ← Calendar view
-│   ├── admin.html             ← Admin dashboard
+│   ├── admin.html             ← Admin dashboard (users, apps, runs, audit, webhooks, KB)
+│   ├── kb.html                ← Public Knowledge Base (searchable, category sidebar)
+│   ├── api-docs.html          ← API reference (rendered from Postman collection; ⬇ download button)
 │   ├── login.html             ← Login + Google OAuth
 │   ├── register.html
 │   ├── profile.html           ← Profile settings (Markdown editor)
@@ -104,7 +115,8 @@ job-apply/
 │   ├── calendar.py            ← Calendar event + reminder CRUD
 │   ├── companies.py           ← BrandFetch proxy
 │   ├── auth_google.py         ← Google OAuth flow
-│   └── admin.py               ← Admin-only endpoints + webhooks + audit
+│   ├── admin.py               ← Admin-only endpoints + webhooks + audit
+│   └── kb.py                  ← Knowledge Base CRUD (public list + admin create/update/delete/seed)
 ├── scripts/
 │   ├── storage.py             ← Tigris S3 adapter
 │   ├── applications.py        ← Application storage layer
@@ -131,8 +143,10 @@ job-apply/
 3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; or use **Interview Prep** section for a prep doc
 4. **Tracker tab** — track applications, add notes, link to agent runs
 5. **Calendar tab** — view and manage interview events and deadlines with Slack/email reminders
-6. **Profile** — update display name, email, password, profile guide (Markdown editor), and resume
-7. Admins are redirected to `/admin.html` automatically
+6. **Knowledge Base** (`/kb.html`) — searchable help articles; admin-managed via the KB tab in the admin dashboard
+7. **API Reference** (`/api-docs.html`) — full endpoint browser rendered from the Postman collection, with a ⬇ download button for the collection JSON
+8. **Profile** — update display name, email, password, profile guide (Markdown editor), and resume
+9. Admins are redirected to `/admin.html` automatically
 
 ### Interview Prep
 - Select an existing tracker application — requires a saved `job_description.md` in the app's Drive folder (run the resume agent first if it doesn't exist)
@@ -294,6 +308,7 @@ Use `?tab=` to deep-link to a specific tab:
 - `/admin.html?tab=runs`
 - `/admin.html?tab=auditlog`
 - `/admin.html?tab=webhooks`
+- `/admin.html?tab=kb`
 
 ---
 
@@ -348,6 +363,8 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/stream` | cookie | SSE prep progress stream |
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
+| POST | `/api/jd/format` | cookie | AI-format a raw job description (returns cleaned Markdown) |
+| GET | `/api/postman` | — | Download the Postman collection JSON |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
 | GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt`; ownership verified via Tigris app records |
 | PUT | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Upsert `job_description.md` in Drive folder |
@@ -356,6 +373,17 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/config/model` | cookie | Get active Claude model |
 | PUT | `/api/config/model` | admin | Set active Claude model |
 | GET | `/api/config/models` | admin | List allowed models |
+| GET | `/api/kb/articles` | cookie | List all KB articles + categories |
+| GET | `/api/kb/articles/{id}` | cookie | Get one KB article |
+| GET | `/api/kb/categories` | cookie | List KB categories |
+| POST | `/api/admin/kb/articles` | admin | Create KB article |
+| PUT | `/api/admin/kb/articles/{id}` | admin | Update KB article |
+| DELETE | `/api/admin/kb/articles/{id}` | admin | Delete KB article |
+| POST | `/api/admin/kb/categories` | admin | Create KB category |
+| PUT | `/api/admin/kb/categories/{id}` | admin | Update KB category |
+| DELETE | `/api/admin/kb/categories/{id}` | admin | Delete KB category |
+| POST | `/api/admin/kb/seed` | admin | Replace entire KB from JSON payload |
+| POST | `/api/admin/kb/seed-from-file` | admin | Re-extract KB from `frontend/kb.html` via Node.js and seed to Tigris |
 | GET | `/api/admin/users` | admin | List all users |
 | PUT | `/api/admin/users/{id}` | admin | Edit user (name, email, role, active, verified) — invalidates user cache |
 | PUT | `/api/admin/users/{id}/role` | admin | Set user role only (Slack bot compat) |
