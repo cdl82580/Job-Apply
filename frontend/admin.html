@@ -2735,25 +2735,7 @@ async function _populateKBFromData(data) {
 
 async function _autoSeedKB() {
   try {
-    const kbRes  = await fetch('/kb.html');
-    const kbText = await kbRes.text();
-    const match  = kbText.match(/const KB\s*=\s*(\{[\s\S]*?\n\});/);
-    if (!match) return false;
-    const kbData    = (new Function(`return ${match[1]}`))(  );
-    const articles  = (kbData.articles || []).map(a => ({
-      id: a.id, category: a.category, title: a.title,
-      snippet: a.snippet || '', readTime: a.readTime || '3 min',
-      body: a.body || '', adminOnly: !!a.adminOnly,
-    }));
-    const categories = (kbData.categories || []).map(c => ({
-      id: c.id, label: c.label, icon: c.icon || '',
-      desc: c.desc || '', adminOnly: !!c.adminOnly,
-    }));
-    const res = await apiFetch('/api/admin/kb/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categories, articles }),
-    });
+    const res = await apiFetch('/api/admin/kb/seed-from-file', { method: 'POST' });
     return res.ok;
   } catch (_) { return false; }
 }
@@ -2763,7 +2745,7 @@ async function loadKB() {
     const res  = await apiFetch('/api/kb/articles');
     const data = await res.json();
 
-    if ((!data.articles || data.articles.length === 0) && !_kbLoaded) {
+    if (!data.articles || data.articles.length === 0) {
       // First open, nothing stored — auto-seed from frontend data silently
       document.getElementById('kbBody').innerHTML = '<tr><td colspan="6" class="empty">Loading articles…</td></tr>';
       await _autoSeedKB();
@@ -2929,42 +2911,13 @@ document.getElementById('kbDeleteBtn').addEventListener('click', async () => {
   }
 });
 
-// Seed button — posts the hardcoded KB from kb.html to the API
+// Seed button — calls server-side endpoint to extract and seed from kb.html
 document.getElementById('kbSeedBtn').addEventListener('click', async () => {
   if (!confirm('This will replace all stored KB articles with the built-in frontend seed data. Continue?')) return;
   const btn = document.getElementById('kbSeedBtn');
   btn.disabled = true; btn.textContent = 'Seeding…';
   try {
-    // Load kb.html in a hidden iframe, extract KB const, then seed
-    const kbRes  = await fetch('/kb.html');
-    const kbText = await kbRes.text();
-    const match  = kbText.match(/const KB\s*=\s*(\{[\s\S]*?\n\});/);
-    if (!match) throw new Error('Could not extract KB data from kb.html');
-    const kbData = (new Function(`return ${match[1]}`))(  );  // safe — local file
-
-    // Normalize article fields for the API
-    const articles = (kbData.articles || []).map(a => ({
-      id:         a.id,
-      category:   a.category,
-      title:      a.title,
-      snippet:    a.snippet || '',
-      readTime:   a.readTime || '3 min',
-      body:       a.body || '',
-      adminOnly:  !!a.adminOnly,
-    }));
-    const categories = (kbData.categories || []).map(c => ({
-      id:        c.id,
-      label:     c.label,
-      icon:      c.icon || '',
-      desc:      c.desc || '',
-      adminOnly: !!c.adminOnly,
-    }));
-
-    const res = await apiFetch('/api/admin/kb/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categories, articles }),
-    });
+    const res  = await apiFetch('/api/admin/kb/seed-from-file', { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Seed failed');
     showAlert('kbAlert', `Seeded ${data.articles} articles and ${data.categories} categories.`, 'ok');

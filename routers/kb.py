@@ -234,6 +234,96 @@ async def seed_kb(body: SeedPayload, request: Request):
     return {"ok": True, "articles": len(body.articles), "categories": len(body.categories)}
 
 
+@router.post("/api/admin/kb/seed-from-file", status_code=200)
+async def seed_kb_from_file(request: Request):
+    """Extract KB data from frontend/kb.html via Node.js and seed to storage."""
+    import subprocess  # noqa: PLC0415
+    import os          # noqa: PLC0415
+
+    admin = _require_admin(request)
+
+    kb_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "kb.html")
+    kb_path = os.path.abspath(kb_path)
+
+    if not os.path.exists(kb_path):
+        raise HTTPException(500, "frontend/kb.html not found on server")
+
+    node_script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const start = html.indexOf('const KB = {');
+if (start === -1) { console.error('KB const not found'); process.exit(1); }
+const sub = html.slice(start + 'const KB = '.length);
+// Find balanced closing brace
+let depth = 0, i = 0, inStr = false, strChar = '', inTemplate = 0;
+for (; i < sub.length; i++) {
+  const c = sub[i];
+  if (inStr) {
+    if (c === '\\\\') { i++; continue; }
+    if (c === strChar) inStr = false;
+    continue;
+  }
+  if (c === '`') { inTemplate = inTemplate ? 0 : 1; continue; }
+  if (inTemplate) { if (c === '\\\\') { i++; } continue; }
+  if (c === '"' || c === "'") { inStr = true; strChar = c; continue; }
+  if (c === '{') depth++;
+  else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+}
+const objSrc = sub.slice(0, i);
+let KB;
+try { KB = eval('(' + objSrc + ')'); } catch(e) { console.error('eval failed: ' + e.message); process.exit(1); }
+console.log(JSON.stringify(KB));
+"""
+    try:
+        result = subprocess.run(
+            ["node", "-e", node_script, kb_path],
+            capture_output=True, text=True, timeout=15,
+        )
+    except FileNotFoundError:
+        raise HTTPException(500, "Node.js not available on server")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(500, "Node.js script timed out")
+
+    if result.returncode != 0:
+        raise HTTPException(500, f"KB extraction failed: {result.stderr.strip()}")
+
+    try:
+        kb_data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(500, f"KB JSON parse failed: {exc}")
+
+    now = _now()
+    articles = []
+    for a in kb_data.get("articles", []):
+        articles.append({
+            "id":         a.get("id", ""),
+            "category":   a.get("category", ""),
+            "title":      a.get("title", ""),
+            "snippet":    a.get("snippet", ""),
+            "readTime":   a.get("readTime", "3 min"),
+            "body":       a.get("body", ""),
+            "adminOnly":  bool(a.get("adminOnly", False)),
+            "created_at": now,
+            "updated_at": now,
+            "created_by": admin["email"],
+        })
+
+    categories = [
+        {
+            "id":        c.get("id", ""),
+            "label":     c.get("label", ""),
+            "icon":      c.get("icon", ""),
+            "desc":      c.get("desc", ""),
+            "adminOnly": bool(c.get("adminOnly", False)),
+        }
+        for c in kb_data.get("categories", _SEED_CATEGORIES)
+    ]
+
+    data = {"categories": categories, "articles": articles}
+    _save(data)
+    return {"ok": True, "articles": len(articles), "categories": len(categories)}
+
+
 # ---------------------------------------------------------------------------
 # Admin endpoints — categories
 # ---------------------------------------------------------------------------
