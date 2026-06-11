@@ -28,11 +28,12 @@
       --bg-page: #0A0A0A; --bg-card: #111111; --card-border: #1E1E1E;
       --input-bg: #161616; --input-border: #2B2B2B;
     }
-    html { background: var(--bg-page); }
+    html, body { height: 100%; }
     body { font-family: system-ui,-apple-system,sans-serif; padding: 0; background: var(--bg-page);
-           color: var(--text); margin: 0; padding: 0; min-height: 100vh;
+           color: var(--text); margin: 0; min-height: 100vh;
+           display: flex; flex-direction: column;
            transition: background .2s, color .2s; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem 2rem; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem 2rem; flex: 1; width: 100%; }
 
     header { border-bottom: 2px solid var(--primary); margin-bottom: 2rem; padding: 0 1rem; }
     .header-inner { max-width: 1200px; margin: 0 auto; padding: 1.25rem 0 1rem;
