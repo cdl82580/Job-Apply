@@ -28,7 +28,9 @@
       --bg-page: #0A0A0A; --bg-card: #111111; --card-border: #1E1E1E;
       --input-bg: #161616; --input-border: #2B2B2B;
     }
-    html, body { height: 100%; background: var(--bg-page); }
+    html { height: 100%; background: #F9FAFB; }
+    html[data-theme="dark"] { background: #0A0A0A; }
+    body { height: 100%; }
     body { font-family: system-ui,-apple-system,sans-serif; padding: 0; background: var(--bg-page);
            color: var(--text); margin: 0; min-height: 100vh;
            display: flex; flex-direction: column;
