@@ -65,13 +65,15 @@
       --evt-custom-bg:        #1f2128;
     }
 
+    html, body { height: 100%; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg-page); color: var(--text);
       margin: 0; padding: 0; min-height: 100vh;
+      display: flex; flex-direction: column;
       transition: background .2s, color .2s;
     }
-    .container { max-width: 1100px; margin: 0 auto; padding: 0 1rem 3rem; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 1rem 3rem; flex: 1; width: 100%; }
 
     /* ── Header ─────────────────────────────────────────────── */
     header { border-bottom: 2px solid var(--primary); margin-bottom: 2rem; padding: 0 1rem; }
