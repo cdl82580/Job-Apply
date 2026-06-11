@@ -22,14 +22,14 @@
       --radius: 8px; --bg-page: #F9FAFB; --bg-card: #FFFFFF;
       --card-border: #E5E7EB; --input-bg: #FFFFFF; --input-border: #D1D5DB;
     }
-    [data-theme="dark"] {
+    [data-theme="dark"] { color-scheme: dark;
       --primary: #A5B4FC; --border: #6366F1; --fill: #1A1A2E;
       --text: #F0F0F5; --muted: #94A3B8; --error: #F87171; --success: #4ADE80;
       --bg-page: #0A0A0A; --bg-card: #111111; --card-border: #1E1E1E;
       --input-bg: #161616; --input-border: #2B2B2B;
     }
     html { height: 100%; background: #F9FAFB; }
-    html[data-theme="dark"] { background: #0A0A0A; }
+    html[data-theme="dark"] { color-scheme: dark; background: #0A0A0A; }
     body { height: 100%; }
     body { font-family: system-ui,-apple-system,sans-serif; padding: 0; background: var(--bg-page);
            color: var(--text); margin: 0; min-height: 100vh;
