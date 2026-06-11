@@ -1094,13 +1094,10 @@ function matchCell(a) {
 }
 
 function logoEl(domain, company, storedLogoUrl) {
-  // Prefer the signed URL stored on the record (from BrandFetch search response).
-  // Fall back to the CDN proxy only when no stored URL is available.
-  const src = safeHref(storedLogoUrl)
-    || (domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null);
-  const fallbackSrc = domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null;
+  // Always use the proxy to avoid expired signed URLs stored on the record.
+  const src = domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null;
   if (src) {
-    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="${esc(fallbackSrc || '')}" onerror="logoError(this)">`;
+    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="" onerror="logoError(this)">`;
   }
   return makePlaceholderHtml(company);
 }
@@ -1663,8 +1660,8 @@ function fillDrawer(a) {
   dCompanyInput.value   = a.company   || '';
   dDomainInput.value    = a.domain    || '';
   dLogoUrlInput.value   = a.company_logo_url || '';
-  if (safeHref(a.company_logo_url)) {
-    dLogoPreview.src          = safeHref(a.company_logo_url);
+  if (a.domain) {
+    dLogoPreview.src          = `/api/companies/logo?domain=${encodeURIComponent(a.domain)}`;
     dLogoPreview.style.display = 'block';
   }
   _selectedCompany = { name: a.company, domain: a.domain, logo_url: a.company_logo_url };
