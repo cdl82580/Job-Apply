@@ -386,6 +386,7 @@
     <button class="tab" data-tab="runs">All Agent Runs</button>
     <button class="tab" data-tab="auditlog">Audit Log</button>
     <button class="tab" data-tab="webhooks">Webhooks</button>
+    <button class="tab" data-tab="kb">Knowledge Base</button>
   </div>
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
@@ -694,6 +695,30 @@
     </div>
   </div>
 
+  <!-- ── Knowledge Base tab ─────────────────────────────────── -->
+  <div class="tab-pane" id="tab-kb">
+    <div class="filter-row">
+      <input type="text" id="kbSearch" placeholder="Search title or body…" style="max-width:260px">
+      <select id="kbCatFilter"><option value="">All categories</option></select>
+      <button class="btn btn-ghost" id="kbClearFilters" style="margin-left:auto">Clear filters</button>
+      <button class="btn btn-sm" id="kbSeedBtn" title="Seed KB from the built-in frontend data">⟳ Seed from frontend</button>
+      <button class="btn btn-sm" id="kbNewBtn">+ New Article</button>
+    </div>
+    <div id="kbAlert"></div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="kbCount"></div>
+    <table id="kbTable">
+      <thead><tr>
+        <th style="width:40%">Title</th>
+        <th>Category</th>
+        <th>Read Time</th>
+        <th style="width:28%">Snippet</th>
+        <th>Updated</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="kbBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
 </div><!-- /container -->
 
 <!-- ── Edit drawer ───────────────────────────────────────────── -->
@@ -904,6 +929,71 @@
   </div>
 </div>
 
+<!-- ── KB article editor drawer ──────────────────────────────── -->
+<div class="overlay" id="kbOverlay"></div>
+<div class="drawer" id="kbDrawer" style="width:620px">
+  <div class="drawer-header">
+    <div class="drawer-title-row">
+      <div class="drawer-title" id="kbDrawerTitle">Article</div>
+      <span class="drawer-mode-badge" id="kbDrawerBadge">New</span>
+    </div>
+    <button class="drawer-close" id="kbDrawerClose">&#x2715;</button>
+  </div>
+  <div class="drawer-body" id="kbDrawerBody" style="display:flex;flex-direction:column;gap:0">
+    <div class="inline-err" id="kbDrawerErr" style="display:none"></div>
+
+    <div class="field-row" style="margin-bottom:1rem">
+      <div class="field" style="margin-bottom:0">
+        <label>Category</label>
+        <select id="kdCat" data-kbfield style="width:100%"></select>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Article ID <span class="opt">(slug)</span></label>
+        <input type="text" id="kdId" data-kbfield placeholder="e.g. gs-overview" style="font-family:'SF Mono','Fira Code',monospace;font-size:.8rem">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="kdTitle" data-kbfield placeholder="Article title">
+    </div>
+
+    <div class="field-row" style="margin-bottom:1rem">
+      <div class="field" style="margin-bottom:0">
+        <label>Snippet <span class="opt">(search preview, ~120 chars)</span></label>
+        <input type="text" id="kdSnippet" data-kbfield placeholder="One-line summary shown in search results">
+      </div>
+      <div class="field" style="margin-bottom:0;flex:0 0 110px">
+        <label>Read Time</label>
+        <input type="text" id="kdReadTime" data-kbfield placeholder="3 min" style="max-width:100px">
+      </div>
+    </div>
+
+    <div class="check-row" style="margin-bottom:.75rem">
+      <input type="checkbox" id="kdAdminOnly" data-kbfield style="width:16px;height:16px;accent-color:var(--primary)">
+      <label for="kdAdminOnly">Admin-only article</label>
+    </div>
+
+    <div class="field" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+        <label style="margin-bottom:0">Body <span class="opt">(HTML)</span></label>
+        <div style="display:flex;gap:.375rem">
+          <button type="button" class="btn btn-ghost btn-sm" id="kbPreviewToggle">Preview</button>
+        </div>
+      </div>
+      <textarea id="kdBody" data-kbfield style="flex:1;min-height:320px;font-family:'SF Mono','Fira Code',monospace;font-size:.8rem;resize:vertical;line-height:1.5" placeholder="<h2>Section</h2>&#10;<p>Body content…</p>"></textarea>
+      <div id="kbPreviewPane" class="hidden" style="min-height:320px;border:1px solid var(--input-border);border-radius:6px;padding:1rem;overflow-y:auto;background:var(--bg-card)">
+        <div class="article-body" id="kbPreviewBody"></div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-footer" id="kbDrawerFooter">
+    <button class="btn" id="kbSaveBtn">Save Article</button>
+    <button class="btn btn-ghost" id="kbCancelBtn">Cancel</button>
+    <button class="btn btn-danger btn-sm" id="kbDeleteBtn" style="margin-left:auto">Delete</button>
+  </div>
+</div>
+
 <!-- ── Delete app confirm modal ──────────────────────────────── -->
 <div class="modal-wrap" id="deleteModal">
   <div class="modal">
@@ -955,7 +1045,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 });
 
 // ── Tabs ────────────────────────────────────────────────────────────
-const VALID_TABS = ['users','applications','runs','auditlog','webhooks'];
+const VALID_TABS = ['users','applications','runs','auditlog','webhooks','kb'];
 
 function activateTab(name) {
   const tabName = VALID_TABS.includes(name) ? name : 'users';
@@ -2611,8 +2701,259 @@ _pagCallbacks['users'] = p => { _usersPage = p; renderUsers(); };
 _pagCallbacks['apps']  = p => { _appsPage  = p; renderApps(); };
 _pagCallbacks['runs']  = p => { _runsPage  = p; filterAndRenderRuns(); };
 
+// ── Knowledge Base ────────────────────────────────────────────────────
+let _kbArticles    = [];
+let _kbCategories  = [];
+let _kbLoaded      = false;
+let _kbEditingId   = null;   // null = new article
+
+const KB_CAT_LABEL = {};   // id → label (populated after load)
+
+async function loadKB() {
+  try {
+    const res  = await apiFetch('/api/kb/articles');
+    const data = await res.json();
+    _kbCategories = data.categories || [];
+    _kbArticles   = data.articles   || [];
+    _kbCategories.forEach(c => { KB_CAT_LABEL[c.id] = c.label; });
+
+    // Populate category filter drop-down
+    const sel = document.getElementById('kbCatFilter');
+    sel.innerHTML = '<option value="">All categories</option>';
+    for (const c of _kbCategories) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.label;
+      sel.appendChild(o);
+    }
+
+    // Populate category select inside editor drawer
+    const kdSel = document.getElementById('kdCat');
+    kdSel.innerHTML = '';
+    for (const c of _kbCategories) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.label;
+      kdSel.appendChild(o);
+    }
+
+    renderKB();
+  } catch (e) { if (e.message !== '401') showAlert('kbAlert', 'Failed to load KB articles.'); }
+}
+
+function renderKB() {
+  const q   = document.getElementById('kbSearch').value.trim().toLowerCase();
+  const cat = document.getElementById('kbCatFilter').value;
+
+  let list = _kbArticles.filter(a => {
+    if (cat && a.category !== cat) return false;
+    if (q && !(a.title.toLowerCase().includes(q) || (a.body||'').toLowerCase().includes(q) || (a.snippet||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  document.getElementById('kbCount').textContent =
+    `${list.length} article${list.length !== 1 ? 's' : ''}${_kbArticles.length !== list.length ? ` (of ${_kbArticles.length})` : ''}`;
+
+  const tbody = document.getElementById('kbBody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No articles match.</td></tr>'; return;
+  }
+  tbody.innerHTML = '';
+  for (const a of list) {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    const catLabel = KB_CAT_LABEL[a.category] || a.category;
+    const snippet  = (a.snippet || '').slice(0, 90);
+    tr.innerHTML = `
+      <td style="font-weight:600">${esc(a.title)}${a.adminOnly ? ' <span style="font-size:.68rem;color:var(--muted);border:1px solid var(--card-border);border-radius:3px;padding:.05rem .3rem">admin</span>' : ''}</td>
+      <td style="font-size:.8rem;white-space:nowrap"><span class="badge" style="background:var(--fill);color:var(--primary)">${esc(catLabel)}</span></td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${esc(a.readTime||'')}</td>
+      <td style="font-size:.8rem;color:var(--muted)">${esc(snippet)}${snippet.length < (a.snippet||'').length ? '…' : ''}</td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${a.updated_at ? fmtDate(a.updated_at) : '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" data-kbedit="${esc(a.id)}">Edit</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function openKbDrawer(article) {
+  _kbEditingId = article ? article.id : null;
+  const isNew  = !article;
+
+  document.getElementById('kbDrawerTitle').textContent = isNew ? 'New Article' : 'Edit Article';
+  document.getElementById('kbDrawerBadge').textContent = isNew ? 'New' : 'Edit';
+  document.getElementById('kdId').value        = isNew ? '' : (article.id || '');
+  document.getElementById('kdId').readOnly     = !isNew;
+  document.getElementById('kdId').style.opacity = isNew ? '' : '.6';
+  document.getElementById('kdCat').value       = isNew ? (_kbCategories[0]?.id || '') : (article.category || '');
+  document.getElementById('kdTitle').value     = isNew ? '' : (article.title || '');
+  document.getElementById('kdSnippet').value   = isNew ? '' : (article.snippet || '');
+  document.getElementById('kdReadTime').value  = isNew ? '3 min' : (article.readTime || '3 min');
+  document.getElementById('kdAdminOnly').checked = isNew ? false : !!article.adminOnly;
+  document.getElementById('kdBody').value      = isNew ? '' : (article.body || '');
+  document.getElementById('kbDeleteBtn').classList.toggle('hidden', isNew);
+
+  // Reset preview
+  document.getElementById('kdBody').classList.remove('hidden');
+  document.getElementById('kbPreviewPane').classList.add('hidden');
+  document.getElementById('kbPreviewToggle').textContent = 'Preview';
+
+  document.getElementById('kbDrawerErr').style.display = 'none';
+  document.getElementById('kbOverlay').classList.add('open');
+  document.getElementById('kbDrawer').classList.add('open');
+}
+
+function closeKbDrawer() {
+  document.getElementById('kbOverlay').classList.remove('open');
+  document.getElementById('kbDrawer').classList.remove('open');
+  _kbEditingId = null;
+}
+
+document.getElementById('kbNewBtn').addEventListener('click', () => openKbDrawer(null));
+document.getElementById('kbDrawerClose').addEventListener('click', closeKbDrawer);
+document.getElementById('kbCancelBtn').addEventListener('click', closeKbDrawer);
+document.getElementById('kbOverlay').addEventListener('click', closeKbDrawer);
+
+document.getElementById('kbBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-kbedit]');
+  if (btn) { const art = _kbArticles.find(a => a.id === btn.dataset.kbedit); if (art) openKbDrawer(art); }
+});
+
+document.getElementById('kbPreviewToggle').addEventListener('click', () => {
+  const bodyEl   = document.getElementById('kdBody');
+  const preEl    = document.getElementById('kbPreviewPane');
+  const togBtn   = document.getElementById('kbPreviewToggle');
+  const showing  = !preEl.classList.contains('hidden');
+  if (showing) {
+    preEl.classList.add('hidden'); bodyEl.classList.remove('hidden');
+    togBtn.textContent = 'Preview';
+  } else {
+    document.getElementById('kbPreviewBody').innerHTML = bodyEl.value;
+    preEl.classList.remove('hidden'); bodyEl.classList.add('hidden');
+    togBtn.textContent = 'Edit';
+  }
+});
+
+document.getElementById('kbSaveBtn').addEventListener('click', async () => {
+  const errEl = document.getElementById('kbDrawerErr');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('kbSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const payload = {
+    id:         document.getElementById('kdId').value.trim(),
+    category:   document.getElementById('kdCat').value,
+    title:      document.getElementById('kdTitle').value.trim(),
+    snippet:    document.getElementById('kdSnippet').value.trim(),
+    read_time:  document.getElementById('kdReadTime').value.trim(),
+    admin_only: document.getElementById('kdAdminOnly').checked,
+    body:       document.getElementById('kdBody').value,
+  };
+
+  if (!payload.title) { errEl.textContent = 'Title is required.'; errEl.style.display = ''; btn.disabled = false; btn.textContent = 'Save Article'; return; }
+  if (!_kbEditingId && !payload.id) { errEl.textContent = 'Article ID is required for new articles.'; errEl.style.display = ''; btn.disabled = false; btn.textContent = 'Save Article'; return; }
+
+  try {
+    const url    = _kbEditingId ? `/api/admin/kb/articles/${_kbEditingId}` : '/api/admin/kb/articles';
+    const method = _kbEditingId ? 'PUT' : 'POST';
+    const res    = await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data   = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Save failed');
+
+    if (_kbEditingId) {
+      const idx = _kbArticles.findIndex(a => a.id === _kbEditingId);
+      if (idx >= 0) _kbArticles[idx] = data; else _kbArticles.push(data);
+    } else {
+      _kbArticles.push(data);
+    }
+    renderKB();
+    closeKbDrawer();
+    showAlert('kbAlert', `Article "${payload.title}" ${_kbEditingId ? 'updated' : 'created'}.`, 'ok');
+  } catch (err) {
+    errEl.textContent = err.message; errEl.style.display = '';
+  } finally { btn.disabled = false; btn.textContent = 'Save Article'; }
+});
+
+document.getElementById('kbDeleteBtn').addEventListener('click', async () => {
+  if (!_kbEditingId) return;
+  const art = _kbArticles.find(a => a.id === _kbEditingId);
+  if (!confirm(`Delete article "${art?.title || _kbEditingId}"? This cannot be undone.`)) return;
+
+  const btn = document.getElementById('kbDeleteBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const res = await apiFetch(`/api/admin/kb/articles/${_kbEditingId}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) { const d = await res.json(); throw new Error(d.detail || 'Delete failed'); }
+    _kbArticles = _kbArticles.filter(a => a.id !== _kbEditingId);
+    renderKB();
+    closeKbDrawer();
+    showAlert('kbAlert', 'Article deleted.', 'ok');
+  } catch (err) {
+    document.getElementById('kbDrawerErr').textContent = err.message;
+    document.getElementById('kbDrawerErr').style.display = '';
+    btn.disabled = false; btn.textContent = 'Delete';
+  }
+});
+
+// Seed button — posts the hardcoded KB from kb.html to the API
+document.getElementById('kbSeedBtn').addEventListener('click', async () => {
+  if (!confirm('This will replace all stored KB articles with the built-in frontend seed data. Continue?')) return;
+  const btn = document.getElementById('kbSeedBtn');
+  btn.disabled = true; btn.textContent = 'Seeding…';
+  try {
+    // Load kb.html in a hidden iframe, extract KB const, then seed
+    const kbRes  = await fetch('/kb.html');
+    const kbText = await kbRes.text();
+    const match  = kbText.match(/const KB\s*=\s*(\{[\s\S]*?\n\});/);
+    if (!match) throw new Error('Could not extract KB data from kb.html');
+    const kbData = (new Function(`return ${match[1]}`))(  );  // safe — local file
+
+    // Normalize article fields for the API
+    const articles = (kbData.articles || []).map(a => ({
+      id:         a.id,
+      category:   a.category,
+      title:      a.title,
+      snippet:    a.snippet || '',
+      readTime:   a.readTime || '3 min',
+      body:       a.body || '',
+      adminOnly:  !!a.adminOnly,
+    }));
+    const categories = (kbData.categories || []).map(c => ({
+      id:        c.id,
+      label:     c.label,
+      icon:      c.icon || '',
+      desc:      c.desc || '',
+      adminOnly: !!c.adminOnly,
+    }));
+
+    const res = await apiFetch('/api/admin/kb/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories, articles }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Seed failed');
+    showAlert('kbAlert', `Seeded ${data.articles} articles and ${data.categories} categories.`, 'ok');
+    await loadKB();
+  } catch (err) {
+    showAlert('kbAlert', `Seed failed: ${err.message}`);
+  } finally { btn.disabled = false; btn.textContent = '⟳ Seed from frontend'; }
+});
+
+// Filter listeners
+document.getElementById('kbSearch').addEventListener('input', renderKB);
+document.getElementById('kbCatFilter').addEventListener('change', renderKB);
+document.getElementById('kbClearFilters').addEventListener('click', () => {
+  document.getElementById('kbSearch').value = '';
+  document.getElementById('kbCatFilter').value = '';
+  renderKB();
+});
+
+// Lazy-load KB tab
+document.querySelector('[data-tab="kb"]').addEventListener('click', () => {
+  if (!_kbLoaded) { _kbLoaded = true; loadKB(); }
+});
+
 // ── Init ─────────────────────────────────────────────────────────────
 loadAll();
+if (_initialTab === 'kb') { _kbLoaded = true; loadKB(); }
 </script>
 </body>
 </html>

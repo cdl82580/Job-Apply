@@ -1668,6 +1668,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (_) {}
 
+  // Try to load KB from API; fall back to hardcoded KB const if empty or unavailable
+  try {
+    const res = await fetch('/api/kb/articles', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.articles && data.articles.length > 0) {
+        KB.articles   = data.articles;
+        KB.categories = data.categories || KB.categories;
+      }
+    }
+  } catch (_) {}
+
   buildHomeCards();
   setupSearch();
   setupTheme();

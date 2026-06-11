@@ -59,6 +59,7 @@ from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
 from routers.admin import router as admin_router
 from routers.calendar import router as calendar_router
+from routers.kb import router as kb_router
 try:
     from apply import (
         DEFAULT_MODEL,
@@ -413,6 +414,7 @@ app.include_router(companies_router)
 app.include_router(auth_google_router)
 app.include_router(admin_router)
 app.include_router(calendar_router)
+app.include_router(kb_router)
 
 
 @app.on_event("startup")
