@@ -250,7 +250,7 @@ async def seed_kb_from_file(request: Request):
 
     node_script = r"""
 const fs = require('fs');
-const html = fs.readFileSync(process.argv[1], 'utf8');
+const html = fs.readFileSync(process.argv[2], 'utf8');
 const start = html.indexOf('const KB = {');
 if (start === -1) { console.error('KB const not found'); process.exit(1); }
 const sub = html.slice(start + 'const KB = '.length);
