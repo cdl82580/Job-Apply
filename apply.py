@@ -617,11 +617,67 @@ def _extract_xml_field(xml: str, prefix: str) -> str | None:
     return first_text
 
 
+def _extract_xml_paragraph_after_heading(xml: str, heading_text: str) -> str | None:
+    """Return the first non-empty <w:p>...</w:p> block that follows the paragraph
+    containing *heading_text*.  Used for fields whose content may drift between
+    master versions (e.g. Professional Summary) so we anchor on the structural
+    position, not the text content.
+    """
+    hm = re.search(r'<w:t(?:\s[^>]*)?>' + re.escape(heading_text) + r'</w:t>', xml)
+    if not hm:
+        return None
+    pos = hm.end()
+    for pm in re.finditer(r'<w:p[\s>].*?</w:p>', xml[pos:], re.S):
+        para = pm.group(0)
+        # Skip empty / spacer paragraphs that have no visible text
+        if re.search(r'<w:t[^>]*>[^<\s]', para):
+            return para
+    return None
+
+
+# Canonical paragraph and run properties for the Professional Summary.
+# Hardcoded from master.docx so output is consistently styled regardless of
+# what formatting the user's uploaded master carries.
+_SUMMARY_PPR = (
+    '<w:pPr>'
+    '<w:spacing w:before="60" w:after="80"/>'
+    '<w:jc w:val="both"/>'
+    '</w:pPr>'
+)
+_SUMMARY_RPR = (
+    '<w:rPr>'
+    '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>'
+    '<w:color w:val="111827"/>'
+    '<w:sz w:val="19"/>'
+    '<w:szCs w:val="19"/>'
+    '</w:rPr>'
+)
+
+
+def _build_summary_paragraph(old_para: str, new_text: str) -> str:
+    """Construct a replacement summary <w:p> from the original paragraph.
+
+    Preserves the opening tag (paraId/rsid attributes) so Word doesn't see a
+    new paragraph, then replaces all runs with a single clean run using the
+    canonical formatting from master.docx.
+    """
+    open_tag_m = re.match(r'<w:p[^>]*>', old_para)
+    open_tag = open_tag_m.group(0) if open_tag_m else '<w:p>'
+    escaped_text = _xml_escape(new_text)
+    return (
+        f'{open_tag}'
+        f'{_SUMMARY_PPR}'
+        f'<w:r>{_SUMMARY_RPR}'
+        f'<w:t xml:space="preserve">{escaped_text}</w:t>'
+        f'</w:r>'
+        f'</w:p>'
+    )
+
+
 # Stable unique prefixes for every field that changes on every run.
 # These are the values in master.docx — they're always the `old` side.
 # IMPORTANT: use the entity-escaped form (&amp; not &) to match raw XML.
 _MASTER_TAGLINE_PREFIX    = "Delivering AI-Powered Integrations"
-_MASTER_SUMMARY_PREFIX    = "Enterprise technology leader with 12+ years"
 _MASTER_SUBTITLE_PREFIX   = "AI Solutions &amp; Integration Engineer"
 _MASTER_EHBULLET_PREFIXES = [
     "Architected and delivered AI-powered proof-of-concepts",
@@ -658,43 +714,51 @@ _MASTER_COMP_PREFIXES = [
 ]
 
 
-def _build_replacement_ops(xml: str, analysis: dict) -> list[tuple[str, str]]:
-    """Build (old, new) pairs for every section that changes each run.
+def _build_replacement_ops(xml: str, analysis: dict) -> list[tuple[str, str, str]]:
+    """Build (old, new, label) triples for every section that changes each run.
 
-    *old* is the exact substring extracted from the raw XML (handles entity
-    escaping and page-break splits automatically).
-    *new* is the XML-escaped replacement text from the analysis dict.
+    *old* is the exact substring extracted from the raw XML.
+    *new* is the replacement XML (text-escaped, or a full paragraph element).
+    *label* names the field for logging — printed on NOT FOUND so failures are
+    immediately identifiable.
 
     No Claude call — no guessing.  If a field can't be found the entry is
     still emitted with old='' so the caller can report it as NOT FOUND.
     """
-    ops: list[tuple[str, str]] = []
+    ops: list[tuple[str, str, str]] = []
 
-    def op(prefix: str, new_text: str) -> None:
+    def op(prefix: str, new_text: str, label: str) -> None:
         old = _extract_xml_field(xml, prefix)
-        ops.append((old or '', _xml_escape(new_text)))
+        ops.append((old or '', _xml_escape(new_text), label))
 
     # Tagline
-    op(_MASTER_TAGLINE_PREFIX, analysis['tagline'])
+    op(_MASTER_TAGLINE_PREFIX, analysis['tagline'], 'tagline')
 
-    # Summary
-    op(_MASTER_SUMMARY_PREFIX, analysis['summary'])
+    # Summary — structural extraction: anchor on heading position, not content.
+    # The user's uploaded master may have a different opening sentence than the
+    # repo master, so a content-prefix match is fragile here.
+    old_para = _extract_xml_paragraph_after_heading(xml, 'PROFESSIONAL SUMMARY')
+    if old_para:
+        new_para = _build_summary_paragraph(old_para, analysis['summary'])
+        ops.append((old_para, new_para, 'summary'))
+    else:
+        ops.append(('', _xml_escape(analysis['summary']), 'summary'))
 
     # Competency cells — analysis['competencies'] is a flat list in row-major
     # order; zip with the master prefixes so we always replace the right cell.
-    for prefix, new_comp in zip(_MASTER_COMP_PREFIXES, analysis['competencies']):
-        op(prefix, new_comp)
+    for i, (prefix, new_comp) in enumerate(zip(_MASTER_COMP_PREFIXES, analysis['competencies'])):
+        op(prefix, new_comp, f'comp{i}')
 
     # eHealth subtitle bar
-    op(_MASTER_SUBTITLE_PREFIX, analysis['ehealth_title_subtitle'])
+    op(_MASTER_SUBTITLE_PREFIX, analysis['ehealth_title_subtitle'], 'ehealth_subtitle')
 
     # eHealth bullets
-    for prefix, new_bullet in zip(_MASTER_EHBULLET_PREFIXES, analysis['ehealth_bullets']):
-        op(prefix, new_bullet)
+    for i, (prefix, new_bullet) in enumerate(zip(_MASTER_EHBULLET_PREFIXES, analysis['ehealth_bullets'])):
+        op(prefix, new_bullet, f'eh_bullet{i}')
 
     # HSP Group bullets
-    for prefix, new_bullet in zip(_MASTER_HSPBULLET_PREFIXES, analysis['hsp_bullets']):
-        op(prefix, new_bullet)
+    for i, (prefix, new_bullet) in enumerate(zip(_MASTER_HSPBULLET_PREFIXES, analysis['hsp_bullets'])):
+        op(prefix, new_bullet, f'hsp_bullet{i}')
 
     return ops
 
@@ -717,14 +781,14 @@ def step4_apply_edits(
     total_success = 0
     total_attempted = 0
 
-    for old, safe_new in _build_replacement_ops(xml, analysis):
+    for old, safe_new, label in _build_replacement_ops(xml, analysis):
         total_attempted += 1
         if old and old in xml:
             xml = xml.replace(old, safe_new, 1)
             total_success += 1
-            config.progress(f"  ✓ {old[:70]!r}...")
+            config.progress(f"  ✓ [{label}] {old[:60]!r}...")
         else:
-            config.progress(f"  ✗ NOT FOUND: {old[:70]!r}...")
+            config.progress(f"  ✗ NOT FOUND: [{label}] {old[:60]!r}...")
 
     if colors:
         xml = apply_brand_colors(xml, colors)
