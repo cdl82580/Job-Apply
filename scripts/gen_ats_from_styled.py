@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""
+Generate an ATS-optimized resume DOCX from an already-styled resume DOCX.
+
+Reads content verbatim from the styled DOCX's XML so there is no drift
+between the two documents.
+
+Usage:
+    python3 scripts/gen_ats_from_styled.py <styled.docx> <output_ats.docx>
+"""
+
+import os
+import re
+import subprocess
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Optional
+
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+
+
+def w(tag: str) -> str:
+    return f"{{{W}}}{tag}"
+
+
+def get_text(elem: ET.Element) -> str:
+    """Concatenate all w:t text under elem, preserving xml:space='preserve'."""
+    parts = []
+    for t in elem.iter(w("t")):
+        parts.append(t.text or "")
+    return "".join(parts)
+
+
+def is_bold(para: ET.Element) -> bool:
+    rpr = para.find(f".//{w('rPr')}/{w('b')}")
+    return rpr is not None
+
+
+def is_italic(para: ET.Element) -> bool:
+    rpr = para.find(f".//{w('rPr')}/{w('i')}")
+    return rpr is not None
+
+
+def has_bottom_border(para: ET.Element) -> bool:
+    return para.find(f".//{w('pBdr')}/{w('bottom')}") is not None
+
+
+def is_bullet(para: ET.Element) -> bool:
+    return para.find(f".//{w('numPr')}") is not None
+
+
+def is_section_header(para: ET.Element) -> bool:
+    """Bold paragraph with a bottom border — section headers, color-agnostic."""
+    text = get_text(para).strip()
+    return bool(text) and is_bold(para) and has_bottom_border(para)
+
+
+def get_style(para: ET.Element) -> Optional[str]:
+    pstyle = para.find(f".//{w('pStyle')}")
+    if pstyle is not None:
+        return pstyle.get(w("val"))
+    return None
+
+
+def parse_xml(docx_path: Path) -> dict:
+    """Unzip the DOCX and parse word/document.xml to extract all resume content."""
+    with zipfile.ZipFile(docx_path) as zf:
+        xml_bytes = zf.read("word/document.xml")
+
+    root = ET.fromstring(xml_bytes)
+    body = root.find(w("body"))
+
+    # Collect top-level body children (paragraphs and tables)
+    children = list(body)
+
+    # ── State machine ────────────────────────────────────────────────────────
+    # We walk through and identify:
+    #   tagline, summary, competencies, experience jobs, education, certs
+
+    result = {
+        "tagline": "",
+        "summary": "",
+        "competencies": [],
+        "jobs": [],            # list of {company, title, dates, bullets}
+        "education": [],       # list of {degree, school}
+        "certifications": [],
+    }
+
+    section = "HEADER"
+    current_job = None
+
+    for child in children:
+        tag = child.tag
+
+        if tag == w("p"):
+            text = get_text(child).strip()
+            if not text:
+                continue
+
+            # Section header detection
+            if is_section_header(child):
+                if current_job:
+                    result["jobs"].append(current_job)
+                    current_job = None
+                if "PROFESSIONAL SUMMARY" in text:
+                    section = "SUMMARY"
+                elif "CORE COMPETENCIES" in text:
+                    section = "COMPETENCIES"
+                elif "PROFESSIONAL EXPERIENCE" in text:
+                    section = "EXPERIENCE"
+                elif "EDUCATION" in text:
+                    section = "EDUCATION"
+                elif "CERTIFICATIONS" in text:
+                    section = "CERTIFICATIONS"
+                continue
+
+            # Tagline: in HEADER, non-bold paragraph with a bottom border that does
+            # NOT contain "|" — the contact bar also has a border but uses "|"
+            # as a field separator, so this distinguishes the two reliably.
+            if (section == "HEADER" and has_bottom_border(child)
+                    and not is_bold(child) and "|" not in text):
+                result["tagline"] = " ".join(text.split())
+                continue
+
+            # Summary
+            if section == "SUMMARY":
+                result["summary"] = " ".join(text.split())
+
+            # Experience bullets
+            elif section == "EXPERIENCE" and is_bullet(child):
+                if current_job is not None:
+                    current_job["bullets"].append(" ".join(text.split()))
+
+            # Education
+            elif section == "EDUCATION":
+                # Each education paragraph: "Degree — School, Location"
+                # We store the whole line and split on " — " or " – "
+                result["education"].append(" ".join(text.split()))
+
+            # Certifications
+            elif section == "CERTIFICATIONS":
+                if is_bullet(child):
+                    result["certifications"].append(" ".join(text.split()))
+
+        elif tag == w("tbl"):
+            rows = child.findall(w("tr"))
+
+            # ── Competency table: 9 columns (5 data + 4 spacers) ─────────────
+            # Identified by having exactly 9 grid columns — color-agnostic
+            grid_cols = child.findall(f".//{w('gridCol')}")
+
+            if section == "COMPETENCIES" or len(grid_cols) == 9:
+                section = "COMPETENCIES"
+                for row in rows:
+                    cells = row.findall(w("tc"))
+                    for i, cell in enumerate(cells):
+                        # Skip spacer cells (width=100)
+                        tcw = cell.find(f".//{w('tcW')}")
+                        if tcw is not None and tcw.get(w("w")) == "100":
+                            continue
+                        cell_text = get_text(cell).strip()
+                        if cell_text:
+                            result["competencies"].append(" ".join(cell_text.split()))
+                continue
+
+            # ── Company header table: 2 columns ──────────────────────────────
+            # The left cell has company name (bold) + title (italic)
+            # The right cell has dates + location
+            if section == "EXPERIENCE" and len(rows) == 1 and len(rows[0].findall(w("tc"))) == 2:
+                row = rows[0]
+                cells = row.findall(w("tc"))
+                left_cell = cells[0]
+                right_cell = cells[1]
+
+                # Save previous job
+                if current_job:
+                    result["jobs"].append(current_job)
+
+                # Extract company and title from left cell paragraphs
+                company = ""
+                title = ""
+                left_paras = left_cell.findall(w("p"))
+                for lp in left_paras:
+                    lp_text = get_text(lp).strip()
+                    if not lp_text:
+                        continue
+                    if is_bold(lp):
+                        company = " ".join(lp_text.split())
+                    elif is_italic(lp):
+                        title = " ".join(lp_text.split())
+
+                # Extract dates from right cell (first non-empty paragraph)
+                dates = ""
+                right_paras = right_cell.findall(w("p"))
+                for rp in right_paras:
+                    rp_text = get_text(rp).strip()
+                    if rp_text and not is_italic(rp):
+                        dates = " ".join(rp_text.split())
+                        break
+
+                current_job = {
+                    "company": company,
+                    "title": title,
+                    "dates": dates,
+                    "bullets": [],
+                }
+
+    # Flush last job
+    if current_job:
+        result["jobs"].append(current_job)
+
+    return result
+
+
+def escape_js(s: str) -> str:
+    s = s.replace("\\", "\\\\")
+    s = s.replace("`", "\\`")
+    s = s.replace("${", "\\${")
+    s = s.replace('"', '\\"')
+    return s
+
+
+def tr(text: str, bold: bool = False, italic: bool = False, size: int = 22) -> str:
+    cleaned = " ".join(text.split())
+    escaped = escape_js(cleaned)
+    props = [f'text: "{escaped}"', 'font: "Calibri"', f'size: {size}', 'color: "000000"']
+    if bold:
+        props.append("bold: true")
+    if italic:
+        props.append("italic: true")
+    return "new TextRun({ " + ", ".join(props) + " })"
+
+
+def build_ats(data: dict, output_path: Path):
+    paras = []
+
+    def add(children_strs, before=0, after=80, left=0):
+        spacing = f"before: {before}, after: {after}"
+        indent = f", indent: {{ left: {left} }}" if left else ""
+        paras.append(
+            f"      new Paragraph({{ spacing: {{ {spacing} }}{indent}, "
+            f"children: [{', '.join(children_strs)}] }})"
+        )
+
+    def heading(text):
+        add([tr(text, bold=True, size=24)], before=240, after=60)
+
+    def body(text, after=80):
+        add([tr(text)], after=after)
+
+    def bullet(text):
+        add([tr("•  " + text)], after=40, left=360)
+
+    def job_header(company_name, title, dates):
+        children = [tr(company_name, bold=True)]
+        if dates:
+            children.append(tr("  |  " + dates))
+        add(children, before=200, after=0)
+        if title:
+            add([tr(title, italic=True)], after=40)
+
+    # Name + contact
+    add([tr("COREY LAVERDIERE", bold=True, size=40)], after=0)
+    add([tr(
+        "978-790-4272  |  cdl825@gmail.com  |  Sterling, MA  |"
+        "  linkedin.com/in/coreydlaverdiere  |  Open to Remote",
+        size=20,
+    )], after=120)
+
+    # Tagline
+    add([tr(data["tagline"], italic=True)], after=160)
+
+    # Summary
+    heading("Professional Summary")
+    body(data["summary"], after=0)
+
+    # Competencies
+    heading("Core Competencies")
+    comps = data["competencies"]
+    for i in range(0, len(comps), 5):
+        body(" | ".join(comps[i:i+5]), after=40)
+
+    # Experience
+    heading("Professional Experience")
+    for job in data["jobs"]:
+        job_header(job["company"], job["title"], job["dates"])
+        for b in job["bullets"]:
+            bullet(b)
+
+    # Education — parse "Degree — School" or keep as-is
+    heading("Education")
+    for edu_line in data["education"]:
+        # Split on em-dash or en-dash to separate degree from school
+        parts = re.split(r"\s+[—–]\s+", edu_line, maxsplit=1)
+        if len(parts) == 2:
+            children = [tr(parts[0], bold=True), tr("  —  " + parts[1])]
+        else:
+            children = [tr(edu_line, bold=True)]
+        add(children, before=60, after=40)
+
+    # Certifications
+    heading("Certifications")
+    for cert in data["certifications"]:
+        body(cert, after=40)
+
+    children_js = ",\n".join(paras)
+    out_str = str(output_path).replace("\\", "/")
+
+    js = f"""\
+const {{ Document, Packer, Paragraph, TextRun }} = require('docx');
+const fs = require('fs');
+
+const doc = new Document({{
+  styles: {{ default: {{ document: {{ run: {{ font: "Calibri", size: 22 }} }} }} }},
+  sections: [{{
+    properties: {{
+      page: {{
+        size: {{ width: 12240, height: 15840 }},
+        margin: {{ top: 720, right: 1080, bottom: 720, left: 1080 }}
+      }}
+    }},
+    children: [
+{children_js}
+    ]
+  }}]
+}});
+
+Packer.toBuffer(doc).then(buffer => {{
+  fs.writeFileSync('{out_str}', buffer);
+  console.log('ATS resume written to {out_str}');
+}});
+"""
+
+    js_path = output_path.parent / f"_ats_gen_{os.urandom(4).hex()}.js"
+    js_path.write_text(js, encoding="utf-8")
+
+    try:
+        result = subprocess.run(
+            ["node", str(js_path)], capture_output=True, text=True
+        )
+    finally:
+        js_path.unlink(missing_ok=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Node error generating ATS resume:\n{result.stderr}")
+
+    print(result.stdout.strip())
+
+
+def main():
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <styled.docx> <output_ats.docx>")
+        sys.exit(1)
+
+    styled = Path(sys.argv[1])
+    output = Path(sys.argv[2])
+
+    if not styled.exists():
+        print(f"Error: {styled} not found")
+        sys.exit(1)
+
+    output.parent.mkdir(exist_ok=True)
+
+    print(f"Parsing {styled}...")
+    data = parse_xml(styled)
+
+    print(f"  Tagline   : {data['tagline'][:60]}...")
+    print(f"  Summary   : {data['summary'][:60]}...")
+    print(f"  Comps     : {len(data['competencies'])} cells")
+    print(f"  Jobs      : {len(data['jobs'])} ({[j['company'] for j in data['jobs']]})")
+    print(f"  Education : {len(data['education'])} entries")
+    print(f"  Certs     : {len(data['certifications'])} entries")
+
+    try:
+        build_ats(data, output)
+    except RuntimeError as exc:
+        print(exc)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

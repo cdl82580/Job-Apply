@@ -140,6 +140,33 @@ class InterviewPrepResult:
     run_dir:    Path
     folder_url: str | None = None
 
+
+@dataclass
+class OptimizeConfig:
+    """Settings for optimizing an existing run's documents in place."""
+    folder_id:             str                    # Drive run folder to optimize
+    instruction:           str                    # user's free-text optimization prompt
+    company:               str
+    role:                  str
+    optimize_resume:       bool                   = True
+    optimize_cover_letter: bool                   = True
+    model:                 str                    = DEFAULT_MODEL
+    progress:              Callable[[str], None]  = field(default=print)
+    user_id:               str | None             = None
+    user_label:            str | None             = None
+
+
+@dataclass
+class OptimizeResult:
+    """Paths and metadata produced by a completed optimize run."""
+    run_dir:              Path
+    folder_url:           str | None = None
+    resume_path:          Path | None = None
+    ats_path:             Path | None = None
+    cover_letter_path:    Path | None = None
+    change_summary:       str = ""
+    replacements_warning: str | None = None
+
 # ---------------------------------------------------------------------------
 # Anthropic client — lazy init so import never fails on missing API key
 # ---------------------------------------------------------------------------
@@ -1375,6 +1402,80 @@ def _upload_single_to_drive(
 
 
 # ---------------------------------------------------------------------------
+# Drive: per-file helpers (used by optimize_run)
+# ---------------------------------------------------------------------------
+
+def _gdrive_query_escape(name: str) -> str:
+    """Escape a value for use inside a Drive API query string literal."""
+    return name.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _gdrive_list_files(service, folder_id: str) -> list[dict]:
+    """Return [{id, name}] for all non-trashed files in a Drive folder."""
+    return service.files().list(
+        q=f"'{folder_id}' in parents and trashed=false",
+        fields="files(id, name)",
+        pageSize=100,
+    ).execute().get("files", [])
+
+
+def _gdrive_download_file(service, file_id: str) -> bytes:
+    """Download a Drive file's content as bytes."""
+    content = service.files().get_media(fileId=file_id).execute()
+    return content if isinstance(content, bytes) else str(content).encode("utf-8")
+
+
+def _gdrive_upsert_file(
+    service,
+    folder_id: str,
+    name: str,
+    local_path: Path,
+    mime: str = _MIME_DOCX,
+) -> str:
+    """Upload a file into a Drive folder, replacing the existing file's content
+    in place when a file with the same name exists (keeps the file ID stable so
+    existing share links continue to work). Returns the file ID."""
+    from googleapiclient.http import MediaFileUpload
+
+    existing = service.files().list(
+        q=(
+            f"name='{_gdrive_query_escape(name)}' and '{folder_id}' in parents "
+            "and trashed=false"
+        ),
+        fields="files(id)",
+        pageSize=1,
+    ).execute().get("files", [])
+
+    media = MediaFileUpload(str(local_path), mimetype=mime, resumable=False)
+    if existing:
+        return service.files().update(
+            fileId=existing[0]["id"], media_body=media, fields="id",
+        ).execute()["id"]
+    return service.files().create(
+        body={"name": name, "parents": [folder_id]},
+        media_body=media,
+        fields="id",
+    ).execute()["id"]
+
+
+def _gdrive_delete_by_name(service, folder_id: str, name: str) -> None:
+    """Best-effort delete of all files with this name in a Drive folder."""
+    try:
+        files = service.files().list(
+            q=(
+                f"name='{_gdrive_query_escape(name)}' and '{folder_id}' in parents "
+                "and trashed=false"
+            ),
+            fields="files(id)",
+            pageSize=10,
+        ).execute().get("files", [])
+        for f in files:
+            service.files().delete(fileId=f["id"]).execute()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Drive: list run folders + fetch job posting (used by /api/gdrive/runs)
 # ---------------------------------------------------------------------------
 
@@ -2403,6 +2504,403 @@ Return ONLY valid JSON. No preamble, no markdown fences.
         run_dir=run_dir,
         folder_url=folder_url,
     )
+
+
+# ---------------------------------------------------------------------------
+# Optimize Run — targeted edits to an existing run's documents
+# ---------------------------------------------------------------------------
+
+_OPTIMIZE_RESUME_SYSTEM = """\
+You are a resume editor making TARGETED edits to an already-tailored resume.
+You receive the resume's editable fields as a JSON map of field-id -> current text,
+the job description (when available), and the user's instruction.
+
+Rules:
+- Only include fields you are actually changing. Leave everything else alone.
+- Keep each replacement within roughly 20% of the current text's length — the
+  resume must stay a single page.
+- The tagline must remain one short line of similar length to the current one.
+- Never invent experience, employers, dates, certifications, or numbers that are
+  not present in the current resume.
+- Preserve the candidate's voice: direct, specific, first-person, no corporate
+  filler. No "passion for", "leverage", "synergy", "results-driven".
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "edits": [{"field": "<field id from the map>", "new": "<replacement text>"}],
+  "change_summary": "<2-3 sentences describing what changed and why>"
+}
+
+No preamble, no markdown fences."""
+
+_OPTIMIZE_COVER_SYSTEM = """\
+You are editing an existing cover letter according to the user's instruction.
+You receive the current body paragraphs, the job description (when available),
+and the instruction.
+
+Rules:
+- Return exactly 5 body paragraphs.
+- Keep any paragraph the user did not ask about as close to the original as possible.
+- Preserve the original voice: first person, direct, no corporate filler. Never
+  start a paragraph with "I am excited to...". No "passion for", "leverage",
+  "synergy", "results-driven".
+- Never invent facts, numbers, or experience not present in the current letter
+  or the job description.
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "paragraphs": ["<p1>", "<p2>", "<p3>", "<p4>", "<p5>"],
+  "change_summary": "<1-2 sentences describing what changed>"
+}
+
+No preamble, no markdown fences."""
+
+
+def _parse_claude_json(raw: str) -> dict:
+    """Strip optional markdown fences and parse Claude's JSON response."""
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$",     "", raw.strip())
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise WorkflowError(f"Failed to parse Claude JSON: {e}\n\nRaw:\n{raw[:2000]}")
+
+
+def _build_resume_field_map(data: dict) -> dict[str, str]:
+    """Flatten parse_xml() output into editable field-id -> current-text pairs."""
+    fields: dict[str, str] = {}
+    if data.get("tagline"):
+        fields["tagline"] = data["tagline"]
+    if data.get("summary"):
+        fields["summary"] = data["summary"]
+    for i, comp in enumerate(data.get("competencies", []), start=1):
+        fields[f"competency_{i}"] = comp
+    for j, job in enumerate(data.get("jobs", []), start=1):
+        if job.get("title"):
+            fields[f"job{j}_title"] = job["title"]
+        for k, bullet in enumerate(job.get("bullets", []), start=1):
+            fields[f"job{j}_bullet{k}"] = bullet
+    return fields
+
+
+def _entity_safe_prefix(escaped: str, limit: int = 60) -> str:
+    """Truncate entity-escaped text without cutting through an entity."""
+    prefix = escaped[:limit]
+    amp = prefix.rfind("&")
+    if amp != -1 and ";" not in prefix[amp:]:
+        prefix = prefix[:amp]
+    return prefix
+
+
+def _apply_optimize_edits(
+    xml: str,
+    edits: list[dict],
+    field_map: dict[str, str],
+    progress: Callable[[str], None],
+) -> tuple[str, int, int]:
+    """Apply Claude's field-level edits to the raw document XML.
+
+    Claude only names fields and replacement text — the `old` search string is
+    always derived here from the field's current text (entity-escaped, with
+    page-break splits handled by _extract_xml_field), never guessed by Claude.
+    Returns (xml, succeeded, attempted).
+    """
+    succeeded = 0
+    attempted = 0
+
+    for edit in edits:
+        field = (edit.get("field") or "").strip()
+        new   = " ".join((edit.get("new") or "").split())
+        attempted += 1
+
+        cur = field_map.get(field)
+        if not cur or not new:
+            progress(f"  ✗ Skipped: unknown field or empty replacement ({field!r})")
+            continue
+        if new == cur:
+            progress(f"  – {field}: unchanged, skipping")
+            continue
+        if field == "tagline" and not tagline_fits(new):
+            progress(f"  ✗ Skipped tagline edit: replacement does not fit on one line")
+            continue
+
+        escaped = _xml_escape(cur)
+        # Try the full text first, then progressively shorter prefixes — a
+        # page-break split can land anywhere, so shorter prefixes catch fields
+        # whose first <w:t> segment is short. 32 chars is the floor to keep
+        # prefixes unique within the document.
+        old = None
+        for limit in (len(escaped), 60, 32):
+            old = _extract_xml_field(xml, _entity_safe_prefix(escaped, limit))
+            if old is not None:
+                break
+        if old is None and xml.count(escaped) == 1:
+            old = escaped
+
+        if not old or old not in xml:
+            progress(f"  ✗ NOT FOUND in document XML: {field} ({cur[:60]!r}...)")
+            continue
+
+        xml = xml.replace(old, _xml_escape(new), 1)
+        succeeded += 1
+        progress(f"  ✓ {field}: {new[:70]!r}...")
+
+    return xml, succeeded, attempted
+
+
+def _parse_cover_letter_text(plain: str) -> dict:
+    """Parse pandoc-plain output of a generated cover letter into its parts.
+
+    The letter layout is fixed by COVER_LETTER_JS_TEMPLATE: name, contact bar,
+    date, addressee, company, "Re:" line, "Dear ...", body paragraphs,
+    "Sincerely,", signature, contact. Returns {contact_name, paragraphs}.
+    """
+    blocks = [" ".join(b.split()) for b in re.split(r"\n\s*\n", plain.strip())]
+    blocks = [b for b in blocks if b]
+
+    dear_idx = next((i for i, b in enumerate(blocks) if b.startswith("Dear ")), None)
+    if dear_idx is None:
+        raise WorkflowError("Could not parse cover letter: no 'Dear ...' salutation found")
+    sinc_idx = next(
+        (i for i in range(dear_idx + 1, len(blocks)) if blocks[i].startswith("Sincerely")),
+        None,
+    )
+    if sinc_idx is None:
+        raise WorkflowError("Could not parse cover letter: no 'Sincerely,' sign-off found")
+
+    paragraphs = blocks[dear_idx + 1:sinc_idx]
+    if not 1 <= len(paragraphs) <= 8:
+        raise WorkflowError(
+            f"Could not parse cover letter: expected 1-8 body paragraphs, found {len(paragraphs)}"
+        )
+
+    re_idx = next((i for i, b in enumerate(blocks) if b.startswith("Re: ")), None)
+    contact_name = blocks[re_idx - 2] if re_idx is not None and re_idx >= 2 else "Hiring Team"
+
+    return {"contact_name": contact_name, "paragraphs": paragraphs}
+
+
+def optimize_run(config: OptimizeConfig) -> OptimizeResult:
+    """Optimize an existing run's documents in place, per a user instruction.
+
+    Downloads the tailored resume and/or cover letter from the run's Drive
+    folder, applies targeted Claude-driven edits, and overwrites the Drive
+    files (same names, same file IDs). The ATS resume is regenerated from the
+    optimized styled resume whenever the resume is edited.
+
+    Raises WorkflowError on any unrecoverable error — nothing is uploaded
+    unless the edit + validation pipeline for that document succeeded.
+    """
+    from scripts.gen_ats_from_styled import parse_xml as _parse_styled, build_ats as _build_ats
+
+    wfc = WorkflowConfig(
+        model=config.model,
+        progress=config.progress,
+        user_id=config.user_id,
+        user_label=config.user_label,
+    )
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise WorkflowError("ANTHROPIC_API_KEY environment variable not set")
+    if not config.optimize_resume and not config.optimize_cover_letter:
+        raise WorkflowError("Nothing to optimize — select the resume and/or the cover letter")
+
+    config.progress(f"\n\U0001f527 Optimize Run")
+    config.progress(f"   Company : {config.company}")
+    config.progress(f"   Role    : {config.role}")
+    config.progress(f"   Ask     : {config.instruction[:200]}")
+
+    # ── Step 1: connect to Drive and inventory the run folder ───────────
+    print_step(1, "Reading the Run Folder", wfc)
+    service = _gdrive_service(wfc)
+    if service is None:
+        raise WorkflowError("Google Drive is not configured — cannot optimize an existing run")
+
+    try:
+        meta = service.files().get(
+            fileId=config.folder_id, fields="name, webViewLink",
+        ).execute()
+    except Exception as exc:
+        raise WorkflowError(f"Could not access the Drive run folder: {exc}")
+    folder_name = meta.get("name", "run")
+    folder_url  = meta.get("webViewLink")
+    config.progress(f"  ✓ Drive folder: {folder_name}")
+
+    files = _gdrive_list_files(service, config.folder_id)
+    styled = next(
+        (f for f in files
+         if re.match(r"^Resume_.*\.docx$", f["name"]) and not f["name"].endswith("_ATS.docx")),
+        None,
+    )
+    ats   = next((f for f in files if f["name"].endswith("_ATS.docx")), None)
+    cover = next((f for f in files if re.match(r"^CoverLetter_.*\.docx$", f["name"])), None)
+
+    if config.optimize_resume and styled is None:
+        raise WorkflowError(
+            f"No tailored resume (Resume_*.docx) found in Drive folder '{folder_name}'"
+        )
+    if config.optimize_cover_letter and cover is None:
+        raise WorkflowError(
+            f"No cover letter (CoverLetter_*.docx) found in Drive folder '{folder_name}'"
+        )
+
+    jd = get_gdrive_job_posting(config.folder_id, wfc) or ""
+    config.progress(
+        f"  ✓ Job description: {'found (' + str(len(jd)) + ' chars)' if jd else 'not found — optimizing without it'}"
+    )
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    if config.user_id:
+        run_dir = OUTPUT_DIR / safe_filename(config.user_id) / safe_filename(folder_name)
+    else:
+        run_dir = OUTPUT_DIR / safe_filename(folder_name)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    src_dir    = run_dir / f"_optimize_src_{os.urandom(4).hex()}"
+    unpack_dir = run_dir / f"unpacked_opt_{os.urandom(4).hex()}"
+    src_dir.mkdir()
+
+    result = OptimizeResult(run_dir=run_dir, folder_url=folder_url)
+    summaries: list[str] = []
+    jd_block = f"Job Description:\n---\n{jd[:6000]}\n---\n\n" if jd else ""
+
+    try:
+        # ── Step 2: resume ───────────────────────────────────────────────
+        if config.optimize_resume:
+            print_step(2, "Optimizing Resume", wfc)
+            src_docx = src_dir / styled["name"]
+            src_docx.write_bytes(_gdrive_download_file(service, styled["id"]))
+            config.progress(f"  ✓ Downloaded {styled['name']}")
+
+            data      = _parse_styled(src_docx)
+            field_map = _build_resume_field_map(data)
+            jobs_legend = "\n".join(
+                f"  job{j}: {job.get('company', '?')} ({job.get('dates', '')})"
+                for j, job in enumerate(data.get("jobs", []), start=1)
+            )
+
+            raw = claude(
+                _OPTIMIZE_RESUME_SYSTEM,
+                f"{jd_block}"
+                f"User instruction:\n---\n{config.instruction}\n---\n\n"
+                f"Jobs legend (read-only context for the field ids):\n{jobs_legend}\n\n"
+                f"Editable fields (field id -> current text):\n"
+                f"{json.dumps(field_map, indent=2)}",
+                max_tokens=4096,
+                config=wfc,
+            )
+            parsed = _parse_claude_json(raw)
+            edits  = parsed.get("edits", [])
+            if not edits:
+                raise WorkflowError(
+                    "Claude proposed no resume edits for this instruction — "
+                    "try a more specific prompt"
+                )
+            if parsed.get("change_summary"):
+                summaries.append(f"Resume: {parsed['change_summary']}")
+
+            run(
+                ["python3", str(SCRIPTS_DIR / "unpack.py"), str(src_docx), str(unpack_dir) + "/"],
+                config=wfc,
+            )
+            xml_path = unpack_dir / "word" / "document.xml"
+            xml = xml_path.read_text(encoding="utf-8")
+
+            xml, ok, total = _apply_optimize_edits(xml, edits, field_map, config.progress)
+            config.progress(f"\n  Result: {ok}/{total} replacements succeeded")
+            if ok == 0:
+                raise WorkflowError(
+                    "None of the proposed edits matched the document — "
+                    "nothing was changed in Drive"
+                )
+            if ok < total:
+                result.replacements_warning = (
+                    f"Only {ok}/{total} resume edits could be applied — "
+                    "some requested changes may be missing."
+                )
+            xml_path.write_text(xml, encoding="utf-8")
+
+            out_path = run_dir / styled["name"]
+            run(
+                ["python3", str(SCRIPTS_DIR / "pack.py"), str(unpack_dir) + "/",
+                 str(out_path), "--original", str(src_docx)],
+                config=wfc,
+            )
+            config.progress(f"  ✓ Optimized resume written to {out_path.name}")
+
+            _gdrive_upsert_file(service, config.folder_id, styled["name"], out_path)
+            config.progress(f"  ✓ Updated {styled['name']} in Drive")
+            result.resume_path = out_path
+
+            # Keep the Drive PDF in sync (best-effort, like step8_upload)
+            pdf_name = styled["name"][:-len(".docx")] + ".pdf"
+            _gdrive_delete_by_name(service, config.folder_id, pdf_name)
+            _convert_docx_to_pdf_via_drive(
+                service, out_path, pdf_name, config.folder_id, config.progress,
+            )
+
+            # ── Step 3: regenerate the ATS resume from the optimized resume
+            print_step(3, "Regenerating ATS Resume", wfc)
+            ats_name = ats["name"] if ats else styled["name"][:-len(".docx")] + "_ATS.docx"
+            ats_path = run_dir / ats_name
+            try:
+                _build_ats(_parse_styled(out_path), ats_path)
+            except RuntimeError as exc:
+                raise WorkflowError(str(exc))
+            _gdrive_upsert_file(service, config.folder_id, ats_name, ats_path)
+            config.progress(f"  ✓ Updated {ats_name} in Drive")
+            result.ats_path = ats_path
+
+        # ── Step 4: cover letter ─────────────────────────────────────────
+        if config.optimize_cover_letter:
+            print_step(4, "Optimizing Cover Letter", wfc)
+            src_cover = src_dir / cover["name"]
+            src_cover.write_bytes(_gdrive_download_file(service, cover["id"]))
+            config.progress(f"  ✓ Downloaded {cover['name']}")
+
+            plain  = run(["pandoc", str(src_cover), "-t", "plain"], config=wfc).stdout
+            letter = _parse_cover_letter_text(plain)
+
+            current = "\n\n".join(
+                f"Paragraph {i}: {p}" for i, p in enumerate(letter["paragraphs"], start=1)
+            )
+            raw = claude(
+                _OPTIMIZE_COVER_SYSTEM,
+                f"{jd_block}"
+                f"Company: {config.company}\nRole: {config.role}\n\n"
+                f"User instruction:\n---\n{config.instruction}\n---\n\n"
+                f"Current cover letter body paragraphs:\n---\n{current}\n---",
+                max_tokens=4096,
+                config=wfc,
+            )
+            parsed     = _parse_claude_json(raw)
+            paragraphs = parsed.get("paragraphs", [])
+            if len(paragraphs) != 5 or not all(isinstance(p, str) and p.strip() for p in paragraphs):
+                raise WorkflowError(
+                    f"Cover letter rewrite returned {len(paragraphs)} paragraphs (expected 5)"
+                )
+            if parsed.get("change_summary"):
+                summaries.append(f"Cover letter: {parsed['change_summary']}")
+
+            analysis = {"contact_name": letter["contact_name"]}
+            for i, p in enumerate(paragraphs, start=1):
+                analysis[f"cover_letter_p{i}"] = " ".join(p.split())
+
+            cover_out = run_dir / cover["name"]
+            step6_cover_letter(
+                analysis, config.company, config.role, cover_out, wfc,
+                colors=get_brand_color(config.company),
+            )
+            _gdrive_upsert_file(service, config.folder_id, cover["name"], cover_out)
+            config.progress(f"  ✓ Updated {cover['name']} in Drive")
+            result.cover_letter_path = cover_out
+
+    finally:
+        shutil.rmtree(src_dir, ignore_errors=True)
+        shutil.rmtree(unpack_dir, ignore_errors=True)
+
+    result.change_summary = " ".join(summaries)
+    return result
 
 
 def _print_result(result: WorkflowResult):

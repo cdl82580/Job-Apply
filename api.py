@@ -121,10 +121,13 @@ try:
         ROUND_TYPES,
         InterviewPrepConfig,
         InterviewPrepResult,
+        OptimizeConfig,
+        OptimizeResult,
         WorkflowConfig,
         WorkflowError,
         WorkflowResult,
         generate_interview_prep,
+        optimize_run,
         claude,
         get_gdrive_job_posting,
         save_gdrive_job_posting,
@@ -740,8 +743,9 @@ def _invalidate_user_cache(user_id: str) -> None:
 # In-memory stores
 # ---------------------------------------------------------------------------
 
-_runs:  dict[str, dict[str, Any]] = {}
-_preps: dict[str, dict[str, Any]] = {}
+_runs:          dict[str, dict[str, Any]] = {}
+_preps:         dict[str, dict[str, Any]] = {}
+_optimizations: dict[str, dict[str, Any]] = {}
 _MAX_ACTIVE_RUNS_PER_USER = 5  # cap in-flight + queued entries per user
 
 # Per-user locks so concurrent runs from different users don't block each other.
@@ -823,7 +827,7 @@ def _worker_thread(
 def _evict_stale() -> None:
     """Remove completed/errored runs and preps older than _RUN_TTL."""
     cutoff = time.time() - _RUN_TTL
-    for store in (_runs, _preps):
+    for store in (_runs, _preps, _optimizations):
         stale = [
             k for k, v in store.items()
             if v.get("status") in ("done", "error")
@@ -873,6 +877,18 @@ class PrepRequest(BaseModel):
     interviewer: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
+
+_MAX_OPTIMIZE_INSTRUCTION_LEN = 4000
+
+class OptimizeRequest(BaseModel):
+    app_id: str                 # application tracker record owning the run
+    folder_id: str              # Drive run folder to optimize
+    instruction: str            # user's free-text optimization prompt
+    company: str
+    role: str
+    optimize_resume: bool = True
+    optimize_cover_letter: bool = True
+    model: str | None = None
 
 # ---------------------------------------------------------------------------
 # Health
@@ -1698,6 +1714,175 @@ async def get_prep_file(prep_id: str, filename: str, request: Request):
     user_audit.log(user_data["user_id"], "file_downloaded", user_data["email"],
                    _client_ip(request), prep_id=prep_id, filename=filename,
                    run_type="interview_prep")
+
+    return FileResponse(
+        file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Optimize Run endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/optimize")
+async def create_optimize(req: OptimizeRequest, request: Request, response: Response):
+    user_data = _require_user(request)
+    if user_data.get("role") == "admin":
+        raise HTTPException(403, "Admin accounts cannot create optimize runs")
+    user_id = user_data["user_id"]
+
+    _evict_stale()
+
+    instruction = req.instruction.strip()
+    if not instruction:
+        raise HTTPException(400, "instruction is required")
+    if len(instruction) > _MAX_OPTIMIZE_INSTRUCTION_LEN:
+        raise HTTPException(400, f"instruction must be at most {_MAX_OPTIMIZE_INSTRUCTION_LEN} characters")
+    if not req.optimize_resume and not req.optimize_cover_letter:
+        raise HTTPException(400, "Select at least one document to optimize")
+
+    # Verify the folder belongs to this user via their application records —
+    # same authorization check as /api/gdrive/runs/{folder_id}/job_posting.
+    from scripts import applications as app_store
+    apps_result = app_store.list_applications(user_id)
+    allowed_ids = {
+        run.get("gdrive_folder_id")
+        for app_rec in (apps_result.get("items") or [])
+        for run in (app_rec.get("linked_runs") or [])
+        if run.get("gdrive_folder_id")
+    }
+    if req.folder_id not in allowed_ids:
+        raise HTTPException(403, "Access denied to this Drive folder")
+
+    active_count = sum(1 for o in _optimizations.values()
+                       if o.get("user_id") == user_id and o.get("status") not in ("done", "error"))
+    if active_count >= _MAX_ACTIVE_RUNS_PER_USER:
+        raise HTTPException(429, "Too many active optimize runs. Wait for an existing run to finish.")
+
+    optimize_id = str(uuid.uuid4())
+    q: Queue[dict | None] = Queue()
+    _optimizations[optimize_id] = {"queue": q, "status": "queued", "result": None,
+                                   "error": None, "user_id": user_id}
+    user_audit.log(user_id, "optimize_started", user_data["email"], _client_ip(request),
+                   optimize_id=optimize_id, company=req.company, role=req.role,
+                   folder_id=req.folder_id)
+
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
+
+    def _opt_fn(resume_path: Path, progress) -> OptimizeResult:
+        config = OptimizeConfig(
+            folder_id=req.folder_id,
+            instruction=instruction,
+            company=req.company,
+            role=req.role,
+            optimize_resume=req.optimize_resume,
+            optimize_cover_letter=req.optimize_cover_letter,
+            model=req.model or _get_active_model(),
+            progress=progress,
+            user_id=user_id,
+            user_label=user_data["email"],
+        )
+        result = optimize_run(config)
+        _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="optimize",
+                         result_dir=result.run_dir, folder_url=result.folder_url or "")
+        return result
+
+    def _opt_done_payload(result: OptimizeResult) -> dict:
+        files = {}
+        if result.resume_path:
+            files["resume"] = result.resume_path.name
+        if result.ats_path:
+            files["ats"] = result.ats_path.name
+        if result.cover_letter_path:
+            files["cover_letter"] = result.cover_letter_path.name
+        return {
+            "optimize_id":          optimize_id,
+            "folder_url":           result.folder_url,
+            "app_id":               req.app_id,
+            "change_summary":       result.change_summary,
+            "replacements_warning": result.replacements_warning,
+            "files":                files,
+        }
+
+    threading.Thread(
+        target=_worker_thread,
+        args=(_optimizations, optimize_id, user_id, user_data["email"], b"",
+              _opt_fn, _opt_done_payload,
+              "optimize_completed", "optimize_failed",
+              lambda result, _oid=optimize_id, _co=req.company, _ro=req.role: {
+                  "optimize_id": _oid, "company": _co, "role": _ro,
+                  "folder_url": (result.folder_url if result else "") or "",
+              }),
+        daemon=True,
+    ).start()
+    return {"optimize_id": optimize_id, "machine_id": FLY_MACHINE_ID or None}
+
+
+@app.get("/api/optimize/{optimize_id}/stream")
+async def stream_optimize(optimize_id: str, request: Request):
+    user_data = _require_user(request)
+    if optimize_id not in _optimizations:
+        raise HTTPException(404, "Optimize run not found")
+    if _optimizations[optimize_id].get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    q    = _optimizations[optimize_id]["queue"]
+    loop = asyncio.get_running_loop()
+
+    async def generate():
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: q.get(timeout=30))
+            except Empty:
+                yield ": keepalive\n\n"
+                continue
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/optimize/{optimize_id}/status")
+async def optimize_status(optimize_id: str, request: Request):
+    user_data = _require_user(request)
+    opt = _optimizations.get(optimize_id)
+    if not opt:
+        raise HTTPException(404, "Optimize run not found")
+    if opt.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+    return {"optimize_id": optimize_id, "status": opt["status"], "error": opt.get("error")}
+
+
+@app.get("/api/optimize/{optimize_id}/files/{filename}")
+async def get_optimize_file(optimize_id: str, filename: str, request: Request):
+    user_data = _require_user(request)
+    opt = _optimizations.get(optimize_id)
+    if not opt or opt["status"] != "done" or not opt.get("result"):
+        raise HTTPException(404, "Optimize run not complete")
+    if opt.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    result: OptimizeResult = opt["result"]
+    file_path = (result.run_dir / filename).resolve()
+    try:
+        file_path.relative_to(result.run_dir.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename")
+
+    if not file_path.exists():
+        raise HTTPException(404, "File not found")
+
+    user_audit.log(user_data["user_id"], "file_downloaded", user_data["email"],
+                   _client_ip(request), optimize_id=optimize_id, filename=filename,
+                   run_type="optimize")
 
     return FileResponse(
         file_path,

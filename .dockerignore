@@ -7,6 +7,8 @@ output
 unpacked
 __pycache__
 *.pyc
+.venv
+.claude
 *.pyo
 cover_letter_gen.js
 ats_resume_gen.js

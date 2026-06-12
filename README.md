@@ -363,6 +363,10 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/stream` | cookie | SSE prep progress stream |
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
+| POST | `/api/optimize` | cookie | Optimize an existing run's resume/cover letter in place per a user prompt → returns `{optimize_id, machine_id}`; folder ownership verified via Tigris app records |
+| GET | `/api/optimize/{id}/stream` | cookie | SSE optimize progress stream (`done` event includes `change_summary` + `replacements_warning`) |
+| GET | `/api/optimize/{id}/status` | cookie | Poll optimize status |
+| GET | `/api/optimize/{id}/files/{name}` | cookie | Download optimized DOCX |
 | POST | `/api/jd/format` | cookie | AI-format a raw job description (returns cleaned Markdown) |
 | GET | `/api/postman` | — | Download the Postman collection JSON |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |

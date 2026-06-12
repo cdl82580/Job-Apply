@@ -11,6 +11,8 @@ cover_letter_gen.js
 ats_resume_gen.js
 edit_*.py
 gen_ats_*.py
+!scripts/gen_ats_from_styled.py
+_ats_gen_*.js
 _ats_gen_tmp.js
 ~$*
 

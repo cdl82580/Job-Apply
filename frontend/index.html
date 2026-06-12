@@ -711,6 +711,80 @@
     </div>
   </div>
 
+  <!-- ── Optimize Run Form ────────────────────────────────────── -->
+  <div class="card" id="optCard">
+    <div class="card-head" id="optToggle">
+      <h2>Optimize Run</h2>
+      <span class="chevron" id="optChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="optBody">
+      <div class="field">
+        <label>Application <span class="opt">(required — must have a completed resume run)</span></label>
+        <div class="app-picker-wrap" id="optAppPickerWrap" style="margin-bottom:.75rem">
+          <div class="app-picker-selected hidden" id="optAppSelected">
+            <img class="sel-logo" id="optSelLogo" alt="">
+            <span class="sel-name" id="optSelName"></span>
+            <button type="button" class="sel-clear" id="optSelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="optAppInputRow">
+            <input type="text" id="optAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="optAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="optJdStatus"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Documents to optimize</label>
+        <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;cursor:pointer">
+            <input type="checkbox" id="optResumeChk" checked> Resume <span class="opt">(ATS resume auto-synced)</span>
+          </label>
+          <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;cursor:pointer">
+            <input type="checkbox" id="optCoverChk" checked> Cover Letter
+          </label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="optInstruction">What should change?</label>
+        <textarea id="optInstruction" rows="3"
+          placeholder="e.g. emphasize Kubernetes more, shorten the summary, mention their Series B in the cover letter"></textarea>
+      </div>
+      <button class="btn" type="button" id="optSubmitBtn">Optimize Documents</button>
+      <div class="inline-err" id="optFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── Optimize Progress ────────────────────────────────────── -->
+  <div class="card hidden" id="optProgressCard">
+    <div class="progress-header">
+      <h2>Optimize Run</h2>
+      <span class="badge badge-running" id="optBadge">Running</span>
+    </div>
+    <div class="log" id="optLog"></div>
+    <div class="inline-err" id="optErr"></div>
+  </div>
+
+  <!-- ── Optimize Results ─────────────────────────────────────── -->
+  <div class="card hidden" id="optResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="optResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="optResRole"></span>
+      </div>
+    </div>
+    <div class="framing hidden" id="optSummaryEl"></div>
+    <div class="inline-err" id="optWarnEl" style="margin-bottom:.875rem"></div>
+    <div class="file-grid" id="optFileGrid"></div>
+    <a class="drive-btn hidden" id="optDriveBtn" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <button class="btn btn-ghost" id="newOptBtn">&#x2190; New Optimization</button>
+  </div>
+
   <!-- ── Interview Prep Form ──────────────────────────────────── -->
   <div class="card" id="prepCard">
     <div class="card-head" id="prepToggle">
@@ -836,6 +910,7 @@
     } catch (_) {}
     await loadAllApps();
     const runPicker = initRunPicker();
+    initOptimizePicker();
     initPrepPicker();
 
     // Handle ?app_id=&autorun=1 redirect from the tracker's "run agent now?" prompt
@@ -1138,6 +1213,44 @@
     });
   }
 
+  // ── Optimize form picker ─────────────────────────────────────────
+  function initOptimizePicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('optAppSearch'),
+      suggestionsEl: document.getElementById('optAppSuggestions'),
+      selectedEl:    document.getElementById('optAppSelected'),
+      selLogoEl:     document.getElementById('optSelLogo'),
+      selNameEl:     document.getElementById('optSelName'),
+      selClearEl:    document.getElementById('optSelClear'),
+      inputRowEl:    document.getElementById('optAppInputRow'),
+      jdStatusEl:    document.getElementById('optJdStatus'),
+      onSelect: (app, _jd) => {
+        _optAppId      = app.id;
+        _optCompanyCtx = app.company;
+        _optRoleCtx    = app.role_title;
+        const runs = app.linked_runs || [];
+        _optFolderId = runs.find(r => r.type === 'resume')?.gdrive_folder_id
+                    || runs.find(r => r.gdrive_folder_id)?.gdrive_folder_id
+                    || null;
+        const statusEl = document.getElementById('optJdStatus');
+        if (_optFolderId) {
+          statusEl.innerHTML = '✓ Found a completed run to optimize';
+          statusEl.className = 'jd-status loaded';
+        } else {
+          statusEl.innerHTML = 'No completed resume run found for this application — run the resume agent first.';
+          statusEl.className = 'jd-status';
+        }
+        statusEl.classList.remove('hidden');
+      },
+      onClear: () => {
+        _optAppId      = null;
+        _optFolderId   = null;
+        _optCompanyCtx = '';
+        _optRoleCtx    = '';
+      },
+    });
+  }
+
   // ── Prep form picker ─────────────────────────────────────────────
   function initPrepPicker() {
     initAppPicker({
@@ -1435,6 +1548,197 @@
       emptyEl.classList.remove('hidden');
     }
   }
+
+  // ── Optimize Run ──────────────────────────────────────────────────
+
+  let _optAppId      = null;   // selected app_id for the optimize form
+  let _optFolderId   = null;   // gdrive folder ID of the run to optimize
+  let _optCompanyCtx = '';
+  let _optRoleCtx    = '';
+
+  document.getElementById('optToggle').addEventListener('click', () => {
+    const body    = document.getElementById('optBody');
+    const chevron = document.getElementById('optChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open'); }
+  });
+
+  function setOptBadge(status) {
+    const b = document.getElementById('optBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  document.getElementById('optSubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('optFormErr');
+    errEl.style.display = 'none';
+
+    const instruction = document.getElementById('optInstruction').value.trim();
+    const doResume    = document.getElementById('optResumeChk').checked;
+    const doCover     = document.getElementById('optCoverChk').checked;
+
+    if (!_optAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('optAppSearch').focus();
+      return;
+    }
+    if (!_optFolderId) {
+      errEl.textContent = 'No completed resume run found for this application — run the resume agent first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!doResume && !doCover) {
+      errEl.textContent = 'Select at least one document to optimize.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!instruction) {
+      errEl.textContent = 'Describe what should change.';
+      errEl.style.display = 'block';
+      document.getElementById('optInstruction').focus();
+      return;
+    }
+
+    const optLog = document.getElementById('optLog');
+    optLog.textContent = '';
+    document.getElementById('optErr').style.display = 'none';
+    hide('optResultsCard');
+    hide('optDriveBtn');
+    show('optProgressCard');
+    setOptBadge('running');
+    const btn = document.getElementById('optSubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Optimizing…';
+
+    let optimize_id;
+    try {
+      const res = await apiFetch('/api/optimize', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          app_id:                _optAppId,
+          folder_id:             _optFolderId,
+          instruction,
+          company:               _optCompanyCtx,
+          role:                  _optRoleCtx,
+          optimize_resume:       doResume,
+          optimize_cover_letter: doCover,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const optData = await res.json();
+      optimize_id = optData.optimize_id;
+      if (optData.machine_id) document.cookie = `fly-force-instance-id=${optData.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      optLog.textContent += '❌ Failed to start: ' + err.message + '\n';
+      setOptBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Optimize Documents';
+      return;
+    }
+
+    const es = new EventSource(`/api/optimize/${optimize_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        optLog.textContent += msg.message + '\n';
+        optLog.scrollTop = optLog.scrollHeight;
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setOptBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Optimize Documents';
+        showOptResults(optimize_id, msg);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setOptBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Optimize Documents';
+        document.getElementById('optErr').textContent = '❌ ' + msg.message;
+        document.getElementById('optErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('optBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setOptBadge('error');
+      optLog.textContent += '\n⚠ Connection lost. Your run may still be processing.';
+      btn.disabled = false;
+      btn.textContent = 'Optimize Documents';
+    };
+  });
+
+  function showOptResults(optimize_id, msg) {
+    show('optResultsCard');
+    document.getElementById('optResultsCard').classList.add('results-appear');
+
+    document.getElementById('optResCompany').textContent = _optCompanyCtx;
+    document.getElementById('optResRole').textContent    = _optRoleCtx;
+
+    const summaryEl = document.getElementById('optSummaryEl');
+    if (msg.change_summary) {
+      summaryEl.textContent = msg.change_summary;
+      show('optSummaryEl');
+    } else {
+      hide('optSummaryEl');
+    }
+
+    const warnEl = document.getElementById('optWarnEl');
+    if (msg.replacements_warning) {
+      warnEl.textContent = '⚠ ' + msg.replacements_warning;
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+
+    const grid = document.getElementById('optFileGrid');
+    grid.innerHTML = '';
+    const fileTypes = [
+      { key: 'resume',       icon: '📄', label: 'Optimized Resume',       desc: 'Styled DOCX — updated in Drive'   },
+      { key: 'ats',          icon: '📋', label: 'ATS Resume',             desc: 'Regenerated from the new resume'  },
+      { key: 'cover_letter', icon: '📝', label: 'Optimized Cover Letter', desc: 'DOCX — updated in Drive'          },
+    ];
+    for (const { key, icon, label, desc } of fileTypes) {
+      const name = msg.files?.[key];
+      if (!name) continue;
+      const a = document.createElement('a');
+      a.className = 'file-card';
+      a.href     = `/api/optimize/${optimize_id}/files/${encodeURIComponent(name)}`;
+      a.download = name;
+      a.title    = name;
+      a.innerHTML = `
+        <div class="file-card-icon">${icon}</div>
+        <div class="file-card-label">${label}</div>
+        <div class="file-card-desc">${desc}</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    if (msg.folder_url) {
+      const driveBtn = document.getElementById('optDriveBtn');
+      driveBtn.href = msg.folder_url;
+      show('optDriveBtn');
+    }
+  }
+
+  document.getElementById('newOptBtn').addEventListener('click', () => {
+    document.getElementById('optResultsCard').classList.remove('results-appear');
+    hide('optResultsCard');
+    hide('optDriveBtn');
+    document.getElementById('optFileGrid').innerHTML = '';
+    hide('optProgressCard');
+    document.getElementById('optLog').textContent = '';
+    document.getElementById('optInstruction').value = '';
+  });
 
   // ── Interview Prep ────────────────────────────────────────────────
 
