@@ -358,30 +358,30 @@ Return ONLY valid JSON.
 
     static = {
         "ehealth": {
-            "company": "eHealth Technologies",
-            "dates": "February 2025 – March 2026",
+            "company": "eHealth, Inc.",
+            "dates": "Feb 2025 – Mar 2026",
         },
         "hsp": {
             "company": "HSP Group",
             "title": "Senior Business Solutions Development Engineer",
-            "dates": "March 2023 – November 2024",
+            "dates": "Mar 2023 – Nov 2024",
         },
         "prodperfect": {
             "company": "ProdPerfect",
             "title": "Customer Experience & Business Solutions Engineer",
-            "dates": "January 2021 – June 2022",
+            "dates": "Jan 2021 – Jun 2022",
             "bullets": data.get("prodperfect_bullets", []),
         },
         "applause": {
-            "company": "Applause App Quality",
-            "title": "Senior TPM / Delivery Operations Support Manager",
-            "dates": "December 2011 – January 2020",
+            "company": "Applause App Quality, Inc.",
+            "title": "Senior Technical Project Manager → Delivery Operations Support Manager",
+            "dates": "Dec 2011 – Jan 2020",
             "bullets": data.get("applause_bullets", []),
         },
         "fidelity": {
             "company": "Fidelity Investments",
-            "title": "Senior Software QA Engineer",
-            "dates": "September 2003 – October 2011",
+            "title": "Senior Software Quality Assurance Engineer",
+            "dates": "Sep 2003 – Oct 2011",
             "bullets": data.get("fidelity_bullets", []),
         },
         "education": [
@@ -905,7 +905,7 @@ def step5b_ats_resume(
     heading("Professional Experience")
 
     ehealth = static_sections["ehealth"]
-    job_header("eHealth Technologies", analysis.get("ehealth_title_subtitle", ""), ehealth["dates"])
+    job_header(ehealth["company"], analysis.get("ehealth_title_subtitle", ""), ehealth["dates"])
     for b in analysis.get("ehealth_bullets", []):
         bullet(b)
 
