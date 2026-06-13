@@ -62,8 +62,44 @@ APPLICANT_NAME = "CoreyLaverdiere"
 # Single source of truth for contact info — used by cover letter and ATS resume
 APPLICANT_CONTACT_LINE = (
     "978-790-4272  |  cdl825@gmail.com  |  Sterling, MA  |  linkedin.com/in/coreydlaverdiere"
+    "  |  github.com/cdl82580"
 )
 APPLICANT_CONTACT_LINE_ATS = APPLICANT_CONTACT_LINE + "  |  Open to Remote"
+
+# GitHub projects — rendered in the ATS resume "Projects" section.
+# Set GITHUB_PROFILE to "" and GITHUB_PROJECTS to [] to suppress both.
+GITHUB_PROFILE = "github.com/cdl82580"
+
+GITHUB_PROJECTS = [
+    {
+        "name": "FlowShift",
+        "url": "github.com/cdl82580/flowshift",
+        "description": (
+            "AI-powered iPaaS migration playbook generator. Describe a workflow in one platform, "
+            "get a full migration playbook and ready-to-import file for another — powered by Claude. "
+            "Supports n8n, Make, Zapier, Tray, Boomi, Workato, Celigo, Power Automate. "
+            "TypeScript, Fly.io, Google Drive integration."
+        ),
+    },
+    {
+        "name": "task-api",
+        "url": "github.com/cdl82580/task-api",
+        "description": (
+            "Production REST API + React frontend for task management. Express 5, SQLite, Vite + React + Tailwind. "
+            "JWT/API key auth, email verification, Slack webhooks, file uploads, scheduled DB backups, "
+            "Fly.io deployment with persistent encrypted volume. Full OpenAPI spec."
+        ),
+    },
+    {
+        "name": "job-apply",
+        "url": "github.com/cdl82580/job-apply",
+        "description": (
+            "Agentic job application workflow: reads a job posting, calls Claude to tailor resume XML + cover letter, "
+            "generates DOCX output, uploads to Google Drive, streams progress via SSE. "
+            "FastAPI backend, Tigris S3, multi-user auth. Built and shipped solo."
+        ),
+    },
+]
 
 MASTER_RESUME = Path("resumes/master.docx")
 PROFILE_FILE  = Path("profile.md")
@@ -321,69 +357,8 @@ def step1_read_inputs(
 # ---------------------------------------------------------------------------
 
 def step1b_extract_static_sections(resume_text: str, config: WorkflowConfig) -> dict:
-    """Parse static employer bullets from the master resume text."""
-    system = """\
-You are a resume parser. Extract bullet points for specific employers from the resume text.
-Return ONLY valid JSON with no preamble or markdown fences.
-"""
-    prompt = f"""
-Resume text:
----
-{resume_text}
----
-
-Extract the bullet points for each of these three employers:
-1. ProdPerfect
-2. Applause (may also appear as "Applause App Quality")
-3. Fidelity Investments (may also appear as "Fidelity")
-
-Return this JSON structure:
-{{
-  "prodperfect_bullets": ["exact bullet text 1", "exact bullet text 2"],
-  "applause_bullets": ["exact bullet text 1", "exact bullet text 2"],
-  "fidelity_bullets": ["exact bullet text 1", "exact bullet text 2"]
-}}
-
-Return ONLY valid JSON.
-"""
-    raw = claude(system, prompt, max_tokens=2000, config=config)
-    raw = re.sub(r"^```json\s*", "", raw.strip())
-    raw = re.sub(r"\s*```$", "", raw.strip())
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        config.progress(f"\n⚠️  Failed to parse static bullets: {e} — using empty fallback.")
-        data = {}
-
+    """Return static resume sections that never change between runs."""
     static = {
-        "ehealth": {
-            "company": "eHealth, Inc.",
-            "dates": "Feb 2025 – Mar 2026",
-        },
-        "hsp": {
-            "company": "HSP Group",
-            "title": "Senior Business Solutions Development Engineer",
-            "dates": "Mar 2023 – Nov 2024",
-        },
-        "prodperfect": {
-            "company": "ProdPerfect",
-            "title": "Customer Experience & Business Solutions Engineer",
-            "dates": "Jan 2021 – Jun 2022",
-            "bullets": data.get("prodperfect_bullets", []),
-        },
-        "applause": {
-            "company": "Applause App Quality, Inc.",
-            "title": "Senior Technical Project Manager → Delivery Operations Support Manager",
-            "dates": "Dec 2011 – Jan 2020",
-            "bullets": data.get("applause_bullets", []),
-        },
-        "fidelity": {
-            "company": "Fidelity Investments",
-            "title": "Senior Software Quality Assurance Engineer",
-            "dates": "Sep 2003 – Oct 2011",
-            "bullets": data.get("fidelity_bullets", []),
-        },
         "education": [
             {"degree": "MBA, Management Information Systems", "school": "Clark University, Worcester, MA"},
             {"degree": "B.S. (Commonwealth Honors College)", "school": "University of Massachusetts, Amherst, MA"},
@@ -399,13 +374,7 @@ Return ONLY valid JSON.
             "Lean Six Sigma Green Belt",
         ],
     }
-
-    config.progress(
-        f"  ✓ Static sections extracted "
-        f"(ProdPerfect: {len(static['prodperfect']['bullets'])} bullets, "
-        f"Applause: {len(static['applause']['bullets'])} bullets, "
-        f"Fidelity: {len(static['fidelity']['bullets'])} bullets)"
-    )
+    config.progress("  ✓ Static sections loaded (education, certifications)")
     return static
 
 # ---------------------------------------------------------------------------
@@ -478,6 +447,14 @@ Produce a JSON object with exactly these keys:
   "ehealth_title_subtitle": "string - the subtitle bar text for eHealth (e.g. 'AI Solutions & Integration Engineer  |  Subtitle  |  Tray.ai Platform Owner')",
   "ehealth_bullets": ["6 strings - complete bullet text for each of the 6 eHealth bullets"],
   "hsp_bullets": ["4 strings - complete bullet text for each of the 4 HSP Group bullets"],
+  "experience": [
+    {{
+      "company": "string - exact employer name as it appears on the resume",
+      "title": "string - job title or subtitle bar text for this role",
+      "dates": "string - date range exactly as it appears on the resume",
+      "bullets": ["string - tailored bullet text relevant to this JD"]
+    }}
+  ],
   "summary": "string - full professional summary text (4-5 sentences, written in Corey's voice per profile.md)",
   "cover_letter_hook": "string - the opening angle for the cover letter P1 (what JD language to echo, what story to lead with)",
   "cover_letter_p1": "string - full text of P1 (max 3 sentences)",
@@ -488,9 +465,16 @@ Produce a JSON object with exactly these keys:
   "contact_name": "string - hiring manager name if determinable from the posting, otherwise 'Hiring Team'"
 }}
 
+For the "experience" field, include every role from the resume in reverse-chronological order.
+For each role, tailor the bullets to this specific JD — surface the work most relevant to the
+job's requirements. More recent and more relevant roles get more bullets (4–6); older or
+less-relevant roles get fewer (2–3). Use exact employer names and date ranges from the resume.
+The eHealth title field should match ehealth_title_subtitle. This experience list drives the
+ATS resume; ehealth_bullets and hsp_bullets are separate and drive the styled XML resume.
+
 Return ONLY valid JSON. No preamble, no markdown fences, no commentary.
 """
-    raw = claude(ANALYSIS_SYSTEM, prompt, max_tokens=6000, config=config)
+    raw = claude(ANALYSIS_SYSTEM, prompt, max_tokens=8000, config=config)
     raw = re.sub(r"^```json\s*", "", raw.strip())
     raw = re.sub(r"\s*```$", "", raw.strip())
 
@@ -889,49 +873,59 @@ def step5b_ats_resume(
     add([tr(APPLICANT_CONTACT_LINE_ATS, size=20)], after=120)
 
     # Tagline
-    add([tr(analysis.get("tagline", ""), italic=True)], after=160)
+    if analysis.get("tagline"):
+        add([tr(analysis["tagline"], italic=True)], after=160)
 
     # Professional Summary
     heading("Professional Summary")
     body(analysis.get("summary", ""), after=0)
 
     # Core Competencies
-    heading("Core Competencies")
     comps = analysis.get("competencies", [])
-    for i in range(0, len(comps), 5):
-        body(" | ".join(comps[i:i+5]), after=40)
+    if comps:
+        heading("Core Competencies")
+        for i in range(0, len(comps), 5):
+            body(" | ".join(comps[i:i+5]), after=40)
 
     # Professional Experience
-    heading("Professional Experience")
-
-    ehealth = static_sections["ehealth"]
-    job_header(ehealth["company"], analysis.get("ehealth_title_subtitle", ""), ehealth["dates"])
-    for b in analysis.get("ehealth_bullets", []):
-        bullet(b)
-
-    hsp = static_sections["hsp"]
-    job_header(hsp["company"], hsp["title"], hsp["dates"])
-    for b in analysis.get("hsp_bullets", []):
-        bullet(b)
-
-    for key in ("prodperfect", "applause", "fidelity"):
-        section = static_sections[key]
-        job_header(section["company"], section["title"], section["dates"])
-        for b in section.get("bullets", []):
-            bullet(b)
+    experience = analysis.get("experience", [])
+    if experience:
+        heading("Professional Experience")
+        for role in experience:
+            job_header(
+                role.get("company", ""),
+                role.get("title", ""),
+                role.get("dates", ""),
+            )
+            for b in role.get("bullets", []):
+                bullet(b)
 
     # Education
-    heading("Education")
-    for edu in static_sections.get("education", []):
-        children = [tr(edu["degree"], bold=True)]
-        if edu.get("school"):
-            children.append(tr("  —  " + edu["school"]))
-        add(children, before=60, after=40)
+    education = static_sections.get("education", [])
+    if education:
+        heading("Education")
+        for edu in education:
+            children = [tr(edu["degree"], bold=True)]
+            if edu.get("school"):
+                children.append(tr("  —  " + edu["school"]))
+            add(children, before=60, after=40)
 
     # Certifications
-    heading("Certifications")
-    for cert in static_sections.get("certifications", []):
-        body(cert, after=40)
+    certifications = static_sections.get("certifications", [])
+    if certifications:
+        heading("Certifications")
+        for cert in certifications:
+            body(cert, after=40)
+
+    # Projects (suppressed if GITHUB_PROJECTS is empty)
+    if GITHUB_PROJECTS:
+        heading("Projects")
+        for proj in GITHUB_PROJECTS:
+            children = [tr(proj["name"], bold=True)]
+            if proj.get("url"):
+                children.append(tr("  |  " + proj["url"]))
+            add(children, before=100, after=0)
+            body(proj["description"], after=60)
 
     children_js  = ",\n".join(paras)
     out_path_str = str(output_path).replace("\\", "/")
