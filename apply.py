@@ -1872,8 +1872,13 @@ Candidate Profile Guide:
 ---
 """
     raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=1024, config=config)
-    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = raw.strip()
+    raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw.strip())
+    # Extract the JSON object even when Claude adds preamble/postamble text
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end != -1:
+        raw = raw[start:end + 1]
     data = json.loads(raw)
 
     score = max(0, min(100, int(round(float(data["score"])))))
