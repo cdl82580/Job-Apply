@@ -31,6 +31,9 @@ from pydantic import BaseModel
 from scripts import applications as app_store
 from scripts import user_audit
 
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 FLY_MACHINE_ID = os.environ.get("FLY_MACHINE_ID", "")
@@ -249,6 +252,7 @@ def _start_application_pipeline(
       3. score the user's resume/profile against the extracted JD
     Streams structured progress events to GET /{app_id}/pipeline/stream.
     Never raises — failures here must never affect the create/update response."""
+    _log.info("pipeline: _start_application_pipeline called app_id=%s company=%s", app_id, company)
     try:
         from apply import (WorkflowConfig, ensure_application_gdrive_folder,
                            extract_job_description_from_url, safe_filename,
@@ -266,7 +270,10 @@ def _start_application_pipeline(
         def emit(step: str, state: str, message: str = "", **extra: Any) -> None:
             q.put({"step": step, "state": state, "message": message, **extra})
 
+        _log.info("pipeline: thread launching app_id=%s company=%s role=%s", app_id, company, role_title)
+
         def _run():
+            _log.info("pipeline: thread started app_id=%s", app_id)
             folder_url = ""
             score_payload = None
             try:
@@ -276,6 +283,7 @@ def _start_application_pipeline(
                 )
 
                 # Stage 1 — Drive folder
+                _log.info("pipeline: stage1 starting app_id=%s", app_id)
                 emit("folder", "running", "Creating Google Drive folder…")
                 folder = ensure_application_gdrive_folder(company, role_title, config)
                 if not folder:
@@ -368,8 +376,8 @@ def _start_application_pipeline(
                 q.put(None)
 
         threading.Thread(target=_run, daemon=True).start()
-    except Exception:
-        pass
+    except Exception as _exc:
+        _log.exception("pipeline: failed to start for app_id=%s: %s", app_id, _exc)
 
 
 # ---------------------------------------------------------------------------
