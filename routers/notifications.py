@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from scripts import applications as app_store
 from scripts import notification_state as notif_state
+from scripts import user_audit
 from scripts.notification_tokens import verify_token
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -56,6 +57,9 @@ async def notification_action(token: str = Query(...)):
     if action == "snooze":
         days = int(payload.get("days", 5))
         notif_state.snooze_researching(user_id, app_id, days)
+        user_audit.log(user_id, "notification_action_taken", "notification_link",
+                       action_taken="snooze", snooze_days=days,
+                       app_id=app_id, company=record["company"], role_title=record["role_title"])
         return _ok_page(
             f"Got it — we'll check back in {days} days.",
             record["company"], record["role_title"],
@@ -74,6 +78,9 @@ async def notification_action(token: str = Query(...)):
 
         _apply_status(user_id, app_id, record, new_status, date_applied)
         notif_state.clear_researching(user_id, app_id)
+        user_audit.log(user_id, "notification_action_taken", "notification_link",
+                       action_taken="status_update", new_status=new_status,
+                       app_id=app_id, company=record["company"], role_title=record["role_title"])
 
         msg = f"Status updated to <strong>{new_status}</strong>."
         if date_applied:
@@ -169,6 +176,9 @@ async def confirm_applied_submit(request: Request):
 
     _apply_status(user_id, app_id, record, "Applied", date_applied)
     notif_state.clear_researching(user_id, app_id)
+    user_audit.log(user_id, "notification_action_taken", "notification_link",
+                   action_taken="status_update", new_status="Applied", date_applied=date_applied,
+                   app_id=app_id, company=record["company"], role_title=record["role_title"])
 
     return _ok_page(
         f"Status updated to <strong>Applied</strong>. Applied date set to {date_applied}.",

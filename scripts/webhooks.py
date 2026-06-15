@@ -131,6 +131,9 @@ CATEGORY_ACTIONS: dict[str, set[str]] = {
         "admin_csv_export",
         "webhook_created", "webhook_updated", "webhook_deleted", "webhook_tested",
     },
+    "notifications": {
+        "notification_sent", "notification_action_taken",
+    },
 }
 _MAX_DELIVERIES = 25
 _INDEX_FIELDS = {"id", "name", "url", "events", "active", "created_at",

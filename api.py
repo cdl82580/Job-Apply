@@ -795,6 +795,9 @@ def _researching_nudge_email(
     _send_email(user_email, subject, text, html=_email_html(body_html))
     notif_state.record_nudge_sent(user_id, app_id, tier)
     logger.info("Researching nudge tier %d sent for user=%s app=%s", tier, user_id, app_id)
+    user_audit.log(user_id, "notification_sent", "system",
+                   notification_type="researching_nudge", tier=tier,
+                   app_id=app_id, company=app.get("company"), role_title=app.get("role_title"))
 
 
 def _scan_notifications(user_id: str, user_email: str) -> None:

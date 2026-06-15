@@ -878,6 +878,22 @@
       </div>
     </div>
 
+    <!-- User scope -->
+    <div style="margin-bottom:1rem">
+      <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">
+        Scope to a specific user <span style="font-weight:400;color:var(--muted)">(optional — leave blank to receive events for all users)</span>
+      </label>
+      <div style="position:relative">
+        <input type="text" id="whUserSearch" autocomplete="off"
+               placeholder="Search by name or email…"
+               style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;background:var(--input-bg);color:var(--text)">
+        <div id="whUserDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+             background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+             box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:180px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+      <div id="whUserChip" style="display:none;margin-top:.4rem;display:none;align-items:center;gap:.4rem;flex-wrap:wrap"></div>
+    </div>
+
     <!-- Events -->
     <div style="margin-bottom:1rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
@@ -2363,9 +2379,8 @@ document.addEventListener('click', async e => {
 // ── Webhook filter rows ───────────────────────────────────────────────
 
 const FILTER_OPTIONS = {
-  actor:    { label: 'Actor',         type: 'text',   placeholder: 'e.g. cdl825@gmail.com or user-uuid' },
   source:   { label: 'Source',        type: 'select', options: ['user','application'] },
-  category: { label: 'Category',      type: 'select', options: ['auth','profile','applications','runs','admin'] },
+  category: { label: 'Category',      type: 'select', options: ['auth','profile','applications','runs','admin','notifications'] },
   app_id:   { label: 'Application ID',type: 'text',   placeholder: 'e.g. abc-uuid-123 (monospace)' },
 };
 
@@ -2402,17 +2417,18 @@ function _filterRow(filterType = 'actor', value = '') {
 }
 
 function _collectFilters() {
-  const actors = [], cats = [];
+  const cats = [];
   let source = '', appId = '';
   document.querySelectorAll('#whFilterRows > div').forEach(row => {
     const type = row.querySelector('.wh-flt-type')?.value || '';
     const val  = (row.querySelector('.wh-flt-val')?.value || '').trim();
     if (!val) return;
-    if (type === 'actor')    actors.push(val);
     if (type === 'source')   source = val;
     if (type === 'category') cats.push(val);
     if (type === 'app_id')   appId  = val;
   });
+  // actor comes from the user search field
+  const actors = _whUserActors.map(u => u.user_id || u.email).filter(Boolean);
   return {
     filter_actors:     actors.join(','),
     filter_source:     source,
@@ -2450,6 +2466,8 @@ const ALL_EVENT_TYPES = [
   'admin_user_updated','admin_verification_resent','role_changed',
   'admin_csv_export',
   'webhook_created','webhook_updated','webhook_deleted','webhook_tested',
+  // notifications
+  'notification_sent','notification_action_taken',
 ];
 
 async function loadWebhooks() {
@@ -2660,6 +2678,77 @@ function _collectKv(containerId) {
   return obj;
 }
 
+// ── Webhook user search ───────────────────────────────────────────────
+let _whUserActors = [];   // list of {user_id, email, display_name} currently pinned
+let _allUsers     = [];   // cached from GET /api/admin/users
+
+async function _loadAllUsers() {
+  if (_allUsers.length) return;
+  try {
+    const res = await apiFetch('/api/admin/users');
+    _allUsers = (await res.json()).users || [];
+  } catch (_) {}
+}
+
+function _renderUserChip() {
+  const chip = document.getElementById('whUserChip');
+  if (!_whUserActors.length) { chip.style.display = 'none'; return; }
+  chip.style.display = 'flex';
+  chip.innerHTML = _whUserActors.map((u, i) => `
+    <span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--fill);
+      border:1px solid var(--border);border-radius:999px;padding:.15rem .55rem .15rem .65rem;
+      font-size:.775rem;font-weight:600;color:var(--primary)">
+      ${esc(u.display_name || u.email)}
+      <button type="button" onclick="_removeUserActor(${i})"
+        style="background:none;border:none;cursor:pointer;padding:0;line-height:1;
+               color:var(--muted);font-size:.9rem">&times;</button>
+    </span>`).join('');
+}
+
+function _removeUserActor(i) {
+  _whUserActors.splice(i, 1);
+  _renderUserChip();
+}
+
+function _initUserSearch() {
+  const input    = document.getElementById('whUserSearch');
+  const dropdown = document.getElementById('whUserDropdown');
+
+  input.addEventListener('focus', _loadAllUsers);
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; return; }
+    const matches = _allUsers.filter(u =>
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.display_name || '').toLowerCase().includes(q)
+    ).slice(0, 8);
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+    dropdown.style.display = 'block';
+    matches.forEach(u => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:.5rem .75rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--card-border)';
+      item.innerHTML = `<strong>${esc(u.display_name || u.email)}</strong>
+        ${u.display_name ? `<span style="color:var(--muted);margin-left:.35rem;font-size:.775rem">${esc(u.email)}</span>` : ''}`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const already = _whUserActors.some(a => a.user_id === u.user_id);
+        if (!already) _whUserActors.push({ user_id: u.user_id, email: u.email, display_name: u.display_name });
+        _renderUserChip();
+        input.value = '';
+        dropdown.style.display = 'none';
+      });
+      dropdown.appendChild(item);
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+}
+_initUserSearch();
+
 function openWebhookModal(wh = null) {
   _editingWh = wh ? wh.id : null;
   document.getElementById('webhookModalTitle').textContent = wh ? 'Edit Webhook' : 'New Webhook';
@@ -2668,11 +2757,27 @@ function openWebhookModal(wh = null) {
   document.getElementById('whSecret').value        = wh?.secret || '';
   document.getElementById('whFormat').value        = wh?.payload_format || 'generic';
   document.getElementById('whActive').checked      = wh ? (wh.active !== false) : true;
-  // Rebuild filter rows from saved values
+
+  // Populate user scope field from filter_actors
+  _whUserActors = [];
+  if (wh?.filter_actors) {
+    const actors = (wh.filter_actors).split(',').map(s => s.trim()).filter(Boolean);
+    // Try to resolve each actor to a known user for display; fallback to raw value
+    _loadAllUsers().then(() => {
+      actors.forEach(a => {
+        const match = _allUsers.find(u => u.user_id === a || u.email === a);
+        _whUserActors.push(match || { user_id: a, email: a, display_name: '' });
+        _renderUserChip();
+      });
+    });
+  }
+  document.getElementById('whUserSearch').value = '';
+  document.getElementById('whUserDropdown').style.display = 'none';
+  _renderUserChip();
+
+  // Rebuild non-actor filter rows (actor is now handled by user search)
   document.getElementById('whFilterRows').innerHTML = '';
   if (wh) {
-    (wh.filter_actors || '').split(',').map(s => s.trim()).filter(Boolean)
-      .forEach(v => _filterRow('actor', v));
     if (wh.filter_source)  _filterRow('source',   wh.filter_source);
     (wh.filter_categories || []).forEach(v => _filterRow('category', v));
     if (wh.filter_app_id)  _filterRow('app_id',   wh.filter_app_id);
