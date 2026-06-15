@@ -213,6 +213,7 @@
     .s-on-hold       { background: #FED7AA; color: #9A3412; }
     .s-offer         { background: #D1FAE5; color: #065F46; }
     .s-rejected      { background: #FEE2E2; color: #991B1B; }
+    .s-no-response   { background: #E2E8F0; color: #475569; }
 
     [data-theme="dark"] .s-not-applying  { background: #1F2937; color: #9CA3AF; }
     [data-theme="dark"] .s-researching   { background: #2E1065; color: #C4B5FD; }
@@ -222,6 +223,7 @@
     [data-theme="dark"] .s-on-hold       { background: #3D1A0A; color: #FDBA74; }
     [data-theme="dark"] .s-offer         { background: #0D2B1E; color: #4ADE80; }
     [data-theme="dark"] .s-rejected      { background: #2B1010; color: #F87171; }
+    [data-theme="dark"] .s-no-response   { background: #1E2A3A; color: #94A3B8; }
 
     /* ── Match score badges ───────────────────────────────────────── */
     /* ── DUA badge ────────────────────────────────────────────── */
@@ -744,6 +746,7 @@
       <button class="pill" data-status="On Hold">On Hold</button>
       <button class="pill" data-status="Offer">Offer</button>
       <button class="pill" data-status="Rejected">Rejected</button>
+      <button class="pill" data-status="No Response">No Response</button>
       <button class="pill" data-status="Not Applying">Not Applying</button>
     </div>
     <div class="pill-group" id="matchPills">
@@ -874,6 +877,7 @@
           <option>On Hold</option>
           <option>Offer</option>
           <option>Rejected</option>
+          <option>No Response</option>
           <option>Not Applying</option>
         </select>
       </div>
@@ -1053,7 +1057,7 @@ let _skipHistory = false;  // prevents pushState during popstate handling
 // Status sort order
 const STATUS_ORDER = {
   'Interviewing': 0, 'Phone Screen': 1, 'Applied': 2, 'Researching': 3,
-  'On Hold': 4, 'Offer': 5, 'Rejected': 6, 'Not Applying': 7,
+  'On Hold': 4, 'Offer': 5, 'Rejected': 6, 'No Response': 7, 'Not Applying': 8,
 };
 // Match category → CSS badge class
 const MATCH_CLASS = {
@@ -1128,6 +1132,7 @@ const STATUS_CLASS = {
   'On Hold':      's-on-hold',
   'Offer':        's-offer',
   'Rejected':     's-rejected',
+  'No Response':  's-no-response',
 };
 function statusBadge(s) {
   return `<span class="badge ${STATUS_CLASS[s] || ''}">${s}</span>`;

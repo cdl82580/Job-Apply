@@ -40,7 +40,7 @@ FLY_MACHINE_ID = os.environ.get("FLY_MACHINE_ID", "")
 
 VALID_STATUSES = {
     "Not Applying", "Researching", "Applied", "Phone Screen",
-    "Interviewing", "On Hold", "Offer", "Rejected",
+    "Interviewing", "On Hold", "Offer", "Rejected", "No Response",
 }
 VALID_PRIORITIES = {"Low", "Medium", "High"}
 
