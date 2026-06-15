@@ -736,7 +736,7 @@
     </div>
     <button class="clear-filters-btn" id="clearFiltersBtn">✕ Clear</button>
     <div class="pill-group" id="statusPills">
-      <button class="pill active" data-status="">All</button>
+      <button class="pill active" data-status="">Status: All</button>
       <button class="pill" data-status="Interviewing">Interviewing</button>
       <button class="pill" data-status="Phone Screen">Phone Screen</button>
       <button class="pill" data-status="Applied">Applied</button>
@@ -747,7 +747,7 @@
       <button class="pill" data-status="Not Applying">Not Applying</button>
     </div>
     <div class="pill-group" id="matchPills">
-      <button class="pill active" data-match="">Any Match</button>
+      <button class="pill active" data-match="">Match: All</button>
       <button class="pill" data-match="Strong Match">Strong Match</button>
       <button class="pill" data-match="Good Match">Good Match</button>
       <button class="pill" data-match="Stretch">Stretch</button>
@@ -1203,21 +1203,32 @@ function updateStats() {
   document.getElementById('statRejected').textContent    = all.filter(a => a.status === 'Rejected').length;
 }
 
-let _activeStatus = '';
-let _activeMatch  = '';
-let _activeDua    = '';
+let _activeStatus = new Set();
+let _activeMatch  = new Set();
+let _activeDua    = new Set();
 let _searchQ      = '';
+
+function _syncPills(groupId, activeSet, dataAttr) {
+  document.querySelectorAll(`#${groupId} .pill`).forEach(p => {
+    const val = p.dataset[dataAttr];
+    p.classList.toggle('active', val === '' ? activeSet.size === 0 : activeSet.has(val));
+  });
+}
 
 function applyFilters() {
   let list = _apps;
-  if (_activeStatus) list = list.filter(a => a.status === _activeStatus);
-  if (_activeMatch) {
-    list = _activeMatch === 'Not scored'
-      ? list.filter(a => !a.match_score || typeof a.match_score.score !== 'number')
-      : list.filter(a => a.match_score?.category === _activeMatch);
+  if (_activeStatus.size) list = list.filter(a => _activeStatus.has(a.status));
+  if (_activeMatch.size) {
+    list = list.filter(a => {
+      const unscored = !a.match_score || typeof a.match_score.score !== 'number';
+      if (_activeMatch.has('Not scored') && unscored) return true;
+      if (a.match_score?.category && _activeMatch.has(a.match_score.category)) return true;
+      return false;
+    });
   }
-  if (_activeDua === 'yes') list = list.filter(a => !!a.dua);
-  if (_activeDua === 'no')  list = list.filter(a => !a.dua);
+  if (_activeDua.size) {
+    list = list.filter(a => (_activeDua.has('yes') && !!a.dua) || (_activeDua.has('no') && !a.dua));
+  }
   if (_searchQ) {
     const q = _searchQ.toLowerCase();
     list = list.filter(a =>
@@ -1229,7 +1240,7 @@ function applyFilters() {
   _filtered = _sortList(list);
   _page = 1;
   if (typeof _updateClearBtn === 'function') _updateClearBtn();
-  const isFiltered = !!(_activeStatus || _activeMatch || _activeDua || _searchQ);
+  const isFiltered = !!(_activeStatus.size || _activeMatch.size || _activeDua.size || _searchQ);
   const chip = document.getElementById('statFilteredChip');
   document.getElementById('statFiltered').textContent = _filtered.length;
   chip.classList.toggle('hidden', !isFiltered);
@@ -1439,22 +1450,29 @@ document.getElementById('perPageSel').addEventListener('change', e => {
   renderTable();
 });
 
-// ── Filter pills ──────────────────────────────────────────────────────
+// ── Filter pills (multi-select) ───────────────────────────────────────
+function _pillToggle(activeSet, val) {
+  if (val === '') {
+    activeSet.clear();
+  } else {
+    if (activeSet.has(val)) activeSet.delete(val);
+    else activeSet.add(val);
+  }
+}
+
 document.getElementById('statusPills').addEventListener('click', (e) => {
   const pill = e.target.closest('.pill');
   if (!pill) return;
-  document.querySelectorAll('#statusPills .pill').forEach(p => p.classList.remove('active'));
-  pill.classList.add('active');
-  _activeStatus = pill.dataset.status;
+  _pillToggle(_activeStatus, pill.dataset.status);
+  _syncPills('statusPills', _activeStatus, 'status');
   applyFilters();
 });
 
 document.getElementById('matchPills').addEventListener('click', (e) => {
   const pill = e.target.closest('.pill');
   if (!pill) return;
-  document.querySelectorAll('#matchPills .pill').forEach(p => p.classList.remove('active'));
-  pill.classList.add('active');
-  _activeMatch = pill.dataset.match;
+  _pillToggle(_activeMatch, pill.dataset.match);
+  _syncPills('matchPills', _activeMatch, 'match');
   applyFilters();
 });
 
@@ -1466,27 +1484,23 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
 document.getElementById('duaPills').addEventListener('click', (e) => {
   const pill = e.target.closest('.pill');
   if (!pill) return;
-  document.querySelectorAll('#duaPills .pill').forEach(p => p.classList.remove('active'));
-  pill.classList.add('active');
-  _activeDua = pill.dataset.dua;
+  _pillToggle(_activeDua, pill.dataset.dua);
+  _syncPills('duaPills', _activeDua, 'dua');
   applyFilters();
 });
 
 function _updateClearBtn() {
-  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus || _activeMatch || _activeDua || _searchQ));
+  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus.size || _activeMatch.size || _activeDua.size || _searchQ));
 }
 document.getElementById('clearFiltersBtn').addEventListener('click', () => {
-  _activeStatus = '';
-  _activeMatch = '';
-  _activeDua = '';
+  _activeStatus.clear();
+  _activeMatch.clear();
+  _activeDua.clear();
   _searchQ = '';
   document.getElementById('searchInput').value = '';
-  document.querySelectorAll('#statusPills .pill').forEach(p => p.classList.remove('active'));
-  document.querySelector('#statusPills .pill[data-status=""]').classList.add('active');
-  document.querySelectorAll('#matchPills .pill').forEach(p => p.classList.remove('active'));
-  document.querySelector('#matchPills .pill[data-match=""]').classList.add('active');
-  document.querySelectorAll('#duaPills .pill').forEach(p => p.classList.remove('active'));
-  document.querySelector('#duaPills .pill[data-dua=""]').classList.add('active');
+  _syncPills('statusPills', _activeStatus, 'status');
+  _syncPills('matchPills',  _activeMatch,  'match');
+  _syncPills('duaPills',    _activeDua,    'dua');
   applyFilters();
 });
 
