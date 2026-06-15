@@ -1757,37 +1757,43 @@ async def forgot_password(request: Request):
     email = (body.get("email") or "").strip().lower() or _NOTIFY_EMAIL
 
     user = storage.get_user_by_email(email) if email else None
-    if user:
-        token = _create_notif_token(
-            user["user_id"], "password_reset", "password_reset",
-            payload={"email": email}, ttl=3600,
-        )
-        reset_url = f"{_APP_URL}/reset-password.html?token={token}"
+    if not user:
+        logger.warning("forgot_password: no account found for email=%r", email)
+    else:
+        try:
+            token = _create_notif_token(
+                user["user_id"], "password_reset", "password_reset",
+                payload={"email": email}, ttl=3600,
+            )
+            reset_url = f"{_APP_URL}/reset-password.html?token={token}"
 
-        text = (
-            f"Hi {user.get('display_name', 'there')},\n\n"
-            f"Click the link below to reset your Job Apply password. "
-            f"This link expires in 1 hour.\n\n{reset_url}\n\n"
-            f"If you didn't request this, ignore this email."
-        )
-        body_html = f"""
-        <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.1rem">Reset your password</h2>
-        <p style="margin:0 0 1rem;color:#374151">
-          Click the button below to choose a new password.
-          This link expires in <strong>1 hour</strong>.
-        </p>
-        <a href="{reset_url}"
-           style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
-                  padding:.65rem 1.5rem;border-radius:6px;font-weight:600;font-size:.9rem;
-                  margin-bottom:1.25rem">
-          Reset password &rarr;
-        </a>
-        <p style="margin:0;color:#6B7280;font-size:.825rem">
-          If you didn't request this, you can safely ignore this email.
-        </p>"""
+            text = (
+                f"Hi {user.get('display_name', 'there')},\n\n"
+                f"Click the link below to reset your Job Apply password. "
+                f"This link expires in 1 hour.\n\n{reset_url}\n\n"
+                f"If you didn't request this, ignore this email."
+            )
+            body_html = f"""
+            <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.1rem">Reset your password</h2>
+            <p style="margin:0 0 1rem;color:#374151">
+              Click the button below to choose a new password.
+              This link expires in <strong>1 hour</strong>.
+            </p>
+            <a href="{reset_url}"
+               style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
+                      padding:.65rem 1.5rem;border-radius:6px;font-weight:600;font-size:.9rem;
+                      margin-bottom:1.25rem">
+              Reset password &rarr;
+            </a>
+            <p style="margin:0;color:#6B7280;font-size:.825rem">
+              If you didn't request this, you can safely ignore this email.
+            </p>"""
 
-        _send_email(email, "Reset your Job Apply password", text, html=_email_html(body_html))
-        user_audit.log(user["user_id"], "password_reset_requested", email, _client_ip(request))
+            sent = _send_email(email, "Reset your Job Apply password", text, html=_email_html(body_html))
+            logger.info("forgot_password: reset email sent=%s to=%r user_id=%s", sent, email, user["user_id"])
+            user_audit.log(user["user_id"], "password_reset_requested", email, _client_ip(request))
+        except Exception:
+            logger.exception("forgot_password: failed for email=%r", email)
 
     return JSONResponse({"ok": True})
 
