@@ -252,7 +252,7 @@ def _start_application_pipeline(
       3. score the user's resume/profile against the extracted JD
     Streams structured progress events to GET /{app_id}/pipeline/stream.
     Never raises — failures here must never affect the create/update response."""
-    _log.info("pipeline: _start_application_pipeline called app_id=%s company=%s", app_id, company)
+    _log.warning("pipeline: _start_application_pipeline called app_id=%s company=%s", app_id, company)
     try:
         from apply import (WorkflowConfig, ensure_application_gdrive_folder,
                            extract_job_description_from_url, safe_filename,
@@ -270,10 +270,10 @@ def _start_application_pipeline(
         def emit(step: str, state: str, message: str = "", **extra: Any) -> None:
             q.put({"step": step, "state": state, "message": message, **extra})
 
-        _log.info("pipeline: thread launching app_id=%s company=%s role=%s", app_id, company, role_title)
+        _log.warning("pipeline: thread launching app_id=%s company=%s role=%s", app_id, company, role_title)
 
         def _run():
-            _log.info("pipeline: thread started app_id=%s", app_id)
+            _log.warning("pipeline: thread started app_id=%s", app_id)
             folder_url = ""
             score_payload = None
             try:
@@ -283,7 +283,7 @@ def _start_application_pipeline(
                 )
 
                 # Stage 1 — Drive folder
-                _log.info("pipeline: stage1 starting app_id=%s", app_id)
+                _log.warning("pipeline: stage1 starting app_id=%s", app_id)
                 emit("folder", "running", "Creating Google Drive folder…")
                 folder = ensure_application_gdrive_folder(company, role_title, config)
                 if not folder:
@@ -361,6 +361,7 @@ def _start_application_pipeline(
                          category=score_payload["category"],
                          rationale=score_payload.get("rationale", ""))
             except Exception as exc:
+                _log.exception("pipeline: thread fatal error app_id=%s: %s", app_id, exc)
                 try:
                     q.put({"fatal": str(exc)})
                     user_audit.log(user_id, "jd_capture_failed", actor,
