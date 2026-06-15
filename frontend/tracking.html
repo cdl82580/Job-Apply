@@ -1208,7 +1208,7 @@ function updateStats() {
   document.getElementById('statRejected').textContent    = all.filter(a => a.status === 'Rejected').length;
 }
 
-const DEFAULT_STATUSES = new Set(['Applied', 'Phone Screen', 'Interviewing', 'Researching']);
+const DEFAULT_STATUSES = new Set(['Applied', 'Phone Screen', 'Interviewing', 'Researching', 'Offer']);
 
 let _activeStatus = new Set(DEFAULT_STATUSES);
 let _activeMatch  = new Set();
