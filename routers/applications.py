@@ -415,14 +415,15 @@ async def create_application(body: ApplicationCreate, request: Request, response
 
     now = _now()
     record = {
-        "id":          str(uuid.uuid4()),
-        "user_id":     user_id,
-        "created_at":  now,
-        "created_by":  actor,
-        "updated_at":  now,
-        "updated_by":  actor,
-        "comments":    [],
-        "audit_log":   [],
+        "id":               str(uuid.uuid4()),
+        "user_id":          user_id,
+        "created_at":       now,
+        "created_by":       actor,
+        "updated_at":       now,
+        "updated_by":       actor,
+        "status_changed_at": now,
+        "comments":         [],
+        "audit_log":        [],
         **body.model_dump(),
     }
     record["audit_log"].append(_audit_entry("created", actor))
@@ -474,6 +475,8 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
     if updates.get("status") == "Applied" and (changes or {}).get("status", {}).get("from") != "Applied":
         if not record.get("date_applied"):
             record["date_applied"] = _now()[:10]  # YYYY-MM-DD
+    if "status" in (changes or {}):
+        record["status_changed_at"] = _now()
     record["updated_at"] = _now()
     record["updated_by"] = actor
 

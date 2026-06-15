@@ -301,6 +301,45 @@
     .resend-btn:hover:not(:disabled) { background: rgba(217,119,6,.12); }
     .resend-btn:disabled { opacity: .5; cursor: not-allowed; }
     .hidden { display: none !important; }
+
+    /* ── Notification toggles ────────────────────────────────────── */
+    .notif-group { margin-bottom: 1.25rem; }
+    .notif-group:last-child { margin-bottom: 0; }
+    .notif-group-label {
+      font-size: .7rem; font-weight: 700; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: .625rem;
+    }
+    .notif-row {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 1rem; padding: .625rem 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .notif-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .notif-row:first-child { padding-top: 0; }
+    .notif-text { flex: 1; min-width: 0; }
+    .notif-title { font-size: .875rem; font-weight: 600; color: var(--text); margin-bottom: .15rem; }
+    .notif-desc  { font-size: .775rem; color: var(--muted); line-height: 1.45; }
+
+    /* iOS-style toggle switch */
+    .toggle-wrap { flex-shrink: 0; padding-top: .1rem; }
+    .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; cursor: pointer;
+      background: var(--input-border); border-radius: 22px;
+      transition: background .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; left: 3px; top: 3px;
+      transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--primary); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+    [data-theme="dark"] .toggle input:checked + .toggle-slider { background: var(--border); }
   </style>
 </head>
 <body>
@@ -423,6 +462,88 @@
     </form>
   </div>
 
+  <!-- Notifications -->
+  <div class="card">
+    <p class="card-title">Email Notifications</p>
+
+    <div class="notif-group">
+      <p class="notif-group-label">Time-Elapsed</p>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Researching nudge</div>
+          <div class="notif-desc">Asks "Did you apply?" after 2 days in Researching, then again at 7 days.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="researching_nudge"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Follow-up reminder</div>
+          <div class="notif-desc">Prompts you to follow up 7 days after applying, then again at 14 days.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="follow_up_reminder"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Gone silent alert</div>
+          <div class="notif-desc">Flags active applications with no status change in 21 days.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="gone_silent"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="notif-group">
+      <p class="notif-group-label">Event-Triggered</p>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Status changed</div>
+          <div class="notif-desc">Sends a confirmation email whenever an application status is updated.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="status_changed"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">New application added</div>
+          <div class="notif-desc">Confirms when a tailoring run completes and links to the Drive folder.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="new_application"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="notif-group">
+      <p class="notif-group-label">Digests</p>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Daily digest</div>
+          <div class="notif-desc">Morning summary of active applications and any follow-ups due today.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="daily_digest"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div class="notif-row">
+        <div class="notif-text">
+          <div class="notif-title">Weekly digest</div>
+          <div class="notif-desc">Sunday evening pipeline overview with funnel breakdown and silent applications.</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle"><input type="checkbox" data-pref="weekly_digest"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="notifToast"></div>
+  </div>
+
   <!-- Password -->
   <div class="card">
     <p class="card-title">Change Password</p>
@@ -515,6 +636,12 @@
     document.getElementById('display_name').value  = d.display_name ?? '';
     document.getElementById('profile_text').value  = d.profile_text ?? '';
     renderPreview(d.profile_text ?? '');
+
+    // Notification prefs
+    const prefs = d.notification_prefs ?? {};
+    document.querySelectorAll('[data-pref]').forEach(cb => {
+      cb.checked = prefs[cb.dataset.pref] !== false;
+    });
 
     // Email verification indicator
     const row   = document.getElementById('emailVerifyRow');
@@ -696,6 +823,26 @@
       exitEdit('profileCard', 'profileEditBtn', 'profileBtn', 'profileCancelBtn');
       renderPreview(saved);
     }
+  });
+
+  // Notification prefs — auto-save on any toggle change
+  let _notifSaveTimer = null;
+  document.querySelectorAll('[data-pref]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      clearTimeout(_notifSaveTimer);
+      _notifSaveTimer = setTimeout(async () => {
+        const prefs = {};
+        document.querySelectorAll('[data-pref]').forEach(el => {
+          prefs[el.dataset.pref] = el.checked;
+        });
+        const res = await apiFetch('/api/profile', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notification_prefs: prefs }),
+        });
+        const body = await res.json();
+        toast('notifToast', res.ok ? '✓ Preferences saved.' : (body.detail ?? 'Error'), res.ok ? 'ok' : 'err');
+      }, 400);
+    });
   });
 
   document.getElementById('pwForm').addEventListener('submit', async (e) => {

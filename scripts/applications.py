@@ -48,7 +48,7 @@ _INDEX_FIELDS = {
     "id", "company", "domain", "company_logo_url", "role_title",
     "status", "date_applied", "last_updated", "created_at", "priority", "dua",
     "url", "recruiter_name", "recruiter_email", "location", "salary_range", "job_source",
-    "linked_runs", "match_score",
+    "linked_runs", "match_score", "status_changed_at",
 }
 
 

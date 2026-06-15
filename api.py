@@ -104,6 +104,9 @@ from scripts import storage
 from scripts import user_audit
 from scripts import email_verification as ev
 from scripts import calendar as cal_store
+from scripts import applications as app_store
+from scripts import notification_state as notif_state
+from scripts.notification_tokens import create_token as _create_notif_token
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
 from scripts.session import create_session_token, verify_session_token
 from routers.applications import router as applications_router
@@ -112,6 +115,7 @@ from routers.auth_google import router as auth_google_router
 from routers.admin import router as admin_router
 from routers.calendar import router as calendar_router
 from routers.kb import router as kb_router
+from routers.notifications import router as notifications_router
 try:
     from apply import (
         DEFAULT_MODEL,
@@ -480,6 +484,7 @@ app.include_router(auth_google_router)
 app.include_router(admin_router)
 app.include_router(calendar_router)
 app.include_router(kb_router)
+app.include_router(notifications_router)
 
 
 @app.on_event("startup")
@@ -670,10 +675,159 @@ def _fire_reminder(user_id: str, reminder: dict, event: dict) -> None:
         _send_slack_dm(slack_text)
 
 
-_RL_SWEEP_INTERVAL = 600   # sweep rate-limit buckets every 10 minutes
-_EVICT_INTERVAL    = 600   # evict stale runs/preps every 10 minutes
-_last_rl_sweep     = 0.0
-_last_evict        = 0.0
+_RL_SWEEP_INTERVAL    = 600    # sweep rate-limit buckets every 10 minutes
+_EVICT_INTERVAL       = 600    # evict stale runs/preps every 10 minutes
+_NOTIF_SCAN_INTERVAL  = 3600   # scan for notification triggers every hour
+_last_rl_sweep        = 0.0
+_last_evict           = 0.0
+_last_notif_scan      = 0.0
+
+# Days-since-status-changed thresholds for Researching nudges
+_RESEARCHING_TIER1_DAYS = 2
+_RESEARCHING_TIER2_DAYS = 7
+
+
+def _iso_to_ts(iso: str) -> float:
+    """Parse an ISO-8601 UTC string to a Unix timestamp. Returns 0.0 on failure."""
+    try:
+        import calendar as _cal
+        t = time.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
+        return float(_cal.timegm(t))
+    except Exception:
+        return 0.0
+
+
+def _days_since(iso: str) -> float:
+    ts = _iso_to_ts(iso)
+    if not ts:
+        return 0.0
+    return (time.time() - ts) / 86400
+
+
+def _researching_nudge_email(
+    user_email: str, user_id: str, app: dict, tier: int
+) -> None:
+    """Send the 'Did you apply?' nudge email for one Researching application."""
+    app_id  = app["id"]
+    company = app["company"]
+    role    = app.get("role_title", "")
+    days    = int(_days_since(app.get("status_changed_at") or app.get("created_at", "")))
+
+    # Build action tokens
+    tok_applied = _create_notif_token(user_id, app_id, "status", {"status": "Applied"})
+    tok_no      = _create_notif_token(user_id, app_id, "status", {"status": "Not Applying"})
+    tok_snooze  = _create_notif_token(user_id, app_id, "snooze", {"days": 5})
+
+    base = _APP_URL
+    url_applied = f"{base}/api/notifications/action?token={tok_applied}"
+    url_confirm = f"{base}/api/notifications/confirm-applied?token={tok_applied}"
+    url_no      = f"{base}/api/notifications/action?token={tok_no}"
+    url_snooze  = f"{base}/api/notifications/action?token={tok_snooze}"
+
+    subject = f"Did you apply to {company}?"
+
+    text = (
+        f"You've been researching {role} at {company} for {days} day(s).\n\n"
+        f"Did you end up applying?\n\n"
+        f"Yes, I applied today: {url_applied}\n"
+        f"Yes, but on a different date: {url_confirm}\n"
+        f"Not applying: {url_no}\n"
+        f"Still researching (remind me in 5 days): {url_snooze}\n\n"
+        f"View tracker: {base}/index.html#tracker"
+    )
+
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
+      Did you apply to {company}?
+    </h2>
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
+      {role} &mdash; in Researching for {days} day{'s' if days != 1 else ''}
+    </p>
+    <p style="color:#374151;margin:0 0 1.5rem">
+      You&rsquo;ve had this one open for a while. What&rsquo;s the status?
+    </p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+           style="margin-bottom:1rem">
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_applied}"
+             style="display:block;background:#1A3C5E;color:#fff;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center">
+            &#10003;&nbsp; Yes, I applied today
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_confirm}"
+             style="display:block;background:#1A3C5E;color:#fff;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center">
+            &#128197;&nbsp; Yes, but on a different date&hellip;
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_no}"
+             style="display:block;background:#F3F4F6;color:#374151;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center;border:1px solid #D1D5DB">
+            &#10007;&nbsp; Not applying
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <a href="{url_snooze}"
+             style="display:block;background:#F9FAFB;color:#6B7280;text-decoration:none;
+                    padding:.5rem 1rem;border-radius:6px;font-size:.85rem;
+                    text-align:center;border:1px solid #E5E7EB">
+            &#128337;&nbsp; Still researching &mdash; remind me in 5 days
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+    _send_email(user_email, subject, text, html=_email_html(body_html))
+    notif_state.record_nudge_sent(user_id, app_id, tier)
+    logger.info("Researching nudge tier %d sent for user=%s app=%s", tier, user_id, app_id)
+
+
+def _scan_notifications(user_id: str, user_email: str) -> None:
+    """Check one user's applications and fire any due notifications."""
+    user_record = storage.get_user_by_id(user_id) or {}
+    prefs = {**_default_notif_prefs(), **user_record.get("notification_prefs", {})}
+
+    if prefs.get("researching_nudge", True):
+        try:
+            result = app_store.list_applications(user_id, status="Researching")
+            apps   = result.get("items", [])
+        except Exception:
+            logger.exception("_scan_notifications: failed to list apps for user %s", user_id)
+            return
+
+        for app in apps:
+            app_id = app["id"]
+            ref_ts = app.get("status_changed_at") or app.get("created_at")
+            if not ref_ts:
+                continue
+
+            days_elapsed = _days_since(ref_ts)
+            ns = notif_state.get_researching_state(user_id, app_id)
+
+            if notif_state.is_snoozed(ns):
+                continue
+
+            tier_sent = ns.get("tier", 0)
+
+            if days_elapsed >= _RESEARCHING_TIER2_DAYS and tier_sent < 2:
+                _researching_nudge_email(user_email, user_id, app, tier=2)
+            elif days_elapsed >= _RESEARCHING_TIER1_DAYS and tier_sent < 1:
+                _researching_nudge_email(user_email, user_id, app, tier=1)
 
 
 def _reminder_scheduler_loop() -> None:
@@ -714,6 +868,18 @@ def _reminder_scheduler_loop() -> None:
                     logger.exception("Reminder scheduler error for user %s", uid)
         except Exception:
             logger.exception("Reminder scheduler top-level error")
+
+        # Application notification scanner (runs once per hour)
+        if now - _last_notif_scan >= _NOTIF_SCAN_INTERVAL:
+            _last_notif_scan = now
+            try:
+                if _NOTIFY_EMAIL:
+                    primary = storage.get_user_by_email(_NOTIFY_EMAIL)
+                    if primary:
+                        _scan_notifications(primary["user_id"], _NOTIFY_EMAIL)
+            except Exception:
+                logger.exception("Notification scanner error")
+
         time.sleep(_REMINDER_POLL_INTERVAL)
 
 
@@ -865,9 +1031,24 @@ class EmailChangeRequest(BaseModel):
 _MAX_DISPLAY_NAME_LEN = 100
 _MAX_PROFILE_TEXT_LEN = 50_000
 
+_NOTIF_PREF_KEYS = {
+    "researching_nudge",
+    "follow_up_reminder",
+    "gone_silent",
+    "status_changed",
+    "new_application",
+    "daily_digest",
+    "weekly_digest",
+}
+
+def _default_notif_prefs() -> dict:
+    return {k: True for k in _NOTIF_PREF_KEYS}
+
+
 class ProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     profile_text: str | None = None
+    notification_prefs: dict | None = None
 
 class RunRequest(BaseModel):
     job_posting: str = ""
@@ -1123,14 +1304,16 @@ async def get_profile(request: Request):
     user_data = _require_user(request)
     record = storage.get_user_by_id(user_data["user_id"]) or {}
     profile_text = storage.get_profile(user_data["user_id"]) or ""
+    prefs = {**_default_notif_prefs(), **record.get("notification_prefs", {})}
     return {
-        "display_name":    record.get("display_name", ""),
-        "email":           user_data["email"],
-        "role":            record.get("role", "user"),
-        "email_verified":  record.get("email_verified", True),
-        "profile_text":    profile_text,
-        "has_resume":      storage.has_resume(user_data["user_id"]),
-        "resume_filename": record.get("resume_filename"),
+        "display_name":       record.get("display_name", ""),
+        "email":              user_data["email"],
+        "role":               record.get("role", "user"),
+        "email_verified":     record.get("email_verified", True),
+        "profile_text":       profile_text,
+        "has_resume":         storage.has_resume(user_data["user_id"]),
+        "resume_filename":    record.get("resume_filename"),
+        "notification_prefs": prefs,
     }
 
 
@@ -1156,6 +1339,16 @@ async def update_profile(req: ProfileUpdateRequest, request: Request):
             raise HTTPException(400, f"Profile text must be {_MAX_PROFILE_TEXT_LEN} characters or fewer.")
         storage.save_profile(user_data["user_id"], req.profile_text)
         changes["profile_text"] = "updated"
+
+    if req.notification_prefs is not None:
+        unknown = set(req.notification_prefs.keys()) - _NOTIF_PREF_KEYS
+        if unknown:
+            raise HTTPException(400, f"Unknown notification pref keys: {', '.join(sorted(unknown))}")
+        existing = {**_default_notif_prefs(), **record.get("notification_prefs", {})}
+        merged   = {**existing, **{k: bool(v) for k, v in req.notification_prefs.items()}}
+        record["notification_prefs"] = merged
+        storage.save_user(record)
+        changes["notification_prefs"] = "updated"
 
     if changes:
         user_audit.log(user_data["user_id"], "profile_updated", user_data["email"],
