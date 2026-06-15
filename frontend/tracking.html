@@ -1208,10 +1208,19 @@ function updateStats() {
   document.getElementById('statRejected').textContent    = all.filter(a => a.status === 'Rejected').length;
 }
 
-let _activeStatus = new Set();
+const DEFAULT_STATUSES = new Set(['Applied', 'Phone Screen', 'Interviewing', 'Researching']);
+
+let _activeStatus = new Set(DEFAULT_STATUSES);
 let _activeMatch  = new Set();
 let _activeDua    = new Set();
 let _searchQ      = '';
+
+function _isDefaultState() {
+  if (_activeMatch.size || _activeDua.size || _searchQ) return false;
+  if (_activeStatus.size !== DEFAULT_STATUSES.size) return false;
+  for (const s of DEFAULT_STATUSES) if (!_activeStatus.has(s)) return false;
+  return true;
+}
 
 function _syncPills(groupId, activeSet, dataAttr) {
   document.querySelectorAll(`#${groupId} .pill`).forEach(p => {
@@ -1245,7 +1254,7 @@ function applyFilters() {
   _filtered = _sortList(list);
   _page = 1;
   if (typeof _updateClearBtn === 'function') _updateClearBtn();
-  const isFiltered = !!(_activeStatus.size || _activeMatch.size || _activeDua.size || _searchQ);
+  const isFiltered = !_isDefaultState();
   const chip = document.getElementById('statFilteredChip');
   document.getElementById('statFiltered').textContent = _filtered.length;
   chip.classList.toggle('hidden', !isFiltered);
@@ -1495,10 +1504,10 @@ document.getElementById('duaPills').addEventListener('click', (e) => {
 });
 
 function _updateClearBtn() {
-  document.getElementById('clearFiltersBtn').classList.toggle('visible', !!(_activeStatus.size || _activeMatch.size || _activeDua.size || _searchQ));
+  document.getElementById('clearFiltersBtn').classList.toggle('visible', !_isDefaultState());
 }
 document.getElementById('clearFiltersBtn').addEventListener('click', () => {
-  _activeStatus.clear();
+  _activeStatus = new Set(DEFAULT_STATUSES);
   _activeMatch.clear();
   _activeDua.clear();
   _searchQ = '';
@@ -2157,6 +2166,7 @@ window.addEventListener('popstate', e => {
 
 // ── Init ──────────────────────────────────────────────────────────────
 _updateSortHeaders();
+_syncPills('statusPills', _activeStatus, 'status');
 loadApps().then(() => {
   const initialId = new URLSearchParams(location.search).get('app');
   if (initialId) openDrawer(initialId);
