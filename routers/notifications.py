@@ -65,6 +65,28 @@ async def notification_action(token: str = Query(...)):
             record["company"], record["role_title"],
         )
 
+    if action == "snooze_follow_up":
+        days = int(payload.get("days", 7))
+        notif_state.snooze_follow_up(user_id, app_id, days)
+        user_audit.log(user_id, "notification_action_taken", "notification_link",
+                       action_taken="snooze_follow_up", snooze_days=days,
+                       app_id=app_id, company=record["company"], role_title=record["role_title"])
+        return _ok_page(
+            f"Got it — we'll remind you again in {days} days.",
+            record["company"], record["role_title"],
+        )
+
+    if action == "snooze_gone_silent":
+        days = int(payload.get("days", 14))
+        notif_state.snooze_gone_silent(user_id, app_id, days)
+        user_audit.log(user_id, "notification_action_taken", "notification_link",
+                       action_taken="snooze_gone_silent", snooze_days=days,
+                       app_id=app_id, company=record["company"], role_title=record["role_title"])
+        return _ok_page(
+            f"Got it — snoozed for {days} days.",
+            record["company"], record["role_title"],
+        )
+
     if action == "status":
         new_status   = payload.get("status")
         date_applied = payload.get("date_applied")
@@ -78,6 +100,8 @@ async def notification_action(token: str = Query(...)):
 
         _apply_status(user_id, app_id, record, new_status, date_applied)
         notif_state.clear_researching(user_id, app_id)
+        notif_state.clear_follow_up(user_id, app_id)
+        notif_state.clear_gone_silent(user_id, app_id)
         user_audit.log(user_id, "notification_action_taken", "notification_link",
                        action_taken="status_update", new_status=new_status,
                        app_id=app_id, company=record["company"], role_title=record["role_title"])
@@ -176,6 +200,8 @@ async def confirm_applied_submit(request: Request):
 
     _apply_status(user_id, app_id, record, "Applied", date_applied)
     notif_state.clear_researching(user_id, app_id)
+    notif_state.clear_follow_up(user_id, app_id)
+    notif_state.clear_gone_silent(user_id, app_id)
     user_audit.log(user_id, "notification_action_taken", "notification_link",
                    action_taken="status_update", new_status="Applied", date_applied=date_applied,
                    app_id=app_id, company=record["company"], role_title=record["role_title"])

@@ -686,6 +686,18 @@ _last_notif_scan      = 0.0
 _RESEARCHING_TIER1_DAYS = 2
 _RESEARCHING_TIER2_DAYS = 7
 
+# Follow-up reminder thresholds (days since date_applied, still "Applied")
+_FOLLOW_UP_TIER1_DAYS = 7
+_FOLLOW_UP_TIER2_DAYS = 14
+
+# Gone-silent threshold (days since status_changed_at for active statuses)
+_GONE_SILENT_DAYS = 21
+_GONE_SILENT_ACTIVE_STATUSES = {"Applied", "Phone Screen", "Interviewing", "On Hold", "Offer"}
+
+# Digest send hours (UTC)
+_DAILY_DIGEST_HOUR  = 8   # 8am UTC
+_WEEKLY_DIGEST_HOUR = 18  # 6pm UTC, Sundays only
+
 
 def _iso_to_ts(iso: str) -> float:
     """Parse an ISO-8601 UTC string to a Unix timestamp. Returns 0.0 on failure."""
@@ -800,20 +812,400 @@ def _researching_nudge_email(
                    app_id=app_id, company=app.get("company"), role_title=app.get("role_title"))
 
 
+# ---------------------------------------------------------------------------
+# Follow-up reminder email
+# ---------------------------------------------------------------------------
+
+def _follow_up_reminder_email(
+    user_email: str, user_id: str, app: dict, tier: int
+) -> None:
+    app_id    = app["id"]
+    company   = app.get("company", "Unknown")
+    role      = app.get("role_title", "Unknown")
+    ref_ts    = _iso_to_ts(app.get("date_applied") or app.get("status_changed_at") or "")
+    days      = int((time.time() - ref_ts) / 86400) if ref_ts else 0
+    base      = _APP_URL
+
+    tok_follow  = _create_notif_token(user_id, app_id, "status",
+                                      {"status": "Applied"})  # mark follow-up sent → stay Applied (status stays)
+    tok_no_resp = _create_notif_token(user_id, app_id, "status", {"status": "No Response"})
+    tok_snooze  = _create_notif_token(user_id, app_id, "snooze_follow_up", {"days": 7})
+
+    url_follow  = f"{base}/api/notifications/action?token={tok_follow}"
+    url_no_resp = f"{base}/api/notifications/action?token={tok_no_resp}"
+    url_snooze  = f"{base}/api/notifications/action?token={tok_snooze}"
+
+    subject = f"Have you heard back from {company}?"
+
+    text = (
+        f"It's been {days} day(s) since you applied for {role} at {company}.\n\n"
+        f"Have you followed up or heard anything?\n\n"
+        f"Mark follow-up sent (still waiting): {url_follow}\n"
+        f"Mark as No Response: {url_no_resp}\n"
+        f"Snooze 7 days: {url_snooze}\n\n"
+        f"View tracker: {base}/index.html#tracker"
+    )
+
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
+      Have you heard back from {company}?
+    </h2>
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
+      {role} &mdash; applied {days} day{'s' if days != 1 else ''} ago
+    </p>
+    <p style="color:#374151;margin:0 0 1.5rem">
+      No movement yet. Time to follow up or move on?
+    </p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+           style="margin-bottom:1rem">
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_follow}"
+             style="display:block;background:#1A3C5E;color:#fff;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center">
+            &#128233;&nbsp; I followed up &mdash; still waiting
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_no_resp}"
+             style="display:block;background:#F3F4F6;color:#374151;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center;border:1px solid #D1D5DB">
+            &#128683;&nbsp; Mark as No Response
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <a href="{url_snooze}"
+             style="display:block;background:#F9FAFB;color:#6B7280;text-decoration:none;
+                    padding:.5rem 1rem;border-radius:6px;font-size:.85rem;
+                    text-align:center;border:1px solid #E5E7EB">
+            &#128337;&nbsp; Remind me again in 7 days
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+    _send_email(user_email, subject, text, html=_email_html(body_html))
+    notif_state.record_follow_up_sent(user_id, app_id, tier)
+    logger.info("Follow-up reminder tier %d sent for user=%s app=%s", tier, user_id, app_id)
+    user_audit.log(user_id, "notification_sent", "system",
+                   notification_type="follow_up_reminder", tier=tier,
+                   app_id=app_id, company=company, role_title=role)
+
+
+# ---------------------------------------------------------------------------
+# Gone-silent alert email
+# ---------------------------------------------------------------------------
+
+def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
+    app_id  = app["id"]
+    company = app.get("company", "Unknown")
+    role    = app.get("role_title", "Unknown")
+    status  = app.get("status", "")
+    ref_ts  = _iso_to_ts(app.get("status_changed_at") or app.get("updated_at") or "")
+    days    = int((time.time() - ref_ts) / 86400) if ref_ts else 0
+    base    = _APP_URL
+
+    tok_no_resp = _create_notif_token(user_id, app_id, "status", {"status": "No Response"})
+    tok_archive = _create_notif_token(user_id, app_id, "status", {"status": "Not Applying"})
+    tok_snooze  = _create_notif_token(user_id, app_id, "snooze_gone_silent", {"days": 14})
+
+    url_no_resp = f"{base}/api/notifications/action?token={tok_no_resp}"
+    url_archive = f"{base}/api/notifications/action?token={tok_archive}"
+    url_snooze  = f"{base}/api/notifications/action?token={tok_snooze}"
+
+    subject = f"No update on {company} in {days} days"
+
+    text = (
+        f"{role} at {company} has been {status} for {days} days with no activity.\n\n"
+        f"Mark as No Response: {url_no_resp}\n"
+        f"Archive (Not Applying): {url_archive}\n"
+        f"Snooze 2 weeks: {url_snooze}\n\n"
+        f"View tracker: {base}/index.html#tracker"
+    )
+
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
+      Gone quiet: {company}
+    </h2>
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
+      {role} &mdash; {status} for {days} day{'s' if days != 1 else ''} with no update
+    </p>
+    <p style="color:#374151;margin:0 0 1.5rem">
+      No activity in a while. Time to close this one out or snooze it?
+    </p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+           style="margin-bottom:1rem">
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_no_resp}"
+             style="display:block;background:#1A3C5E;color:#fff;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center">
+            &#128683;&nbsp; Mark as No Response
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-bottom:.625rem">
+          <a href="{url_archive}"
+             style="display:block;background:#F3F4F6;color:#374151;text-decoration:none;
+                    padding:.65rem 1rem;border-radius:6px;font-weight:600;
+                    font-size:.9rem;text-align:center;border:1px solid #D1D5DB">
+            &#128465;&nbsp; Archive (Not Applying)
+          </a>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <a href="{url_snooze}"
+             style="display:block;background:#F9FAFB;color:#6B7280;text-decoration:none;
+                    padding:.5rem 1rem;border-radius:6px;font-size:.85rem;
+                    text-align:center;border:1px solid #E5E7EB">
+            &#128337;&nbsp; Snooze 2 weeks
+          </a>
+        </td>
+      </tr>
+    </table>
+    """
+
+    _send_email(user_email, subject, text, html=_email_html(body_html))
+    notif_state.record_gone_silent_sent(user_id, app_id)
+    logger.info("Gone-silent alert sent for user=%s app=%s", user_id, app_id)
+    user_audit.log(user_id, "notification_sent", "system",
+                   notification_type="gone_silent",
+                   app_id=app_id, company=company, role_title=role)
+
+
+# ---------------------------------------------------------------------------
+# Daily digest email
+# ---------------------------------------------------------------------------
+
+def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None:
+    base = _APP_URL
+
+    active_statuses = {"Applied", "Phone Screen", "Interviewing", "On Hold", "Offer"}
+    active = [a for a in apps if a.get("status") in active_statuses]
+    researching = [a for a in apps if a.get("status") == "Researching"]
+
+    # Follow-ups due today (Applied > 7 days)
+    follow_ups_due = []
+    for a in active:
+        if a.get("status") == "Applied":
+            ref = a.get("date_applied") or a.get("status_changed_at")
+            if ref and _days_since(ref) >= _FOLLOW_UP_TIER1_DAYS:
+                follow_ups_due.append(a)
+
+    subject = f"Job Apply daily — {len(active)} active, {len(follow_ups_due)} follow-up{'s' if len(follow_ups_due) != 1 else ''} due"
+
+    def _app_row(a: dict) -> str:
+        return (
+            f"<tr>"
+            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{a.get('company','')}</td>"
+            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('role_title','')}</td>"
+            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('status','')}</td>"
+            f"</tr>"
+        )
+
+    active_rows = "".join(_app_row(a) for a in active[:20])
+    followup_rows = "".join(_app_row(a) for a in follow_ups_due[:10])
+
+    followup_section = ""
+    if follow_ups_due:
+        followup_section = f"""
+        <h3 style="color:#B45309;font-size:.9rem;margin:1.25rem 0 .5rem">
+          &#9888;&nbsp; Follow-ups due ({len(follow_ups_due)})
+        </h3>
+        <table width="100%" cellpadding="0" cellspacing="0"
+               style="border-collapse:collapse;margin-bottom:.75rem">
+          <thead>
+            <tr style="background:#FEF3C7">
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Company</th>
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Role</th>
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Status</th>
+            </tr>
+          </thead>
+          <tbody>{followup_rows}</tbody>
+        </table>"""
+
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
+      Your daily job tracker summary
+    </h2>
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
+      {len(active)} active application{'s' if len(active) != 1 else ''} &bull;
+      {len(researching)} researching &bull;
+      {len(follow_ups_due)} follow-up{'s' if len(follow_ups_due) != 1 else ''} due
+    </p>
+    {followup_section}
+    <h3 style="color:#1A3C5E;font-size:.9rem;margin:1.25rem 0 .5rem">
+      Active applications ({len(active)})
+    </h3>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border-collapse:collapse;margin-bottom:1.25rem">
+      <thead>
+        <tr style="background:#EFF6FF">
+          <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#1E40AF">Company</th>
+          <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#1E40AF">Role</th>
+          <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#1E40AF">Status</th>
+        </tr>
+      </thead>
+      <tbody>{active_rows}</tbody>
+    </table>
+    <a href="{base}/index.html#tracker"
+       style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
+              padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem">
+      Open Tracker &rarr;
+    </a>
+    """
+
+    text = (
+        f"Daily summary: {len(active)} active, {len(researching)} researching, "
+        f"{len(follow_ups_due)} follow-ups due.\n\n"
+        f"View tracker: {base}/index.html#tracker"
+    )
+
+    _send_email(user_email, subject, text, html=_email_html(body_html))
+    notif_state.record_digest_sent(user_id, "daily")
+    logger.info("Daily digest sent for user=%s (%d active)", user_id, len(active))
+    user_audit.log(user_id, "notification_sent", "system",
+                   notification_type="daily_digest", active_count=len(active))
+
+
+# ---------------------------------------------------------------------------
+# Weekly digest email
+# ---------------------------------------------------------------------------
+
+def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None:
+    base = _APP_URL
+
+    from collections import Counter
+    status_counts = Counter(a.get("status", "Unknown") for a in apps)
+
+    active_statuses = {"Applied", "Phone Screen", "Interviewing", "On Hold", "Offer"}
+    active = [a for a in apps if a.get("status") in active_statuses]
+
+    # Silent apps: active but no update in 14+ days
+    silent = []
+    for a in active:
+        ref = a.get("status_changed_at") or a.get("updated_at")
+        if ref and _days_since(ref) >= 14:
+            silent.append(a)
+
+    subject = f"Job Apply weekly — {len(active)} active, {len(silent)} gone quiet"
+
+    def _status_row(status: str, count: int) -> str:
+        return (
+            f"<tr>"
+            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{status}</td>"
+            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem;text-align:right'>{count}</td>"
+            f"</tr>"
+        )
+
+    ordered_statuses = ["Researching", "Applied", "Phone Screen", "Interviewing",
+                        "On Hold", "Offer", "No Response", "Not Applying"]
+    status_rows = "".join(
+        _status_row(s, status_counts[s])
+        for s in ordered_statuses if status_counts.get(s)
+    )
+    other_statuses = set(status_counts) - set(ordered_statuses)
+    for s in sorted(other_statuses):
+        status_rows += _status_row(s, status_counts[s])
+
+    silent_section = ""
+    if silent:
+        silent_rows = "".join(
+            f"<tr>"
+            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{a.get('company','')}</td>"
+            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('role_title','')}</td>"
+            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('status','')}</td>"
+            f"</tr>"
+            for a in silent[:10]
+        )
+        silent_section = f"""
+        <h3 style="color:#B45309;font-size:.9rem;margin:1.25rem 0 .5rem">
+          &#128276;&nbsp; Gone quiet ({len(silent)})
+        </h3>
+        <table width="100%" cellpadding="0" cellspacing="0"
+               style="border-collapse:collapse;margin-bottom:.75rem">
+          <thead>
+            <tr style="background:#FEF3C7">
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Company</th>
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Role</th>
+              <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#92400E">Status</th>
+            </tr>
+          </thead>
+          <tbody>{silent_rows}</tbody>
+        </table>"""
+
+    body_html = f"""
+    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
+      Your weekly pipeline overview
+    </h2>
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
+      {len(apps)} total application{'s' if len(apps) != 1 else ''} tracked
+    </p>
+
+    <h3 style="color:#1A3C5E;font-size:.9rem;margin:0 0 .5rem">Pipeline by status</h3>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border-collapse:collapse;margin-bottom:1rem">
+      <thead>
+        <tr style="background:#EFF6FF">
+          <th style="padding:.375rem .5rem;text-align:left;font-size:.8rem;color:#1E40AF">Status</th>
+          <th style="padding:.375rem .5rem;text-align:right;font-size:.8rem;color:#1E40AF">Count</th>
+        </tr>
+      </thead>
+      <tbody>{status_rows}</tbody>
+    </table>
+    {silent_section}
+    <a href="{base}/index.html#tracker"
+       style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
+              padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem;
+              margin-top:.75rem">
+      Open Tracker &rarr;
+    </a>
+    """
+
+    text = (
+        f"Weekly summary: {len(apps)} total, {len(active)} active, {len(silent)} gone quiet.\n\n"
+        + "\n".join(f"  {s}: {c}" for s, c in status_counts.most_common())
+        + f"\n\nView tracker: {base}/index.html#tracker"
+    )
+
+    _send_email(user_email, subject, text, html=_email_html(body_html))
+    notif_state.record_digest_sent(user_id, "weekly")
+    logger.info("Weekly digest sent for user=%s (%d total)", user_id, len(apps))
+    user_audit.log(user_id, "notification_sent", "system",
+                   notification_type="weekly_digest", total_count=len(apps))
+
+
 def _scan_notifications(user_id: str, user_email: str) -> None:
     """Check one user's applications and fire any due notifications."""
     user_record = storage.get_user_by_id(user_id) or {}
     prefs = {**_default_notif_prefs(), **user_record.get("notification_prefs", {})}
 
-    if prefs.get("researching_nudge", True):
-        try:
-            result = app_store.list_applications(user_id, status="Researching")
-            apps   = result.get("items", [])
-        except Exception:
-            logger.exception("_scan_notifications: failed to list apps for user %s", user_id)
-            return
+    # Fetch all apps once for scans that need multiple statuses
+    try:
+        all_apps = app_store.list_applications(user_id).get("items", [])
+    except Exception:
+        logger.exception("_scan_notifications: failed to list apps for user %s", user_id)
+        return
 
-        for app in apps:
+    # ------------------------------------------------------------------
+    # Researching nudge
+    # ------------------------------------------------------------------
+    if prefs.get("researching_nudge", True):
+        for app in all_apps:
+            if app.get("status") != "Researching":
+                continue
             app_id = app["id"]
             ref_ts = app.get("status_changed_at") or app.get("created_at")
             if not ref_ts:
@@ -831,6 +1223,80 @@ def _scan_notifications(user_id: str, user_email: str) -> None:
                 _researching_nudge_email(user_email, user_id, app, tier=2)
             elif days_elapsed >= _RESEARCHING_TIER1_DAYS and tier_sent < 1:
                 _researching_nudge_email(user_email, user_id, app, tier=1)
+
+    # ------------------------------------------------------------------
+    # Follow-up reminder (Applied with no progression)
+    # ------------------------------------------------------------------
+    if prefs.get("follow_up_reminder", True):
+        for app in all_apps:
+            if app.get("status") != "Applied":
+                continue
+            app_id = app["id"]
+            ref = app.get("date_applied") or app.get("status_changed_at")
+            if not ref:
+                continue
+
+            days_elapsed = _days_since(ref)
+            ns = notif_state.get_follow_up_state(user_id, app_id)
+
+            if notif_state.is_snoozed(ns):
+                continue
+
+            tier_sent = ns.get("tier", 0)
+
+            if days_elapsed >= _FOLLOW_UP_TIER2_DAYS and tier_sent < 2:
+                _follow_up_reminder_email(user_email, user_id, app, tier=2)
+            elif days_elapsed >= _FOLLOW_UP_TIER1_DAYS and tier_sent < 1:
+                _follow_up_reminder_email(user_email, user_id, app, tier=1)
+
+    # ------------------------------------------------------------------
+    # Gone-silent alert (active apps with no status change in 21 days)
+    # ------------------------------------------------------------------
+    if prefs.get("gone_silent", True):
+        for app in all_apps:
+            if app.get("status") not in _GONE_SILENT_ACTIVE_STATUSES:
+                continue
+            app_id = app["id"]
+            ref = app.get("status_changed_at") or app.get("updated_at")
+            if not ref:
+                continue
+
+            if _days_since(ref) < _GONE_SILENT_DAYS:
+                continue
+
+            ns = notif_state.get_gone_silent_state(user_id, app_id)
+            if notif_state.is_snoozed(ns):
+                continue
+
+            # Only send once per silence period (cleared when status changes)
+            if ns.get("sent_at"):
+                # Don't re-alert until status changes and comes back silent
+                continue
+
+            _gone_silent_email(user_email, user_id, app)
+
+    # ------------------------------------------------------------------
+    # Daily digest (once per day at ~8am UTC)
+    # ------------------------------------------------------------------
+    if prefs.get("daily_digest", True):
+        utc_now = time.gmtime()
+        if utc_now.tm_hour >= _DAILY_DIGEST_HOUR:
+            today = time.strftime("%Y-%m-%d", utc_now)
+            last_sent = notif_state.get_last_digest_date(user_id, "daily")
+            if last_sent != today:
+                _daily_digest_email(user_email, user_id, all_apps)
+
+    # ------------------------------------------------------------------
+    # Weekly digest (once per week on Sunday at ~6pm UTC)
+    # ------------------------------------------------------------------
+    if prefs.get("weekly_digest", True):
+        utc_now = time.gmtime()
+        # tm_wday: 0=Mon … 6=Sun
+        if utc_now.tm_wday == 6 and utc_now.tm_hour >= _WEEKLY_DIGEST_HOUR:
+            today = time.strftime("%Y-%m-%d", utc_now)
+            last_sent = notif_state.get_last_digest_date(user_id, "weekly")
+            if last_sent != today:
+                _weekly_digest_email(user_email, user_id, all_apps)
 
 
 def _reminder_scheduler_loop() -> None:

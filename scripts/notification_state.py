@@ -7,10 +7,25 @@ Schema:
     "researching_nudges": {
       "{app_id}": {
         "tier": 1 | 2,          # which nudge has been sent (1=2-day, 2=7-day)
-        "sent_at": "<ISO>",     # when the last nudge was sent
+        "sent_at": "<ISO>",
         "snoozed_until": "<ISO>" | null
       }
-    }
+    },
+    "follow_up_nudges": {
+      "{app_id}": {
+        "tier": 1 | 2,          # 1=7-day, 2=14-day
+        "sent_at": "<ISO>",
+        "snoozed_until": "<ISO>" | null
+      }
+    },
+    "gone_silent_nudges": {
+      "{app_id}": {
+        "sent_at": "<ISO>",
+        "snoozed_until": "<ISO>" | null
+      }
+    },
+    "last_daily_digest_date":  "YYYY-MM-DD" | null,
+    "last_weekly_digest_date": "YYYY-MM-DD" | null
   }
 """
 
@@ -94,3 +109,87 @@ def is_snoozed(app_state: dict[str, Any]) -> bool:
         return _t.time() < until_ts
     except Exception:
         return False
+
+
+# ---------------------------------------------------------------------------
+# Follow-up nudge state (Applied status, no progression)
+# ---------------------------------------------------------------------------
+
+def get_follow_up_state(user_id: str, app_id: str) -> dict[str, Any]:
+    state = _load(user_id)
+    return state.get("follow_up_nudges", {}).get(app_id, {})
+
+
+def record_follow_up_sent(user_id: str, app_id: str, tier: int) -> None:
+    state = _load(user_id)
+    state.setdefault("follow_up_nudges", {}).setdefault(app_id, {})
+    state["follow_up_nudges"][app_id]["tier"] = tier
+    state["follow_up_nudges"][app_id]["sent_at"] = _now_iso()
+    state["follow_up_nudges"][app_id].pop("snoozed_until", None)
+    _save(user_id, state)
+
+
+def snooze_follow_up(user_id: str, app_id: str, days: int) -> None:
+    state = _load(user_id)
+    state.setdefault("follow_up_nudges", {}).setdefault(app_id, {})
+    until_ts = time.time() + days * 86400
+    until_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(until_ts))
+    state["follow_up_nudges"][app_id]["snoozed_until"] = until_iso
+    _save(user_id, state)
+
+
+def clear_follow_up(user_id: str, app_id: str) -> None:
+    state = _load(user_id)
+    state.get("follow_up_nudges", {}).pop(app_id, None)
+    _save(user_id, state)
+
+
+# ---------------------------------------------------------------------------
+# Gone-silent nudge state (stalled active applications)
+# ---------------------------------------------------------------------------
+
+def get_gone_silent_state(user_id: str, app_id: str) -> dict[str, Any]:
+    state = _load(user_id)
+    return state.get("gone_silent_nudges", {}).get(app_id, {})
+
+
+def record_gone_silent_sent(user_id: str, app_id: str) -> None:
+    state = _load(user_id)
+    state.setdefault("gone_silent_nudges", {}).setdefault(app_id, {})
+    state["gone_silent_nudges"][app_id]["sent_at"] = _now_iso()
+    state["gone_silent_nudges"][app_id].pop("snoozed_until", None)
+    _save(user_id, state)
+
+
+def snooze_gone_silent(user_id: str, app_id: str, days: int) -> None:
+    state = _load(user_id)
+    state.setdefault("gone_silent_nudges", {}).setdefault(app_id, {})
+    until_ts = time.time() + days * 86400
+    until_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(until_ts))
+    state["gone_silent_nudges"][app_id]["snoozed_until"] = until_iso
+    _save(user_id, state)
+
+
+def clear_gone_silent(user_id: str, app_id: str) -> None:
+    state = _load(user_id)
+    state.get("gone_silent_nudges", {}).pop(app_id, None)
+    _save(user_id, state)
+
+
+# ---------------------------------------------------------------------------
+# Digest state (daily / weekly)
+# ---------------------------------------------------------------------------
+
+def get_last_digest_date(user_id: str, digest_type: str) -> str | None:
+    """Return 'YYYY-MM-DD' of the last sent digest, or None."""
+    state = _load(user_id)
+    key = f"last_{digest_type}_digest_date"
+    return state.get(key)
+
+
+def record_digest_sent(user_id: str, digest_type: str) -> None:
+    """Store today's UTC date as the last-sent date for this digest type."""
+    state = _load(user_id)
+    key = f"last_{digest_type}_digest_date"
+    state[key] = time.strftime("%Y-%m-%d", time.gmtime())
+    _save(user_id, state)
