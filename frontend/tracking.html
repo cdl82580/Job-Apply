@@ -1359,6 +1359,12 @@ async function scoreApplication(id, btn) {
   try {
     const res = await apiFetch(`/api/applications/${id}/score`, { method: 'POST' });
     if (!res.ok) {
+      // No JD found yet — open the pipeline modal so the user can capture one,
+      // which will run scoring automatically at the end.
+      if (res.status === 422) {
+        setupFolder(id);
+        return;
+      }
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || `Scoring failed (${res.status})`);
     }
