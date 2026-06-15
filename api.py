@@ -1663,7 +1663,7 @@ async def register(
 
     # Send verification email (best-effort — don't block registration if it fails)
     token = ev.create_token(user_id, email)
-    _send_verification_email(email, display_name.strip(), token)
+    _send_verification_email(_NOTIFY_EMAIL or email, display_name.strip(), token)
 
     response = JSONResponse({"ok": True, "display_name": user["display_name"],
                              "email_verified": False})
@@ -1753,7 +1753,7 @@ async def resend_verification(request: Request):
         return JSONResponse({"ok": True, "already_verified": True})
 
     token = ev.create_token(user_data["user_id"], user_data["email"])
-    sent  = _send_verification_email(user_data["email"], user.get("display_name", "there"), token)
+    sent  = _send_verification_email(_NOTIFY_EMAIL or user_data["email"], user.get("display_name", "there"), token)
     user_audit.log(user_data["user_id"], "verification_email_resent", user_data["email"],
                    _client_ip(request))
     return JSONResponse({"ok": True, "sent": sent})
@@ -1806,8 +1806,11 @@ async def forgot_password(request: Request):
               If you didn't request this, you can safely ignore this email.
             </p>"""
 
-            sent = _send_email(email, "Reset your Job Apply password", text, html=_email_html(body_html))
-            logger.info("forgot_password: reset email sent=%s to=%r user_id=%s", sent, email, user["user_id"])
+            # Always deliver to the Resend-verified address (_NOTIFY_EMAIL / APP_USER_EMAIL).
+            # +alias variants stored on user records are rejected by Resend in test mode.
+            send_to = _NOTIFY_EMAIL or email
+            sent = _send_email(send_to, "Reset your Job Apply password", text, html=_email_html(body_html))
+            logger.info("forgot_password: reset email sent=%s to=%r user_id=%s", sent, send_to, user["user_id"])
             user_audit.log(user["user_id"], "password_reset_requested", email, _client_ip(request))
         except Exception:
             logger.exception("forgot_password: failed for email=%r", email)
@@ -2028,7 +2031,7 @@ async def change_email(req: EmailChangeRequest, request: Request):
 
     # Send verification to the new address
     token = ev.create_token(record["user_id"], new_email)
-    _send_verification_email(new_email, record.get("display_name", new_email), token)
+    _send_verification_email(_NOTIFY_EMAIL or new_email, record.get("display_name", new_email), token)
 
     # Invalidate the current session — the email embedded in it is now stale
     response = JSONResponse({"ok": True, "message": "Email updated. Please verify your new address and log in again."})
