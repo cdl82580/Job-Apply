@@ -1742,6 +1742,84 @@ async def resend_verification(request: Request):
     return JSONResponse({"ok": True, "sent": sent})
 
 
+@app.post("/api/auth/forgot-password")
+async def forgot_password(request: Request):
+    """Unauthenticated. Sends a password-reset link to the account email.
+    Always returns 200 to avoid user-enumeration."""
+    _check_rate_limit(request, "forgot_password", max_hits=3, window_secs=3600)
+
+    # Single-user: look up by APP_USER_EMAIL, or by posted email
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    email = (body.get("email") or "").strip().lower() or _NOTIFY_EMAIL
+
+    user = storage.get_user_by_email(email) if email else None
+    if user:
+        token = _create_notif_token(
+            user["user_id"], "password_reset", "password_reset",
+            payload={"email": email}, ttl=3600,
+        )
+        reset_url = f"{_APP_URL}/reset-password.html?token={token}"
+
+        text = (
+            f"Hi {user.get('display_name', 'there')},\n\n"
+            f"Click the link below to reset your Job Apply password. "
+            f"This link expires in 1 hour.\n\n{reset_url}\n\n"
+            f"If you didn't request this, ignore this email."
+        )
+        body_html = f"""
+        <h2 style="color:#1A3C5E;margin:0 0 .75rem;font-size:1.1rem">Reset your password</h2>
+        <p style="margin:0 0 1rem;color:#374151">
+          Click the button below to choose a new password.
+          This link expires in <strong>1 hour</strong>.
+        </p>
+        <a href="{reset_url}"
+           style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
+                  padding:.65rem 1.5rem;border-radius:6px;font-weight:600;font-size:.9rem;
+                  margin-bottom:1.25rem">
+          Reset password &rarr;
+        </a>
+        <p style="margin:0;color:#6B7280;font-size:.825rem">
+          If you didn't request this, you can safely ignore this email.
+        </p>"""
+
+        _send_email(email, "Reset your Job Apply password", text, html=_email_html(body_html))
+        user_audit.log(user["user_id"], "password_reset_requested", email, _client_ip(request))
+
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/auth/reset-password")
+async def reset_password(request: Request):
+    """Unauthenticated. Verifies reset token and sets a new password."""
+    _check_rate_limit(request, "reset_password", max_hits=5, window_secs=3600)
+    body = await request.json()
+    token       = (body.get("token") or "").strip()
+    new_password = (body.get("new_password") or "").strip()
+
+    from scripts.notification_tokens import verify_token as _verify_reset_token
+    data = _verify_reset_token(token)
+    if not data or data.get("action") != "password_reset":
+        raise HTTPException(400, "This reset link has expired or is invalid.")
+
+    if len(new_password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+
+    user_id = data["user_id"]
+    record  = storage.get_user_by_id(user_id)
+    if not record:
+        raise HTTPException(404, "Account not found.")
+
+    record["password_hash"] = _hash_password(new_password)
+    storage.save_user(record)
+    _invalidate_user_cache(user_id)
+    user_audit.log(user_id, "password_reset_completed", record.get("email", ""), _client_ip(request))
+    return JSONResponse({"ok": True})
+
+
 @app.get("/api/audit/me")
 async def my_audit_log(request: Request):
     """Return the current user's full action audit log, newest first."""
