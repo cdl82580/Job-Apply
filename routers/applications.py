@@ -29,7 +29,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from scripts import applications as app_store
-from scripts import user_audit
+from scripts import notif_dispatch, user_audit
 
 import logging as _logging
 _log = _logging.getLogger(__name__)
@@ -431,6 +431,13 @@ async def create_application(body: ApplicationCreate, request: Request, response
     user_audit.log(user_id, "created", actor, app_id=record["id"],
                    company=record["company"], role_title=record["role_title"])
 
+    import threading as _threading
+    _threading.Thread(
+        target=notif_dispatch.notify_new_application,
+        args=(user_id, record),
+        daemon=True,
+    ).start()
+
     pipeline_started = False
     if record.get("url"):
         _start_application_pipeline(
@@ -491,6 +498,16 @@ async def update_application(app_id: str, body: ApplicationUpdate, request: Requ
         user_audit.log(user_id, "updated", actor, app_id=app_id,
                        company=record["company"], role_title=record["role_title"],
                        fields=list(changes.keys()))
+
+    if "status" in changes:
+        old_status = changes["status"]["from"]
+        new_status = changes["status"]["to"]
+        import threading as _threading
+        _threading.Thread(
+            target=notif_dispatch.notify_status_changed,
+            args=(user_id, record, old_status, new_status),
+            daemon=True,
+        ).start()
 
     # If the URL actually changed, re-capture the job description and re-score
     pipeline_started = False
