@@ -1663,6 +1663,53 @@ def save_gdrive_job_posting(folder_id: str, markdown: str, config: WorkflowConfi
         return False
 
 
+def get_latest_gdrive_resume_text(folder_id: str, config: WorkflowConfig) -> str | None:
+    """Return the plain text of the most recent tailored resume in a Drive folder.
+
+    Picks the most recently modified styled resume (``Resume_*.docx``, excluding
+    the ATS variant); falls back to the ATS resume if that is all that's present.
+    Returns ``None`` when Drive is unreachable or the folder holds no resume yet —
+    callers should fall back to the user's master resume in that case.
+    Best-effort: never raises.
+    """
+    service = _gdrive_service(config)
+    if service is None:
+        return None
+    try:
+        files = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields="files(id, name, modifiedTime)",
+            orderBy="modifiedTime desc",
+            pageSize=100,
+        ).execute().get("files", [])
+    except Exception:
+        return None
+
+    resumes = [f for f in files if re.match(r"^Resume_.*\.docx$", f["name"])]
+    if not resumes:
+        return None
+    # `resumes` is already newest-first; prefer the styled resume over the ATS one.
+    chosen = next((f for f in resumes if not f["name"].endswith("_ATS.docx")), resumes[0])
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+    try:
+        tmp.write(_gdrive_download_file(service, chosen["id"]))
+        tmp.close()
+        text = extract_resume_text(
+            WorkflowConfig(progress=config.progress, master_resume=Path(tmp.name))
+        )
+        config.progress(f"  ✓ Scoring against latest Drive resume: {chosen['name']}")
+        return text
+    except Exception:
+        return None
+    finally:
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Auto-capture: extract job description from a posting URL via Claude
 # ---------------------------------------------------------------------------

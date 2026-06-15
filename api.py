@@ -130,6 +130,7 @@ try:
         optimize_run,
         claude,
         get_gdrive_job_posting,
+        get_latest_gdrive_resume_text,
         save_gdrive_job_posting,
         list_gdrive_run_folders,
         run_workflow,
@@ -304,19 +305,28 @@ def _trigger_match_scoring(
     resume_path,           # Path to the resume docx already on disk for this run
     profile_text: str,
     user_label: str,
+    folder_id: str = "",   # Drive folder to fetch the latest resume from
 ) -> None:
     """Best-effort, async: score how well this run's resume/profile matched the
     job posting it was tailored against, and store the result on the application
-    record. Never raises — failures here must never affect the run response."""
+    record. When folder_id is supplied the latest Drive resume is preferred over
+    the local resume_path, so the score always reflects what is in Drive.
+    Never raises — failures here must never affect the run response."""
     try:
-        from apply import score_application_match, extract_resume_text, WorkflowConfig
+        from apply import (score_application_match, extract_resume_text,
+                           get_latest_gdrive_resume_text, WorkflowConfig)
         from scripts.applications import save_match_score, get_application, save_application
 
         def _run():
             try:
                 config = WorkflowConfig(progress=lambda _: None, user_label=user_label,
                                         master_resume=resume_path)
-                resume_text = extract_resume_text(config)
+                if folder_id:
+                    resume_text = get_latest_gdrive_resume_text(folder_id, config)
+                    if not resume_text:
+                        resume_text = extract_resume_text(config)
+                else:
+                    resume_text = extract_resume_text(config)
                 match_score = score_application_match(job_posting, resume_text, profile_text, config)
                 match_score["scored_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 match_score["scored_by"] = "system"
@@ -1357,13 +1367,13 @@ async def create_run(req: RunRequest, request: Request, response: Response):
         if req.app_id:
             _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="resume",
                              result_dir=result.run_dir, folder_url=result.folder_url or "")
+            run_folder_id = (result.folder_url or "").rstrip("/").split("/")[-1]
             _trigger_match_scoring(user_id=user_id, app_id=req.app_id, job_posting=job_posting,
-                                   resume_path=resume_path, profile_text=profile_text,
-                                   user_label=user_data["email"])
+                                   resume_path=result.resume_path, profile_text=profile_text,
+                                   user_label=user_data["email"], folder_id=run_folder_id)
             # If the JD was pasted (not loaded from a Drive folder), persist it as
             # job_description.md in the run's output folder and register a jd run link.
             if job_posting and not req.jd_folder_id and result.folder_url:
-                run_folder_id = result.folder_url.rstrip("/").split("/")[-1]
                 if run_folder_id:
                     save_gdrive_job_posting(run_folder_id, job_posting, config)
                     _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="job_description",
@@ -1788,6 +1798,18 @@ async def create_optimize(req: OptimizeRequest, request: Request, response: Resp
         result = optimize_run(config)
         _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="optimize",
                          result_dir=result.run_dir, folder_url=result.folder_url or "")
+        # Re-score the application against its job posting using the optimized
+        # resume, mirroring the post-run scoring on /api/run. Only meaningful when
+        # the optimize touched the resume (cover-letter-only runs leave it None).
+        if result.resume_path:
+            profile_text = storage.get_profile(user_id) or ""
+            jd_text = get_gdrive_job_posting(req.folder_id, config) or ""
+            if profile_text and jd_text:
+                _trigger_match_scoring(
+                    user_id=user_id, app_id=req.app_id, job_posting=jd_text,
+                    resume_path=result.resume_path, profile_text=profile_text,
+                    user_label=user_data["email"], folder_id=req.folder_id,
+                )
         return result
 
     def _opt_done_payload(result: OptimizeResult) -> dict:

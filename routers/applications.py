@@ -148,40 +148,66 @@ def _actor(request: Request) -> str:
     return request.state.user.get("email", request.state.user.get("user_id", "unknown"))
 
 
+def _app_gdrive_folder_id(record: dict) -> str | None:
+    """The Drive folder backing this application's resumes. All runs for a
+    company/role share one folder, so prefer the most recently linked
+    resume/optimize run, then fall back to any linked run with a folder id."""
+    runs = [r for r in (record.get("linked_runs") or []) if r.get("gdrive_folder_id")]
+    if not runs:
+        return None
+    runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+    preferred = next((r for r in runs if r.get("type") in ("resume", "optimize")), None)
+    return (preferred or runs[0])["gdrive_folder_id"]
+
+
 def _run_match_scoring(
     user_id: str, app_id: str, jd_text: str, actor: str, scored_by: str,
 ) -> dict:
     """Score the user's resume/profile against jd_text, persist the result on the
     application record, and write audit entries. Returns the match_score dict.
-    Raises ValueError when the user has no resume/profile, LookupError when the
+
+    Scores the most recent tailored resume in the application's Drive folder when
+    one exists, falling back to the user's master resume otherwise. Raises
+    ValueError when the user has no resume/profile, LookupError when the
     application record is gone."""
     import tempfile
     from pathlib import Path
 
-    from apply import WorkflowConfig, extract_resume_text, score_application_match
+    from apply import (WorkflowConfig, extract_resume_text,
+                       get_latest_gdrive_resume_text, score_application_match)
     from scripts import storage
 
-    resume_bytes = storage.get_resume(user_id)
-    if not resume_bytes:
-        raise ValueError("No master resume uploaded. Add one in your profile.")
     profile_text = storage.get_profile(user_id)
     if not profile_text:
         raise ValueError("No profile guide saved. Add one in your profile.")
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
-    try:
-        tmp.write(resume_bytes)
-        tmp.close()
-        resume_config = WorkflowConfig(progress=lambda _: None, user_label=actor,
-                                       master_resume=Path(tmp.name))
-        resume_text = extract_resume_text(resume_config)
-    finally:
-        try:
-            Path(tmp.name).unlink()
-        except OSError:
-            pass
-
     config = WorkflowConfig(progress=lambda _: None, user_label=actor)
+
+    # Prefer the most recent tailored resume in this application's Drive folder;
+    # fall back to the user's master resume when no run has produced one yet.
+    resume_text = None
+    record = app_store.get_application(user_id, app_id)
+    folder_id = _app_gdrive_folder_id(record) if record else None
+    if folder_id:
+        resume_text = get_latest_gdrive_resume_text(folder_id, config)
+
+    if not resume_text:
+        resume_bytes = storage.get_resume(user_id)
+        if not resume_bytes:
+            raise ValueError("No master resume uploaded. Add one in your profile.")
+        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+        try:
+            tmp.write(resume_bytes)
+            tmp.close()
+            resume_config = WorkflowConfig(progress=lambda _: None, user_label=actor,
+                                           master_resume=Path(tmp.name))
+            resume_text = extract_resume_text(resume_config)
+        finally:
+            try:
+                Path(tmp.name).unlink()
+            except OSError:
+                pass
+
     match_score = score_application_match(jd_text, resume_text, profile_text, config)
     match_score["scored_at"] = _now()
     match_score["scored_by"] = scored_by
