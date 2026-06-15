@@ -659,8 +659,21 @@
     }
 
     const fname = d.resume_filename ? ` — ${d.resume_filename}` : '';
+    let uploadedLabel = '';
+    if (d.has_resume && d.resume_uploaded_at) {
+      const dt = new Date(d.resume_uploaded_at);
+      const now = new Date();
+      const diffDays = Math.floor((now - dt) / 86400000);
+      let age;
+      if (diffDays === 0)      age = 'uploaded today';
+      else if (diffDays === 1) age = 'uploaded yesterday';
+      else if (diffDays < 30)  age = `uploaded ${diffDays} days ago`;
+      else if (diffDays < 60)  age = 'uploaded ~1 month ago';
+      else                     age = `uploaded ${Math.floor(diffDays / 30)} months ago`;
+      uploadedLabel = `<span style="color:var(--muted);font-weight:400;font-size:.8rem;margin-left:.5rem">(${age})</span>`;
+    }
     document.getElementById('resumeStatus').innerHTML = d.has_resume
-      ? `<span class="dot"></span>Resume on file<span style="color:var(--muted);font-weight:400">${fname}</span>`
+      ? `<span class="dot"></span>Resume on file<span style="color:var(--muted);font-weight:400">${fname}</span>${uploadedLabel}`
       : '<span style="color:var(--error)">⚠ No resume uploaded yet</span>';
   }
   loadProfile();

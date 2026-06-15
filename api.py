@@ -1780,9 +1780,10 @@ async def get_profile(request: Request):
         "role":               record.get("role", "user"),
         "email_verified":     record.get("email_verified", True),
         "profile_text":       profile_text,
-        "has_resume":         storage.has_resume(user_data["user_id"]),
-        "resume_filename":    record.get("resume_filename"),
-        "notification_prefs": prefs,
+        "has_resume":           storage.has_resume(user_data["user_id"]),
+        "resume_filename":      record.get("resume_filename"),
+        "resume_uploaded_at":   record.get("resume_uploaded_at"),
+        "notification_prefs":   prefs,
     }
 
 
@@ -1840,6 +1841,7 @@ async def upload_resume(request: Request, resume: UploadFile = File(...)):
     record = storage.get_user_by_id(user_data["user_id"])
     if record:
         record["resume_filename"] = resume.filename
+        record["resume_uploaded_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         storage.save_user(record)
     storage.save_resume(user_data["user_id"], data)
     user_audit.log(user_data["user_id"], "resume_uploaded", user_data["email"],
