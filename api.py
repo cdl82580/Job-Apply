@@ -427,6 +427,7 @@ def _email_html(body_html: str) -> str:
 def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bool:
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
+        logger.warning("_send_email: RESEND_API_KEY not set — email to %r not sent", to)
         return False
     payload: dict = {
         "from":    _FROM_ADDRESS,
@@ -444,8 +445,13 @@ def _send_email(to: str, subject: str, body: str, html: str | None = None) -> bo
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=10,
         )
-        return 200 <= resp.status_code < 300
+        ok = 200 <= resp.status_code < 300
+        if not ok:
+            logger.warning("_send_email: Resend returned %d to=%r body=%s",
+                           resp.status_code, to, resp.text[:200])
+        return ok
     except Exception:
+        logger.exception("_send_email: request failed to=%r", to)
         return False
 
 
@@ -515,9 +521,11 @@ async def security_headers_middleware(request: Request, call_next):
 
 _PUBLIC_PATHS = frozenset({
     "/login.html", "/register.html",
+    "/forgot-password.html", "/reset-password.html",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",
     "/api/auth/verify-email",
+    "/api/auth/forgot-password", "/api/auth/reset-password",
     "/api/companies/search",
     "/api/health",
     "/favicon.ico",
@@ -1302,7 +1310,7 @@ def _scan_notifications(user_id: str, user_email: str) -> None:
 def _reminder_scheduler_loop() -> None:
     """Background thread: poll every 60s and fire due reminders.
     Also does periodic housekeeping (rate-limit sweep, stale run eviction)."""
-    global _last_rl_sweep, _last_evict
+    global _last_rl_sweep, _last_evict, _last_notif_scan
     time.sleep(15)  # brief startup delay
     while True:
         now = time.time()
