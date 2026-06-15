@@ -496,6 +496,13 @@ app.include_router(notifications_router)
 @app.on_event("startup")
 async def _on_startup():
     _start_reminder_scheduler()
+    # Surface missing env vars immediately in logs
+    if not os.environ.get("RESEND_API_KEY"):
+        logger.warning("STARTUP: RESEND_API_KEY is not set — all email sending is disabled")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        logger.warning("STARTUP: ANTHROPIC_API_KEY is not set")
+    if not os.environ.get("SESSION_SECRET"):
+        logger.warning("STARTUP: SESSION_SECRET is not set — sessions will not survive restarts")
 
 
 @app.middleware("http")
@@ -1349,6 +1356,8 @@ def _reminder_scheduler_loop() -> None:
         # Application notification scanner (runs once per hour)
         if now - _last_notif_scan >= _NOTIF_SCAN_INTERVAL:
             _last_notif_scan = now
+            if not os.environ.get("RESEND_API_KEY"):
+                logger.warning("notification scanner: RESEND_API_KEY not set — skipping (no email will be sent)")
             try:
                 if _NOTIFY_EMAIL:
                     primary = storage.get_user_by_email(_NOTIFY_EMAIL)
