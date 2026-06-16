@@ -400,16 +400,41 @@
       gap: .375rem;
       margin-top: .5rem;
     }
-    .app-card-actions .btn-danger { grid-column: 1 / -1; }
+    /* Delete: subtle ghost-danger style, spans full width */
+    .app-card-actions .btn-card-delete {
+      grid-column: 1 / -1;
+      background: none;
+      border: 1px solid var(--card-border);
+      color: var(--muted);
+      font-size: .8rem; font-weight: 500;
+      border-radius: 6px; padding: .35rem .75rem;
+      cursor: pointer; display: inline-flex; align-items: center;
+      justify-content: center; gap: .35rem;
+      transition: border-color .12s, color .12s, background .12s;
+    }
+    .app-card-actions .btn-card-delete:hover {
+      border-color: #FECACA; color: var(--error); background: #FEF2F2;
+    }
+    [data-theme="dark"] .app-card-actions .btn-card-delete:hover {
+      border-color: #7F1D1D; background: #2B1010;
+    }
 
     /* Show card view on narrow screens AND on landscape mobile (short viewport) */
     @media (max-width: 700px) {
       .app-table { display: none; }
       .app-cards { display: block; }
+      .stats-bar { display: none; }
+      .filter-toggle-btn { display: inline-flex; }
+      .filter-pills { display: none; flex-direction: column; gap: .5rem; width: 100%; }
+      .filter-pills.open { display: flex; }
     }
     @media (max-height: 600px) and (orientation: landscape) {
       .app-table { display: none; }
       .app-cards { display: block; }
+      .stats-bar { display: none; }
+      .filter-toggle-btn { display: inline-flex; }
+      .filter-pills { display: none; flex-direction: column; gap: .5rem; width: 100%; }
+      .filter-pills.open { display: flex; }
     }
 
     /* ── Pagination ──────────────────────────────────────────────── */
@@ -1478,11 +1503,11 @@ function renderTable() {
         ${matchCell(a)}
       </div>
       <div class="app-card-actions">
-        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="run">&#x25B6; Run Agent</button>
-        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">Edit</button>
-        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job Post &#x2197;</a>` : ''}
-        ${folderUrl(a) ? `<a class="btn btn-ghost btn-sm" href="${esc(folderUrl(a))}" target="_blank" rel="noopener">Folder &#x1F4C1;</a>` : ''}
-        <button class="btn btn-danger btn-sm" data-id="${a.id}" data-action="delete">Delete</button>
+        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="run">▶ Run Agent</button>
+        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">✏ Edit</button>
+        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">↗ Job Post</a>` : ''}
+        ${folderUrl(a) ? `<a class="btn btn-ghost btn-sm" href="${esc(folderUrl(a))}" target="_blank" rel="noopener">📁 Folder</a>` : ''}
+        <button class="btn-card-delete" data-id="${a.id}" data-action="delete">🗑 Delete</button>
       </div>`;
     cards.appendChild(card);
   }
