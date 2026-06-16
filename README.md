@@ -23,7 +23,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **bfcache prevention** — Web Lock acquired on page load keeps all HTML pages ineligible for Chrome's back/forward cache; server-side middleware also injects `no-store` headers, `<meta>` cache tags, and a `pageshow` reload script into every HTML response
 
 ### Application Tracker
-- Full CRUD for job applications — company (via BrandFetch lookup), role, status, recruiter, salary, DUA tracking
+- Full CRUD for job applications — company (via Logo.dev search), role, status, recruiter, salary, DUA tracking
 - **Match scoring** — Claude-powered resume↔JD fit score (0–100) with category badge (Strong Match / Good Match / Stretch / Long Shot) and per-dimension breakdown; Rescore button per row
 - **DUA indicator** — tag and filter applications reported to unemployment (DUA)
 - **Auto `date_applied`** — setting status to "Applied" automatically sets today's date if not already present
@@ -115,7 +115,7 @@ job-apply/
 ├── routers/
 │   ├── applications.py        ← Tracker CRUD + comments + linked runs
 │   ├── calendar.py            ← Calendar event + reminder CRUD
-│   ├── companies.py           ← BrandFetch proxy
+│   ├── companies.py           ← Logo.dev company search proxy
 │   ├── auth_google.py         ← Google OAuth flow
 │   ├── admin.py               ← Admin-only endpoints + webhooks + audit
 │   └── kb.py                  ← Knowledge Base CRUD (public list + admin create/update/delete/seed)
@@ -172,11 +172,11 @@ job-apply/
 | 📋 Tracker | `/tracker` | Pipeline summary by status |
 | 📋 Tracker | `/track-list [status]` | List applications (optional status filter) |
 | 📋 Tracker | `/track-view` | View full details of an application |
-| 📋 Tracker | `/track-add` | Add a new application (BrandFetch company search, all fields except priority) |
+| 📋 Tracker | `/track-add` | Add a new application (Logo.dev company search, all fields except priority) |
 | 📋 Tracker | `/track-update` | Two-step: pick app → edit all fields pre-filled (setting status to Applied auto-sets date applied) |
 | 📋 Tracker | `/track-note` | Add a comment to an application |
 | 📋 Tracker | `/track-delete` | Delete an application (two-step confirm) |
-| 🔍 Lookup | `/company [name]` | Search company info via BrandFetch |
+| 🔍 Lookup | `/company [name]` | Search company info via Logo.dev |
 | 🔍 Lookup | `/whoami` | Show your account details |
 | 🔍 Lookup | `/activity` | Show your 10 most recent audit events |
 | 👤 Profile | `/profile-name` | Update display name (modal) |
@@ -288,7 +288,7 @@ Both process groups share the same Docker image and all Fly secrets.
 | `APP_USER_EMAIL` | Primary user email — used by the Slack bot to resolve its API identity |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `BRANDFETCH_API_KEY` | BrandFetch API key for company search |
+| `LOGODEV_API_KEY` | Logo.dev secret key (`sk_`) for company search API |
 | `BOT_API_KEY` | Shared secret between Slack bot and web API |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack signing secret |
@@ -357,8 +357,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/applications/{id}/score` | cookie | Run (or re-run) resume↔JD match scoring; persists result to record |
 | POST | `/api/applications/{id}/extract-jd` | cookie | Extract JD text from the app's posting URL via Claude |
 | POST | `/api/applications/{id}/setup-folder` | cookie | Create Drive folder + attempt JD capture in background; returns 202 immediately |
-| GET | `/api/companies/search?q=` | — | BrandFetch company search |
-| GET | `/api/companies/logo?domain=` | — | Fetch company logo — redirects (302) to signed BrandFetch CDN URL |
+| GET | `/api/companies/search?q=` | — | Logo.dev company search — returns `name`, `domain`, `description`; logos constructed client-side via `img.logo.dev` |
 | POST | `/api/run` | cookie | Start resume generation run → returns `{run_id, machine_id}`; accepts `jd_folder_id` to load JD server-side from Drive |
 | GET | `/api/run/{id}/stream` | cookie | SSE progress stream (`done` event includes `replacements_warning` if < 70% XML edits succeeded) |
 | GET | `/api/run/{id}/status` | cookie | Poll run status |
