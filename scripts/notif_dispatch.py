@@ -142,6 +142,41 @@ def notify_new_application(user_id: str, record: dict[str, Any]) -> None:
 
         subject = f"New application added: {company}"
 
+        # Status pill colours (shared with notify_status_changed)
+        _bg = {
+            "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
+            "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
+            "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
+            "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
+            "Not Applying": "#F3F4F6",
+        }
+        _color = {
+            "Researching":  "#0369A1", "Applied":      "#92400E",
+            "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
+            "On Hold":      "#9A3412", "Offer":        "#065F46",
+            "Rejected":     "#991B1B",
+        }
+        status_pill = (
+            f'<span style="display:inline-block;background:{_bg.get(status,"#F3F4F6")};'
+            f'color:{_color.get(status,"#374151")};padding:.2rem .65rem;border-radius:999px;'
+            f'font-size:.85rem;font-weight:600">'
+            f'{_STATUS_EMOJI.get(status,"")} {status}</span>'
+        )
+
+        # Friendly applied date: "Monday, June 16, 2026"
+        applied_html = ""
+        if record.get("date_applied"):
+            try:
+                from datetime import date as _date
+                d = _date.fromisoformat(record["date_applied"])
+                friendly = d.strftime("%A, %B %-d, %Y")
+            except Exception:
+                friendly = record["date_applied"]
+            applied_html = (
+                f'<tr><td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:110px">Applied</td>'
+                f'<td style="padding:.375rem 0;color:#374151;font-size:.875rem">{friendly}</td></tr>'
+            )
+
         score_line = ""
         ms = record.get("match_score")
         if ms:
@@ -161,14 +196,9 @@ def notify_new_application(user_id: str, record: dict[str, Any]) -> None:
                style="border-collapse:collapse;margin-bottom:1.25rem">
           <tr>
             <td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:110px">Status</td>
-            <td style="padding:.375rem 0;color:#374151;font-size:.875rem">{status}</td>
+            <td style="padding:.375rem 0">{status_pill}</td>
           </tr>
-          {'<tr><td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:110px">Applied</td>'
-           f'<td style="padding:.375rem 0;color:#374151;font-size:.875rem">{record["date_applied"]}</td></tr>'
-           if record.get("date_applied") else ""}
-          {'<tr><td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:110px">Priority</td>'
-           f'<td style="padding:.375rem 0;color:#374151;font-size:.875rem">{record["priority"]}</td></tr>'
-           if record.get("priority") else ""}
+          {applied_html}
           {'<tr><td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:110px">Location</td>'
            f'<td style="padding:.375rem 0;color:#374151;font-size:.875rem">{record["location"]}</td></tr>'
            if record.get("location") else ""}
