@@ -3566,6 +3566,8 @@ loadUsers();
 if (_initialTab === 'applications') { _appsLoaded = true; loadApps(); }
 if (_initialTab === 'runs')         { _runsLoaded = true; loadRuns(); }
 if (_initialTab === 'kb') { _kbLoaded = true; loadKB(); }
+
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 </script>
 </body>
 </html>
