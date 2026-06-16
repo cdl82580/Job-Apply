@@ -34,7 +34,7 @@ router = APIRouter(tags=["auth"])
 
 _CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
 _CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-_APP_URL       = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+_APP_URL       = os.environ.get("APP_URL", "https://apply.cdlav.us")
 _REDIRECT_URI  = f"{_APP_URL}/api/auth/google/callback"
 
 _GOOGLE_AUTH_URL  = "https://accounts.google.com/o/oauth2/v2/auth"
