@@ -2773,7 +2773,10 @@ _NO_CACHE_HEADERS = {
     "Pragma": "no-cache",
     "Expires": "0",
 }
-_BFCACHE_SCRIPT = b'<script>window.addEventListener("pageshow",function(e){if(e.persisted)location.reload();});</script>'
+# beforeunload disqualifies the page from bfcache in Chrome (unlike unload,
+# Chrome still respects beforeunload as a bfcache disqualifier as of 2024).
+# pageshow+reload is a fallback for any browser that ignores beforeunload.
+_BFCACHE_SCRIPT = b'<script>window.addEventListener("beforeunload",function(){});window.addEventListener("pageshow",function(e){if(e.persisted)location.reload();});</script>'
 _META_NO_CACHE = b'<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">'
 
 class NoCacheHTMLStaticFiles(StaticFiles):
