@@ -1277,10 +1277,10 @@ function fmtDateTime(iso) {
   } catch { return iso; }
 }
 
-function logoHtml(domain, company, size = 24, logoUrl = '') {
-  const src = logoUrl || (domain ? `https://img.logo.dev/${esc(domain)}` : '');
-  if (src) return `<img class="co-logo" style="width:${size}px;height:${size}px"
-    src="${esc(src)}"
+const LOGODEV_PK = 'pk_U3oIYbhyTvinmftvOvCTJg';
+function logoHtml(domain, company, size = 24) {
+  if (domain) return `<img class="co-logo" style="width:${size}px;height:${size}px"
+    src="https://img.logo.dev/${esc(domain)}?token=${LOGODEV_PK}&size=${size}&format=png&retina=true"
     alt="${esc(company)}" data-company="${esc(company)}"
     onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'co-logo-ph',textContent:'${esc(company).slice(0,2).toUpperCase()}'}))">`;
   return `<div class="co-logo-ph">${esc(company).slice(0,2).toUpperCase()}</div>`;
@@ -1611,7 +1611,7 @@ function renderApps() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><div class="company-cell">
-        ${logoHtml(a.domain, a.company, 24, a.company_logo_url)}
+        ${logoHtml(a.domain, a.company)}
         <div><div class="co-name">${esc(a.company)}</div>
              <div class="co-email">${esc(a.domain || '')}</div></div>
       </div></td>
@@ -3459,7 +3459,7 @@ function renderAppCards(list) {
     return `<div class="admin-card">
       <div class="admin-card-header">
         <div class="company-cell">
-          ${logoHtml(a.domain, a.company, 24, a.company_logo_url)}
+          ${logoHtml(a.domain, a.company)}
           <div>
             <div class="admin-card-name">${esc(a.company)}</div>
             <div class="admin-card-sub">${esc(a.role_title)}</div>

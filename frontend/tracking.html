@@ -956,7 +956,6 @@
         <div class="suggestions hidden" id="dSuggestions"></div>
       </div>
       <input type="hidden" id="dDomain">
-      <input type="hidden" id="dLogoUrl">
     </div>
 
     <!-- Role + Status -->
@@ -1307,21 +1306,15 @@ function matchCell(a) {
   return `<div class="match-cell">${badge}${btn}</div>`;
 }
 
-function logoEl(domain, company, storedLogoUrl) {
-  // Always use the proxy to avoid expired signed URLs stored on the record.
-  const src = domain ? `/api/companies/logo?domain=${encodeURIComponent(domain)}` : null;
-  if (src) {
-    return `<img class="co-logo" src="${esc(src)}" alt="${esc(company)}" data-company="${esc(company)}" data-fallback="" onerror="logoError(this)">`;
+const LOGODEV_PK = 'pk_U3oIYbhyTvinmftvOvCTJg';
+function logoDevUrl(domain, size) {
+  return `https://img.logo.dev/${encodeURIComponent(domain)}?token=${LOGODEV_PK}&size=${size}&format=png&retina=true`;
+}
+function logoEl(domain, company) {
+  if (domain) {
+    return `<img class="co-logo" src="${esc(logoDevUrl(domain, 28))}" alt="${esc(company)}" data-company="${esc(company)}" onerror="this.replaceWith(makePlaceholder(this.dataset.company))">`;
   }
   return makePlaceholderHtml(company);
-}
-function logoError(img) {
-  const fallback = img.dataset.fallback;
-  if (fallback && img.src !== fallback) {
-    img.src = fallback;
-  } else {
-    img.replaceWith(makePlaceholder(img.dataset.company));
-  }
 }
 function makePlaceholder(company) {
   const el = document.createElement('div');
@@ -1450,7 +1443,7 @@ function renderTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><div class="company-cell">
-        ${logoEl(a.domain, a.company, a.company_logo_url)}
+        ${logoEl(a.domain, a.company)}
         <div>
           <div class="co-name">${esc(a.company)}</div>
           ${a.domain ? `<div class="co-domain">${esc(a.domain)}</div>` : ''}
@@ -1474,7 +1467,7 @@ function renderTable() {
     card.className = 'app-card';
     card.innerHTML = `
       <div class="app-card-top">
-        ${logoEl(a.domain, a.company, a.company_logo_url)}
+        ${logoEl(a.domain, a.company)}
         <div class="app-card-body">
           <div class="app-card-company">${esc(a.company)}</div>
           <div class="app-card-role">${esc(a.role_title)}</div>
@@ -1677,13 +1670,13 @@ document.getElementById('clearFiltersBtn').addEventListener('click', () => {
 
 // ── Logo.dev company search ────────────────────────────────────────────
 let _searchTimer = null;
-let _selectedCompany = null;  // {name, domain, logo_url}
+let _selectedCompany = null;  // {name, domain}
 
 const dCompanyInput = document.getElementById('dCompany');
 const dSuggestionsEl = document.getElementById('dSuggestions');
 const dLogoPreview = document.getElementById('dLogoPreview');
 const dDomainInput = document.getElementById('dDomain');
-const dLogoUrlInput = document.getElementById('dLogoUrl');
+
 
 dCompanyInput.addEventListener('input', () => {
   const q = dCompanyInput.value.trim();
@@ -1692,7 +1685,6 @@ dCompanyInput.addEventListener('input', () => {
   if (_selectedCompany && dCompanyInput.value !== _selectedCompany.name) {
     _selectedCompany = null;
     dDomainInput.value = '';
-    dLogoUrlInput.value = '';
     dLogoPreview.style.display = 'none';
   }
   if (!q || q.length < 2) {
@@ -1725,9 +1717,8 @@ function renderSuggestions(list) {
     div.className = 'sugg-item';
     div.dataset.name    = item.name;
     div.dataset.domain  = item.domain;
-    div.dataset.logoUrl = item.logo_url;
     div.innerHTML = `
-      <img class="sugg-logo" src="${esc(item.logo_url)}" alt="${esc(item.name)}" onerror="this.style.visibility='hidden'">
+      <img class="sugg-logo" src="${esc(item.domain ? logoDevUrl(item.domain, 32) : '')}" alt="${esc(item.name)}" onerror="this.style.visibility='hidden'">
       <div class="sugg-text">
         <div class="sugg-name">${esc(item.name)}</div>
         <div class="sugg-meta">${esc(item.domain)}${item.description ? ' · ' + esc(item.description) : ''}</div>
@@ -1741,20 +1732,13 @@ function renderSuggestions(list) {
 }
 
 function selectCompany(item) {
-  _selectedCompany    = item;
+  _selectedCompany    = { name: item.name, domain: item.domain };
   dCompanyInput.value = item.name;
   dDomainInput.value  = item.domain;
-
-  // Store the Logo.dev CDN URL directly from the search response.
-  const savedLogo = item.logo_url || '';
-  dLogoUrlInput.value = savedLogo;
-
   dSuggestionsEl.classList.add('hidden');
 
-  // Preview uses the Logo.dev URL from the search response (immediate)
-  const previewSrc = safeHref(item.logo_url) || safeHref(savedLogo);
-  if (previewSrc) {
-    dLogoPreview.src          = previewSrc;
+  if (item.domain) {
+    dLogoPreview.src          = logoDevUrl(item.domain, 28);
     dLogoPreview.style.display = 'block';
   } else {
     dLogoPreview.style.display = 'none';
@@ -1850,7 +1834,6 @@ function resetDrawerForm() {
   document.getElementById('drawerErr').style.display = 'none';
   dCompanyInput.value         = '';
   dDomainInput.value          = '';
-  dLogoUrlInput.value         = '';
   dLogoPreview.style.display  = 'none';
   dSuggestionsEl.classList.add('hidden');
   document.getElementById('dRole').value          = '';
@@ -1885,12 +1868,11 @@ async function loadAndFillDrawer(id) {
 function fillDrawer(a) {
   dCompanyInput.value   = a.company   || '';
   dDomainInput.value    = a.domain    || '';
-  dLogoUrlInput.value   = a.company_logo_url || '';
   if (a.domain) {
-    dLogoPreview.src          = `/api/companies/logo?domain=${encodeURIComponent(a.domain)}`;
+    dLogoPreview.src          = logoDevUrl(a.domain, 28);
     dLogoPreview.style.display = 'block';
   }
-  _selectedCompany = { name: a.company, domain: a.domain, logo_url: a.company_logo_url };
+  _selectedCompany = { name: a.company, domain: a.domain };
 
   document.getElementById('dRole').value           = a.role_title    || '';
   document.getElementById('dStatus').value         = a.status        || 'Researching';
@@ -1930,7 +1912,6 @@ async function saveDrawer() {
   const payload = {
     company:         company,
     domain:          dDomainInput.value || '',
-    company_logo_url: dLogoUrlInput.value || '',
     role_title:      role,
     status:          document.getElementById('dStatus').value,
     ...(document.getElementById('dDateApplied').value ? { date_applied: document.getElementById('dDateApplied').value } : {}),

@@ -2,7 +2,8 @@
 routers/companies.py — Logo.dev company search proxy.
 
 GET /api/companies/search?q=salesforce
-Returns up to 5 matches: [{name, domain, logo_url, description}]
+Returns up to 5 matches: [{name, domain, description}]
+Logo URLs are constructed client-side from domain using the pk_ CDN token.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ router = APIRouter(prefix="/api/companies", tags=["companies"])
 
 _LOGODEV_KEY    = os.environ.get("LOGODEV_API_KEY", "")
 _LOGODEV_SEARCH = "https://api.logo.dev/search"
-_LOGODEV_CDN    = "https://img.logo.dev/{domain}?token={token}"
 
 
 @router.get("/search")
@@ -39,30 +39,10 @@ async def search_companies(q: str = Query(..., min_length=1)):
 
     results = []
     for item in raw[:5]:
-        domain   = item.get("domain", "")
-        logo_url = item.get("logo_url") or (
-            _LOGODEV_CDN.format(domain=domain, token=_LOGODEV_KEY) if domain else ""
-        )
         results.append({
             "name":        item.get("name", ""),
-            "domain":      domain,
-            "logo_url":    logo_url,
+            "domain":      item.get("domain", ""),
             "description": item.get("description", ""),
         })
 
     return results
-
-
-@router.get("/logo")
-async def company_logo(domain: str = Query(..., min_length=1)):
-    """Redirect to the Logo.dev CDN URL for the given domain."""
-    if not _LOGODEV_KEY:
-        raise HTTPException(503, "Logo service not configured")
-    if "/" in domain or "\\" in domain or domain.startswith("."):
-        raise HTTPException(400, "Invalid domain")
-
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(
-        url=_LOGODEV_CDN.format(domain=domain, token=_LOGODEV_KEY),
-        status_code=302,
-    )
