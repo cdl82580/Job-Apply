@@ -492,7 +492,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/applications",
-            "description": "Create a new application. `url` must start with http:// or https:// if provided. `company_logo_url` must start with https:// if provided.",
+            "description": "Create a new application. `url` must start with http:// or https:// if provided. `company_logo_url` is no longer used — logos are rendered dynamically from `domain` via Logo.dev.",
             "header": [
               {
                 "key": "Content-Type",
@@ -667,31 +667,7 @@
                 }
               ]
             },
-            "description": "BrandFetch company search. Returns up to 5 results: `{name, domain, logo_url, description}`. `logo_url` is a short-lived signed CDN URL suitable for immediate `<img>` display. Used by the tracker and Slack `/track-add` command."
-          }
-        },
-        {
-          "name": "GET /api/companies/logo",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/companies/logo?domain=salesforce.com",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "companies",
-                "logo"
-              ],
-              "query": [
-                {
-                  "key": "domain",
-                  "value": "salesforce.com"
-                }
-              ]
-            },
-            "description": "Fetch a fresh logo for a domain by running a BrandFetch search and redirecting (302) to the signed icon CDN URL. Returns 404 if no logo found. Returns 503 if BRANDFETCH_API_KEY is not configured. Used by the tracker list view for per-row logo loading with fallback."
+            "description": "Logo.dev company search. Returns up to 5 results: `{name, domain, description}`. Logos are constructed client-side from `domain` using `https://img.logo.dev/{domain}?token={pk_}&size={n}&format=png&retina=true`. Used by the tracker and Slack `/track-add` command."
           }
         }
       ]
