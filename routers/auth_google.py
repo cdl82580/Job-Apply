@@ -8,7 +8,7 @@ Flow:
 Env vars required:
   GOOGLE_CLIENT_ID
   GOOGLE_CLIENT_SECRET
-  APP_URL  (e.g. https://job-apply-corey.fly.dev)
+  APP_URL  (e.g. https://apply.cdlav.us)
 """
 
 from __future__ import annotations

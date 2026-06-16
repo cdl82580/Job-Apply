@@ -1,5 +1,5 @@
 """
-routers/companies.py — BrandFetch company search proxy.
+routers/companies.py — Logo.dev company search proxy.
 
 GET /api/companies/search?q=salesforce
 Returns up to 5 matches: [{name, domain, logo_url, description}]
@@ -14,18 +14,20 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
-_BRANDFETCH_KEY = os.environ.get("BRANDFETCH_API_KEY", "")
-_BRANDFETCH_URL     = "https://api.brandfetch.io/v2/search/{query}"
+_LOGODEV_KEY    = os.environ.get("LOGODEV_API_KEY", "")
+_LOGODEV_SEARCH = "https://api.logo.dev/search"
+_LOGODEV_CDN    = "https://img.logo.dev/{domain}?token={token}"
 
 
 @router.get("/search")
 async def search_companies(q: str = Query(..., min_length=1)):
-    if not _BRANDFETCH_KEY:
-        raise HTTPException(503, "Company search not configured (BRANDFETCH_API_KEY not set)")
+    if not _LOGODEV_KEY:
+        raise HTTPException(503, "Company search not configured (LOGODEV_API_KEY not set)")
     try:
         resp = requests.get(
-            _BRANDFETCH_URL.format(query=q),
-            params={"c": _BRANDFETCH_KEY},
+            _LOGODEV_SEARCH,
+            params={"q": q},
+            headers={"Authorization": f"Bearer {_LOGODEV_KEY}"},
             timeout=8,
         )
         resp.raise_for_status()
@@ -37,18 +39,15 @@ async def search_companies(q: str = Query(..., min_length=1)):
 
     results = []
     for item in raw[:5]:
-        domain = item.get("domain", "")
-        icon   = item.get("icon", "")
-        if not isinstance(icon, str):
-            icon = ""
-        # Use the icon URL from the response directly — it's a signed CDN URL
-        # that works immediately in <img> tags. The domain CDN URL is used
-        # on the list view (after the record is saved) via the domain field.
+        domain   = item.get("domain", "")
+        logo_url = item.get("logo_url") or (
+            _LOGODEV_CDN.format(domain=domain, token=_LOGODEV_KEY) if domain else ""
+        )
         results.append({
             "name":        item.get("name", ""),
             "domain":      domain,
-            "logo_url":    icon,   # ready-to-use signed URL for dropdown display
-            "description": item.get("claim", ""),
+            "logo_url":    logo_url,
+            "description": item.get("description", ""),
         })
 
     return results
@@ -56,31 +55,14 @@ async def search_companies(q: str = Query(..., min_length=1)):
 
 @router.get("/logo")
 async def company_logo(domain: str = Query(..., min_length=1)):
-    """Fetch a fresh logo URL for the domain via BrandFetch search, then proxy the image."""
-    if not _BRANDFETCH_KEY:
+    """Redirect to the Logo.dev CDN URL for the given domain."""
+    if not _LOGODEV_KEY:
         raise HTTPException(503, "Logo service not configured")
     if "/" in domain or "\\" in domain or domain.startswith("."):
         raise HTTPException(400, "Invalid domain")
-    try:
-        search = requests.get(
-            _BRANDFETCH_URL.format(query=domain),
-            params={"c": _BRANDFETCH_KEY},
-            timeout=8,
-        )
-        search.raise_for_status()
-        results = search.json()
-    except Exception as exc:
-        raise HTTPException(502, f"Logo search failed: {exc}")
-
-    icon_url = None
-    for item in results:
-        if (item.get("domain") or "").lower() == domain.lower():
-            icon_url = item.get("icon") or ""
-            break
-    if not icon_url and results:
-        icon_url = results[0].get("icon") or ""
-    if not icon_url:
-        raise HTTPException(404, "Logo not found")
 
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=icon_url, status_code=302)
+    return RedirectResponse(
+        url=_LOGODEV_CDN.format(domain=domain, token=_LOGODEV_KEY),
+        status_code=302,
+    )

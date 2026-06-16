@@ -32,7 +32,7 @@ from datetime import date
 from pathlib import Path
 from typing import Callable
 
-# Load .env before anything else so BRANDFETCH_API_KEY / ANTHROPIC_API_KEY are set
+# Load .env before anything else so LOGODEV_API_KEY / ANTHROPIC_API_KEY are set
 _env_path = Path(__file__).parent / ".env"
 if _env_path.exists():
     for _line in _env_path.read_text(encoding="utf-8").splitlines():

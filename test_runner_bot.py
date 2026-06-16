@@ -15,7 +15,7 @@ Environment variables required:
   TEST_RUNNER_SLACK_USER_ID   Slack user ID allowed to run commands
 
 Environment variables (for UI tests — already set as Fly secrets):
-  UI_BASE_URL         Target app URL (default: https://job-apply-corey.fly.dev)
+  UI_BASE_URL         Target app URL (default: https://apply.cdlav.us)
   UI_TEST_EMAIL       Standard test user email
   UI_TEST_PASSWORD    Standard test user password
   UI_ADMIN_EMAIL      Admin test user email
@@ -39,7 +39,7 @@ BOT_TOKEN      = os.environ["TEST_RUNNER_BOT_TOKEN"]
 SIGNING_SECRET = os.environ["TEST_RUNNER_SIGNING_SECRET"]
 APP_TOKEN      = os.environ.get("TEST_RUNNER_APP_TOKEN", "")
 ALLOWED_USER   = os.environ.get("TEST_RUNNER_SLACK_USER_ID", "")
-UI_BASE_URL    = os.environ.get("UI_BASE_URL", "https://job-apply-corey.fly.dev")
+UI_BASE_URL    = os.environ.get("UI_BASE_URL", "https://apply.cdlav.us")
 
 app = App(token=BOT_TOKEN, signing_secret=SIGNING_SECRET)
 

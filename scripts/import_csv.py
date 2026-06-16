@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts import storage
 from scripts.applications import _app_key, _index_key, _to_index_entry
 
-BF_KEY       = "1idZFX8Ll28d4x2IVye"
+LOGODEV_TOKEN = "YOUR_LOGODEV_KEY_HERE"
 IMPORT_ACTOR = "cdl825@gmail.com"
 IMPORT_TS    = "2026-06-01T00:00:00Z"   # timestamp of the import run itself
 
@@ -139,7 +139,7 @@ def main() -> None:
             updated_at = last_upd or date_app or IMPORT_TS
 
             logo_url = (
-                f"https://cdn.brandfetch.io/domain/{domain}?c={BF_KEY}"
+                f"https://img.logo.dev/{domain}?token={LOGODEV_TOKEN}"
                 if domain else ""
             )
 

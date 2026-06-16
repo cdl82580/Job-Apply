@@ -1675,7 +1675,7 @@ document.getElementById('clearFiltersBtn').addEventListener('click', () => {
   applyFilters();
 });
 
-// ── BrandFetch search ─────────────────────────────────────────────────
+// ── Logo.dev company search ────────────────────────────────────────────
 let _searchTimer = null;
 let _selectedCompany = null;  // {name, domain, logo_url}
 
@@ -1745,13 +1745,13 @@ function selectCompany(item) {
   dCompanyInput.value = item.name;
   dDomainInput.value  = item.domain;
 
-  // Store the signed icon URL from BrandFetch directly — the CDN proxy is not reliable.
+  // Store the Logo.dev CDN URL directly from the search response.
   const savedLogo = item.logo_url || '';
   dLogoUrlInput.value = savedLogo;
 
   dSuggestionsEl.classList.add('hidden');
 
-  // Preview uses the signed icon URL from the BrandFetch response (immediate)
+  // Preview uses the Logo.dev URL from the search response (immediate)
   const previewSrc = safeHref(item.logo_url) || safeHref(savedLogo);
   if (previewSrc) {
     dLogoPreview.src          = previewSrc;

@@ -6,7 +6,7 @@ job posting.
 
 **Every run starts from `resumes/master.docx`. Never use a previously tailored file.**
 
-**Web app:** https://job-apply-corey.fly.dev/ — deployed on Fly.io (1 web machine,
+**Web app:** https://apply.cdlav.us/ — deployed on Fly.io (1 web machine,
 1 bot machine), backed by FastAPI (`api.py`) + Tigris S3 for user data + Google Drive
 for output storage. The frontend (`frontend/index.html`) streams run and prep progress
 via SSE. Machine pinning: POST /api/run and /api/prep return `machine_id`; the client

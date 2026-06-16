@@ -5,7 +5,7 @@ Environment variables required:
   SLACK_BOT_TOKEN       xoxb-... token from the Slack app
   SLACK_SIGNING_SECRET  signing secret from the Slack app Basic Information page
   BOT_API_KEY           must match the BOT_API_KEY set on the Fly.io app
-  JOB_APPLY_API_URL     base URL of the deployed app (default: https://job-apply-corey.fly.dev)
+  JOB_APPLY_API_URL     base URL of the deployed app (default: https://apply.cdlav.us)
 
 Run locally:
   python slack_bot.py
@@ -38,7 +38,7 @@ Slash commands handled:
   /track-note      — add a comment to an application (modal)
   /track-delete    — delete an application (modal + confirm)
 
-  /company         — search company info via BrandFetch
+  /company         — search company info via Logo.dev
   /whoami          — show account details
   /activity        — show 10 most recent audit events
 
@@ -79,7 +79,7 @@ SLACK_BOT_TOKEN      = os.environ["SLACK_BOT_TOKEN"]
 SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
 SLACK_APP_TOKEN      = os.environ.get("SLACK_APP_TOKEN", "")  # xapp-... for Socket Mode
 BOT_API_KEY          = os.environ["BOT_API_KEY"]
-API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://job-apply-corey.fly.dev").rstrip("/")
+API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://apply.cdlav.us").rstrip("/")
 PORT                 = int(os.environ.get("PORT", "3000"))
 
 # Slack user ID authorised to run test suites (resolved once at startup).
@@ -371,12 +371,12 @@ def track_list_command(ack, respond, body):
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# BrandFetch external_select handler (used by /track-add)
+# Logo.dev external_select handler (used by /track-add)
 # ---------------------------------------------------------------------------
 
 @app.options("company_search")
 def handle_company_search(ack, payload):
-    """Return BrandFetch results for the company external_select."""
+    """Return Logo.dev results for the company external_select."""
     query = (payload.get("value") or "").strip()
     if len(query) < 2:
         ack(options=[])
@@ -1408,7 +1408,7 @@ def activity_command(ack, respond):
 
 
 # ---------------------------------------------------------------------------
-# /company — BrandFetch company lookup
+# /company — Logo.dev company lookup
 # ---------------------------------------------------------------------------
 
 @app.command("/company")
@@ -2604,7 +2604,7 @@ def handle_app_home_opened(client, event, logger):
         {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"<{API_BASE}|job-apply-corey.fly.dev>  ·  Powered by Claude"},
+                {"type": "mrkdwn", "text": f"<{API_BASE}|apply.cdlav.us>  ·  Powered by Claude"},
             ],
         },
     ]
