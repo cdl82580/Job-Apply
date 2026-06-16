@@ -394,9 +394,20 @@
     .app-card-meta {
       display: flex; gap: .375rem; flex-wrap: wrap; align-items: center;
     }
-    .app-card-actions { display: flex; gap: .375rem; margin-top: .5rem; }
+    .app-card-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .375rem;
+      margin-top: .5rem;
+    }
+    .app-card-actions .btn-danger { grid-column: 1 / -1; }
 
+    /* Show card view on narrow screens AND on landscape mobile (short viewport) */
     @media (max-width: 700px) {
+      .app-table { display: none; }
+      .app-cards { display: block; }
+    }
+    @media (max-height: 600px) and (orientation: landscape) {
       .app-table { display: none; }
       .app-cards { display: block; }
     }
@@ -725,7 +736,7 @@
       padding: 0; font-family: inherit;
     }
     .date-sort-sel:focus { outline: none; }
-    .date-th { white-space: nowrap; }
+    .date-th { white-space: nowrap; min-width: 110px; }
 
     .hidden { display: none !important; }
     .verify-banner {
