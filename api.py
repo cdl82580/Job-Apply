@@ -1018,9 +1018,8 @@ def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
 def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None:
     base = _APP_URL
 
-    active_statuses = {"Applied", "Phone Screen", "Interviewing", "On Hold", "Offer"}
+    active_statuses = {"Researching", "Applied", "Phone Screen", "Interviewing", "On Hold", "Offer"}
     active = [a for a in apps if a.get("status") in active_statuses]
-    researching = [a for a in apps if a.get("status") == "Researching"]
 
     # Follow-ups due today (Applied > 7 days)
     follow_ups_due = []
@@ -1032,16 +1031,71 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
 
     subject = f"Job Apply daily — {len(active)} active, {len(follow_ups_due)} follow-up{'s' if len(follow_ups_due) != 1 else ''} due"
 
+    _pill_bg = {
+        "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
+        "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
+        "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
+        "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
+        "Not Applying": "#F3F4F6",
+    }
+    _pill_color = {
+        "Researching":  "#0369A1", "Applied":      "#92400E",
+        "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
+        "On Hold":      "#9A3412", "Offer":        "#065F46",
+        "Rejected":     "#991B1B",
+    }
+    _pill_emoji = {
+        "Researching":   "&#128270;", "Applied":       "&#128228;",
+        "Phone Screen":  "&#128222;", "Interviewing":  "&#128101;",
+        "On Hold":       "&#9203;",   "Offer":         "&#127881;",
+        "No Response":   "&#128683;", "Not Applying":  "&#128465;",
+        "Rejected":      "&#10060;",
+    }
+
+    def _status_pill(status: str) -> str:
+        bg    = _pill_bg.get(status, "#F3F4F6")
+        color = _pill_color.get(status, "#374151")
+        emoji = _pill_emoji.get(status, "")
+        return (
+            f'<span style="display:inline-block;background:{bg};color:{color};'
+            f'padding:.15rem .55rem;border-radius:999px;font-size:.8rem;font-weight:600;'
+            f'white-space:nowrap">{emoji}&nbsp;{status}</span>'
+        )
+
+    def _company_cell(a: dict) -> str:
+        company  = a.get("company", "")
+        logo_url = a.get("company_logo_url", "")
+        if not logo_url:
+            # fall back to Google favicon service using the job posting URL
+            job_url = a.get("url") or a.get("job_url") or ""
+            if job_url:
+                import re as _re
+                m = _re.search(r'https?://([^/]+)', job_url)
+                if m:
+                    logo_url = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz=32"
+        logo_html = ""
+        if logo_url:
+            logo_html = (
+                f'<img src="{logo_url}" alt="" width="16" height="16" '
+                f'style="display:inline-block;vertical-align:middle;border-radius:3px;'
+                f'margin-right:.375rem;border:0">'
+            )
+        return (
+            f'<td style="padding:.5rem .5rem;color:#374151;font-size:.875rem;'
+            f'vertical-align:middle;white-space:nowrap">'
+            f'{logo_html}<span style="vertical-align:middle">{company}</span></td>'
+        )
+
     def _app_row(a: dict) -> str:
         return (
             f"<tr>"
-            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{a.get('company','')}</td>"
-            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('role_title','')}</td>"
-            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('status','')}</td>"
+            f"{_company_cell(a)}"
+            f"<td style='padding:.5rem .5rem;color:#6B7280;font-size:.875rem;vertical-align:middle'>{a.get('role_title','')}</td>"
+            f"<td style='padding:.5rem .5rem;vertical-align:middle'>{_status_pill(a.get('status',''))}</td>"
             f"</tr>"
         )
 
-    active_rows = "".join(_app_row(a) for a in active[:20])
+    active_rows   = "".join(_app_row(a) for a in active[:20])
     followup_rows = "".join(_app_row(a) for a in follow_ups_due[:10])
 
     followup_section = ""
@@ -1067,13 +1121,12 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
       Your daily job tracker summary
     </h2>
     <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
-      {len(active)} active application{'s' if len(active) != 1 else ''} &bull;
-      {len(researching)} researching &bull;
+      {len(active)} application{'s' if len(active) != 1 else ''} in progress &bull;
       {len(follow_ups_due)} follow-up{'s' if len(follow_ups_due) != 1 else ''} due
     </p>
     {followup_section}
     <h3 style="color:#1A3C5E;font-size:.9rem;margin:1.25rem 0 .5rem">
-      Active applications ({len(active)})
+      Applications ({len(active)})
     </h3>
     <table width="100%" cellpadding="0" cellspacing="0"
            style="border-collapse:collapse;margin-bottom:1.25rem">
@@ -1086,7 +1139,7 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
       </thead>
       <tbody>{active_rows}</tbody>
     </table>
-    <a href="{base}/tracking.html"
+    <a href="{base}/index.html#tracker"
        style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
               padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem">
       Open Tracker &rarr;
@@ -1094,9 +1147,9 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
     """
 
     text = (
-        f"Daily summary: {len(active)} active, {len(researching)} researching, "
+        f"Daily summary: {len(active)} in progress, "
         f"{len(follow_ups_due)} follow-ups due.\n\n"
-        f"View tracker: {base}/tracking.html"
+        f"View tracker: {base}/index.html#tracker"
     )
 
     _send_email(user_email, subject, text, html=_email_html(body_html))
