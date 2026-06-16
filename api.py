@@ -2762,17 +2762,22 @@ async def get_postman_collection():
 # ---------------------------------------------------------------------------
 # Static frontend — mounted last; auth middleware handles redirects
 # ---------------------------------------------------------------------------
-# Wrap StaticFiles to add Cache-Control: no-cache on HTML responses so browsers
-# always revalidate after a deploy rather than serving stale cached pages.
-from starlette.staticfiles import NotModifiedResponse
-
+# Wrap StaticFiles so HTML pages are never cached and never return 304.
+# Strip conditional request headers (If-None-Match, If-Modified-Since) for HTML
+# requests so the server always returns a fresh 200, then add Cache-Control:
+# no-store so the browser never stores it in the first place.
 class NoCacheHTMLStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
+        is_html = path.endswith(".html") or path in ("", "/")
+        if is_html:
+            scope = dict(scope)
+            scope["headers"] = [
+                (k, v) for k, v in scope.get("headers", [])
+                if k.lower() not in (b"if-none-match", b"if-modified-since")
+            ]
         response = await super().get_response(path, scope)
-        if isinstance(response, NotModifiedResponse) or (
-            hasattr(response, "media_type") and response.media_type == "text/html"
-        ):
-            response.headers["Cache-Control"] = "no-cache"
+        if is_html:
+            response.headers["Cache-Control"] = "no-store"
         return response
 
 app.mount("/", NoCacheHTMLStaticFiles(directory="frontend", html=True), name="frontend")
