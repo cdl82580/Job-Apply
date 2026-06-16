@@ -232,26 +232,34 @@ def notify_status_changed(
         base    = _APP_URL
 
         emoji_new = _STATUS_EMOJI.get(new_status, "&#8594;")
+        emoji_old = _STATUS_EMOJI.get(old_status, "&#8594;")
         subject   = f"{company}: {old_status} → {new_status}"
 
-        # Pick a colour for the new-status badge
-        badge_bg = {
-            "Offer":        "#D1FAE5",
-            "Interviewing": "#DBEAFE",
-            "Phone Screen": "#EDE9FE",
+        _bg = {
+            "Researching":  "#F0F9FF",
             "Applied":      "#FEF3C7",
+            "Phone Screen": "#EDE9FE",
+            "Interviewing": "#DBEAFE",
+            "On Hold":      "#FFF7ED",
+            "Offer":        "#D1FAE5",
             "Rejected":     "#FEE2E2",
             "No Response":  "#F3F4F6",
             "Not Applying": "#F3F4F6",
-        }.get(new_status, "#F3F4F6")
-
-        badge_color = {
-            "Offer":        "#065F46",
-            "Interviewing": "#1E40AF",
-            "Phone Screen": "#5B21B6",
+        }
+        _color = {
+            "Researching":  "#0369A1",
             "Applied":      "#92400E",
+            "Phone Screen": "#5B21B6",
+            "Interviewing": "#1E40AF",
+            "On Hold":      "#9A3412",
+            "Offer":        "#065F46",
             "Rejected":     "#991B1B",
-        }.get(new_status, "#374151")
+        }
+
+        badge_bg    = _bg.get(new_status, "#F3F4F6")
+        badge_color = _color.get(new_status, "#374151")
+        from_bg     = _bg.get(old_status, "#F3F4F6")
+        from_color  = _color.get(old_status, "#374151")
 
         body_html = f"""
         <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
@@ -264,7 +272,13 @@ def notify_status_changed(
                style="border-collapse:collapse;margin-bottom:1.5rem">
           <tr>
             <td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:80px">From</td>
-            <td style="padding:.375rem 0;color:#374151;font-size:.875rem">{old_status}</td>
+            <td style="padding:.375rem 0">
+              <span style="display:inline-block;background:{from_bg};color:{from_color};
+                           padding:.2rem .65rem;border-radius:999px;font-size:.85rem;
+                           font-weight:600">
+                {emoji_old}&nbsp; {old_status}
+              </span>
+            </td>
           </tr>
           <tr>
             <td style="padding:.375rem 0;color:#6B7280;font-size:.875rem">To</td>

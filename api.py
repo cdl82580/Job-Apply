@@ -397,8 +397,19 @@ def _email_html(body_html: str) -> str:
         <!-- Header -->
         <tr>
           <td style="background:#1A3C5E;padding:1.25rem 1.75rem">
-            <img src="{_LOGO_URL}" alt="Job Apply" height="32"
-                 style="display:block;border:0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;padding-right:.625rem">
+                  <img src="{_LOGO_URL}" alt="Job Apply" height="32"
+                       style="display:block;border:0">
+                </td>
+                <td style="vertical-align:middle">
+                  <span style="font-family:system-ui,-apple-system,sans-serif;
+                               font-size:1.125rem;font-weight:600;color:#FFFFFF;
+                               line-height:32px">Job Apply</span>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
         <!-- Body -->
