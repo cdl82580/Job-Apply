@@ -2763,28 +2763,36 @@ async def get_postman_collection():
 # Static frontend — mounted last; auth middleware handles redirects
 # ---------------------------------------------------------------------------
 # Wrap StaticFiles so HTML pages are never cached, never return 304, and are
-# excluded from bfcache. Chrome doesn't reliably honour Cache-Control: no-store
-# for bfcache, so we also inject a pageshow listener into every HTML response
-# that forces a real reload whenever the page is restored from bfcache.
+# excluded from bfcache. FileResponse streams lazily so we read the file
+# ourselves and return a plain Response with the bfcache-bust script injected.
+import os as _os
+from starlette.responses import Response as _Response
+
 _BFCACHE_SCRIPT = b'<script>window.addEventListener("pageshow",function(e){if(e.persisted)location.reload();});</script>'
 
 class NoCacheHTMLStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         is_html = path.endswith(".html") or path in ("", "/")
         if is_html:
+            # Strip conditional headers so server never returns 304 for HTML
             scope = dict(scope)
             scope["headers"] = [
                 (k, v) for k, v in scope.get("headers", [])
                 if k.lower() not in (b"if-none-match", b"if-modified-since")
             ]
         response = await super().get_response(path, scope)
+        if is_html and hasattr(response, "path"):
+            # FileResponse — read file directly, inject bfcache script, return as Response
+            with open(response.path, "rb") as f:
+                body = f.read()
+            body = body.replace(b"</body>", _BFCACHE_SCRIPT + b"</body>", 1)
+            return _Response(
+                content=body,
+                media_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
         if is_html:
             response.headers["Cache-Control"] = "no-store"
-            # Stream the body and inject the bfcache-bust script before </body>
-            if hasattr(response, "body"):
-                body = response.body
-                response.body = body.replace(b"</body>", _BFCACHE_SCRIPT + b"</body>", 1)
-                response.headers["content-length"] = str(len(response.body))
         return response
 
 app.mount("/", NoCacheHTMLStaticFiles(directory="frontend", html=True), name="frontend")
