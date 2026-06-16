@@ -2768,7 +2768,13 @@ async def get_postman_collection():
 import os as _os
 from starlette.responses import Response as _Response
 
+_NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 _BFCACHE_SCRIPT = b'<script>window.addEventListener("pageshow",function(e){if(e.persisted)location.reload();});</script>'
+_META_NO_CACHE = b'<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">'
 
 class NoCacheHTMLStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
@@ -2782,17 +2788,19 @@ class NoCacheHTMLStaticFiles(StaticFiles):
             ]
         response = await super().get_response(path, scope)
         if is_html and hasattr(response, "path"):
-            # FileResponse — read file directly, inject bfcache script, return as Response
+            # FileResponse — read file directly, inject cache-bust meta + bfcache script
             with open(response.path, "rb") as f:
                 body = f.read()
+            body = body.replace(b"<head>", b"<head>" + _META_NO_CACHE, 1)
             body = body.replace(b"</body>", _BFCACHE_SCRIPT + b"</body>", 1)
             return _Response(
                 content=body,
                 media_type="text/html",
-                headers={"Cache-Control": "no-store"},
+                headers=_NO_CACHE_HEADERS,
             )
         if is_html:
-            response.headers["Cache-Control"] = "no-store"
+            for k, v in _NO_CACHE_HEADERS.items():
+                response.headers[k] = v
         return response
 
 app.mount("/", NoCacheHTMLStaticFiles(directory="frontend", html=True), name="frontend")
