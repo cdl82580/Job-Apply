@@ -374,6 +374,7 @@
       border-radius: 5px; padding: .3rem .45rem;
       cursor: pointer; color: var(--muted); font-size: .8rem;
       transition: all .12s; line-height: 1;
+      text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
     }
     .icon-btn:hover { border-color: var(--border); color: var(--primary); background: var(--fill); }
     .icon-btn.del:hover { border-color: #FECACA; color: var(--error); background: #FEF2F2; }
@@ -395,28 +396,10 @@
       display: flex; gap: .375rem; flex-wrap: wrap; align-items: center;
     }
     .app-card-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
       gap: .375rem;
       margin-top: .5rem;
-    }
-    /* Delete: subtle ghost-danger style, spans full width */
-    .app-card-actions .btn-card-delete {
-      grid-column: 1 / -1;
-      background: none;
-      border: 1px solid var(--card-border);
-      color: var(--muted);
-      font-size: .8rem; font-weight: 500;
-      border-radius: 6px; padding: .35rem .75rem;
-      cursor: pointer; display: inline-flex; align-items: center;
-      justify-content: center; gap: .35rem;
-      transition: border-color .12s, color .12s, background .12s;
-    }
-    .app-card-actions .btn-card-delete:hover {
-      border-color: #FECACA; color: var(--error); background: #FEF2F2;
-    }
-    [data-theme="dark"] .app-card-actions .btn-card-delete:hover {
-      border-color: #7F1D1D; background: #2B1010;
+      flex-wrap: wrap;
     }
 
     /* Show card view on narrow screens AND on landscape mobile (short viewport) */
@@ -1503,11 +1486,11 @@ function renderTable() {
         ${matchCell(a)}
       </div>
       <div class="app-card-actions">
-        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="run">▶ Run Agent</button>
-        <button class="btn btn-ghost btn-sm" data-id="${a.id}" data-action="edit">✏ Edit</button>
-        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">↗ Job Post</a>` : ''}
-        ${folderUrl(a) ? `<a class="btn btn-ghost btn-sm" href="${esc(folderUrl(a))}" target="_blank" rel="noopener">📁 Folder</a>` : ''}
-        <button class="btn-card-delete" data-id="${a.id}" data-action="delete">🗑 Delete</button>
+        ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
+        ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : `<button class="icon-btn" data-id="${a.id}" data-action="setup-folder" title="Create Drive folder">&#x2295;</button>`}
+        <button class="icon-btn" data-id="${a.id}" data-action="run" title="Run resume agent">&#x25B6;</button>
+        <button class="icon-btn" data-id="${a.id}" data-action="edit" title="Edit">&#x270E;</button>
+        <button class="icon-btn del" data-id="${a.id}" data-action="delete" title="Delete">&#x1F5D1;</button>
       </div>`;
     cards.appendChild(card);
   }
