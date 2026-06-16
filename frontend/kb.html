@@ -1125,10 +1125,13 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <p>This is why the web machine stays scaled to 1 — SSE across multiple machines without shared state would lose events.</p>
 
 <h2>Interview Prep</h2>
-<p>The prep workflow (<code>POST /api/prep</code>) generates role-specific interview prep materials — likely questions, stories to prepare, and company research. It follows the same SSE streaming pattern as the run workflow.</p>
+<p>The prep workflow (<code>POST /api/prep</code>) generates a compact 2-page interview prep reference card. It follows the same SSE streaming pattern as the run workflow. Select an existing tracker application (which must have a saved <code>job_description.md</code> in its Drive folder), enter the interview round and an optional focus/slant, and hit <strong>Generate Prep</strong>. Company and role auto-fill from the selected application.</p>
+
+<h2>Optimize Run</h2>
+<p>After a resume or cover letter has been generated, the <strong>Optimize</strong> workflow (<code>POST /api/optimize</code>) revises the documents in place based on a freeform instruction — e.g. "strengthen the opening bullet to emphasize API delivery." It verifies folder ownership via your linked application records, then streams progress via SSE. The <code>done</code> event includes a <code>change_summary</code> list of edits made. Rate-limited to one active optimize per user.</p>
 
 <h2>Authentication</h2>
-<p>The web app requires login. User accounts are managed via the admin panel at <code>/admin.html</code>. The API uses token-based auth with the token stored in <code>localStorage</code>.</p>
+<p>The web app requires login (email/password or Google OAuth). Sessions are stored as a stateless HMAC-signed <code>HttpOnly</code> cookie with a 30-day TTL — no tokens in <code>localStorage</code>. User accounts are managed via the admin panel at <code>/admin.html</code>.</p>
       `
     },
     {
@@ -1190,15 +1193,25 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>API</h2>
 <p>The backend is FastAPI (<code>api.py</code>). Key endpoints:</p>
 <ul>
-  <li><code>POST /api/run</code> — start a tailoring run, returns <code>machine_id</code></li>
-  <li><code>POST /api/prep</code> — start interview prep, returns <code>machine_id</code></li>
-  <li><code>GET /api/events/{run_id}</code> — SSE stream for run progress</li>
+  <li><code>POST /api/run</code> — start a tailoring run, returns <code>{run_id, machine_id}</code></li>
+  <li><code>GET /api/run/{id}/stream</code> — SSE stream for run progress</li>
+  <li><code>POST /api/prep</code> — start interview prep, returns <code>{prep_id, machine_id}</code></li>
+  <li><code>GET /api/prep/{id}/stream</code> — SSE stream for prep progress</li>
+  <li><code>POST /api/optimize</code> — optimize existing docs in place, returns <code>{optimize_id, machine_id}</code></li>
+  <li><code>GET /api/optimize/{id}/stream</code> — SSE stream for optimize progress</li>
   <li><code>GET /api/applications</code> — list tracked applications</li>
+  <li><code>POST /api/applications/{id}/score</code> — run Claude-based resume↔JD match scoring</li>
 </ul>
 <p>Full API reference is in <code>JobApply.postman_collection.json</code> and at <code>/api-docs.html</code>.</p>
 
 <h2>Frontend</h2>
 <p>Plain HTML/CSS/JS — no framework. Each page is a self-contained file in <code>frontend/</code>. Pages share a common header pattern and CSS token system (<code>--primary</code>, <code>--bg-card</code>, etc.).</p>
+
+<h2>Auth Model</h2>
+<p>Stateless HMAC-signed <code>HttpOnly</code> session cookie (30-day TTL). Login and register set the cookie automatically. Google OAuth is also supported. Admins may also authenticate via <code>Authorization: Bearer {BOT_API_KEY}</code> header (used by the Slack bot).</p>
+
+<h2>Email Notifications</h2>
+<p>A background scan runs every hour to send nudge and follow-up reminder emails for applications in the <em>Researching</em> and <em>Applied</em> statuses. Emails contain signed one-time action links — clicking a link directly updates the application status or snoozes further reminders, no login required.</p>
       `
     },
 
@@ -1607,6 +1620,153 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       `
     },
     {
+      id: 'wf-interview-prep',
+      category: 'workflow',
+      title: 'Interview Prep — How It Works',
+      snippet: 'What the prep doc contains, how to trigger it, and what inputs it needs.',
+      readTime: '3 min',
+      body: `
+<h2>What It Generates</h2>
+<p>The interview prep workflow produces a compact <strong>2-page DOCX reference card</strong> (0.4" margins, 2-column layout) with 9 sections:</p>
+<ol>
+  <li>Interviewer intel — who you're meeting and what to know about them</li>
+  <li>Role fit map — how your background maps to the specific requirements</li>
+  <li>Gap bridges — how to address anything you're light on</li>
+  <li>DEV framework — delivery/engineering/vision context for the role</li>
+  <li>Anchor stories — 2–3 quantified stories to lead with</li>
+  <li>Likely Q&amp;A — predicted questions with suggested answer frames</li>
+  <li>Questions to ask — smart, role-specific questions for the interviewer</li>
+  <li>Differentiating edge — what makes you distinct for this specific role</li>
+  <li>Closing line — how to close the conversation</li>
+</ol>
+
+<h2>Proof Point Scope</h2>
+<p>Prep docs draw only from the last 10 years: Applause (2016+), ProdPerfect, HSP Group, eHealth, and GitHub projects. Fidelity is excluded. GitHub repos (FlowShift, task-api, job-apply) are injected as additional proof points.</p>
+
+<h2>How to Trigger</h2>
+<p>In the web app, use the <strong>Interview Prep</strong> section on the Agent page. You must select a tracker application that has a saved <code>job_description.md</code> in its Drive folder — run the resume agent first if it's missing. Enter the interview round (e.g. "Technical Round 2") and an optional focus/slant. Company and role auto-fill from the selected application.</p>
+<p>Via Slack: <code>/prep</code>. Via the API: <code>POST /api/prep</code>.</p>
+
+<h2>Output</h2>
+<p>A single DOCX uploaded to Drive under the application's run folder, available for immediate download. Filenames follow the pattern: <code>InterviewPrep_CoreyLaverdiere_[Company]_[Role]_[Interviewer].docx</code>.</p>
+      `
+    },
+    {
+      id: 'wf-optimize',
+      category: 'workflow',
+      title: 'Optimize Run — Revising Docs After Generation',
+      snippet: 'How to refine a generated resume or cover letter in place with a freeform instruction.',
+      readTime: '2 min',
+      body: `
+<h2>What It Does</h2>
+<p>The Optimize workflow lets you revise an already-generated resume or cover letter based on a freeform instruction — without re-running the full agent. Examples:</p>
+<ul>
+  <li>"Strengthen the opening bullet to emphasize API-first delivery"</li>
+  <li>"Make the cover letter opening less formal and more direct"</li>
+  <li>"Add the word 'agentic' somewhere in the competencies"</li>
+</ul>
+
+<h2>How to Trigger</h2>
+<p>After a run completes on the Agent page, an <strong>Optimize</strong> section appears. Select which documents to revise (resume, cover letter, or both), type your instruction, and hit Optimize. Progress streams via SSE exactly like the main run.</p>
+
+<h2>Authorization</h2>
+<p>The optimize endpoint verifies that the target Drive folder belongs to your account by checking it against your application records. You can only optimize folders linked to your own applications.</p>
+
+<h2>What the Done Event Returns</h2>
+<p>The SSE <code>done</code> event for an optimize run includes:</p>
+<ul>
+  <li><code>change_summary</code> — a list of the specific edits that were applied</li>
+  <li><code>replacements_warning</code> — if less than 70% of XML edits succeeded, a warning is included</li>
+  <li><code>files</code> — filenames of the revised documents, ready for download</li>
+</ul>
+
+<h2>Limitations</h2>
+<p>Rate-limited to one active optimize per user at a time. The instruction must be 2,000 characters or fewer. You must select at least one document to optimize.</p>
+      `
+    },
+    {
+      id: 'wf-match-scoring',
+      category: 'workflow',
+      title: 'Match Scoring — Resume↔JD Fit',
+      snippet: 'How Claude scores your resume against a job description and what the score means.',
+      readTime: '2 min',
+      body: `
+<h2>What It Is</h2>
+<p>Each application in the tracker can be scored for how well your current resume matches the job description. Claude reads both documents and returns a <strong>0–100 fit score</strong> with a category badge and a per-dimension breakdown.</p>
+
+<h2>Score Categories</h2>
+<ul>
+  <li><strong>Strong Match (80–100)</strong> — your background directly maps to the role's core requirements</li>
+  <li><strong>Good Match (60–79)</strong> — solid overlap with some gaps</li>
+  <li><strong>Stretch (40–59)</strong> — meaningful gaps; would require strong framing</li>
+  <li><strong>Long Shot (&lt;40)</strong> — significant mismatch; worth reconsidering</li>
+</ul>
+
+<h2>How to Score</h2>
+<p>In the tracker, click the score cell on any application row (or the <strong>Rescore</strong> button on the detail view). The application must have a job description saved — either from a prior run or by using <em>Extract JD from URL</em>. The score is persisted to the application record after each run.</p>
+<p>Via API: <code>POST /api/applications/{id}/score</code>. The endpoint is synchronous — it returns the score directly in the response body.</p>
+
+<h2>Re-Scoring</h2>
+<p>You can re-score any time — for example after optimizing the resume or after updating the job description. Each score run overwrites the previous result.</p>
+      `
+    },
+    {
+      id: 'wf-password-reset',
+      category: 'workflow',
+      title: 'Password Reset',
+      snippet: 'How to use the forgot-password flow to reset your account password without logging in.',
+      readTime: '1 min',
+      body: `
+<h2>Forgot Your Password?</h2>
+<p>On the login page, click <strong>Forgot password?</strong>. Enter your account email and submit. If an account exists for that email, a reset link is sent immediately. The link expires in <strong>1 hour</strong>.</p>
+<p>The endpoint always returns success (200) regardless of whether the email matches an account — this prevents user enumeration.</p>
+
+<h2>Resetting via the Link</h2>
+<p>Click the link in the email to open the reset form at <code>/reset-password.html</code>. Enter a new password (minimum 8 characters) and submit. The old password is invalidated and all existing sessions are logged out.</p>
+
+<h2>Rate Limits</h2>
+<ul>
+  <li>Forgot password: 3 requests per hour per IP</li>
+  <li>Reset password: 5 requests per hour per IP</li>
+</ul>
+
+<h2>Via API</h2>
+<ul>
+  <li><code>POST /api/auth/forgot-password</code> — send reset email (<code>{"email": "..."}</code>)</li>
+  <li><code>POST /api/auth/reset-password</code> — consume token and set new password (<code>{"token": "...", "new_password": "..."}</code>)</li>
+</ul>
+      `
+    },
+    {
+      id: 'wf-email-notifications',
+      category: 'workflow',
+      title: 'Email Notifications — Nudges & Follow-Up Reminders',
+      snippet: 'Automated email nudges for Researching and Applied applications, with one-click action links.',
+      readTime: '2 min',
+      body: `
+<h2>What Gets Sent</h2>
+<p>A background scan runs every hour and sends two types of reminder emails:</p>
+<ul>
+  <li><strong>Researching nudge</strong> — for applications stuck in <em>Researching</em> status for too long, prompting you to either apply or drop them</li>
+  <li><strong>Follow-up reminder</strong> — for applications in <em>Applied</em> status after a set number of days, reminding you to follow up or update the status</li>
+</ul>
+
+<h2>One-Click Action Links</h2>
+<p>Every notification email contains signed action links — clicking them executes the action immediately, no login required:</p>
+<ul>
+  <li><strong>Applied today</strong> — sets status to Applied with today's date</li>
+  <li><strong>Not applying</strong> — sets status to Withdrawn</li>
+  <li><strong>Followed up</strong> — logs a follow-up comment</li>
+  <li><strong>No response</strong> — notes that there was no response</li>
+  <li><strong>Snooze</strong> — suppresses further nudges for this application for N days</li>
+</ul>
+<p>Links are valid for 7 days and are single-use. For "Applied" actions, if the date isn't already set in the link payload, you're redirected to a small form to pick the date.</p>
+
+<h2>Notification State</h2>
+<p>Each application tracks notification state — which nudge tier was last sent and when — to avoid repeat sends. Snooze suppresses all notifications for an application until the snooze period expires.</p>
+      `
+    },
+    {
       id: 'ts-validation',
       category: 'admin',
       title: 'Pack Validation Failures',
@@ -1651,18 +1811,23 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       readTime: '2 min',
       body: `
 <h2>Token Expired</h2>
-<p>The token at <code>~/.config/job-apply/gdrive_token.json</code> is automatically refreshed if the OAuth client credentials are valid. If you see a <code>401 Unauthorized</code> or <code>invalid_grant</code> error, the refresh token has been revoked (usually because the Google Cloud project's OAuth consent screen was republished or the authorized users list changed).</p>
-<p>Fix: delete the token file and re-run to trigger a fresh authorization flow:</p>
+<p>The Google Drive OAuth token is automatically refreshed on each API call and persisted to Tigris (<code>system/gdrive_token.json</code>) so it survives container restarts. If you see a <code>401 Unauthorized</code> or <code>invalid_grant</code> error, the refresh token has been revoked — usually because the Google Cloud project's OAuth consent screen was republished or the authorized users list changed.</p>
+<p>Fix: re-authorize and push the new token to both Fly secrets and Tigris:</p>
 <pre><code>rm ~/.config/job-apply/gdrive_token.json
-python3 apply.py --job jobs/job.txt --company "Test" --role "Test"</code></pre>
+python3 setup_gdrive.py
+fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
+# Clear stale Tigris copy so the new token takes precedence on next boot:
+fly ssh console -C "python3 -c \"from scripts import storage; storage.delete_text('system/gdrive_token.json')\""
+fly deploy --app job-apply-corey</code></pre>
 
 <h2>Missing gdrive_credentials.json</h2>
 <p>If the credentials file is absent, Drive upload is silently skipped with a warning. To restore it:</p>
 <pre><code>python3 setup_gdrive.py</code></pre>
-<p>Follow the instructions to download the credentials JSON from Google Cloud Console OAuth 2.0 client configuration.</p>
+<p>Follow the instructions to download the credentials JSON from Google Cloud Console OAuth 2.0 client configuration. The file must be saved as <code>gdrive_credentials.json</code> in the project root.</p>
 
 <h2>Folder ID Changed</h2>
-<p>The parent folder ID (<code>1JneTCux_wjhhU_TIPWZifO7UtCPb7Ppy</code>) is hardcoded in <code>apply.py</code>. If the <em>Job Applications</em> folder was deleted and recreated in Drive, the ID will have changed. Update the constant in <code>apply.py</code> with the new folder ID from the Drive URL.</p>
+<p>The parent folder ID (<code>1JneTCux_wjhhU_TIPWZifO7UtCPb7Ppy</code>) is set via the <code>GDRIVE_PARENT_FOLDER_ID</code> Fly secret. If the <em>Job Applications</em> folder was deleted and recreated in Drive, the ID will have changed. Get the new ID from the Drive URL and update the secret:</p>
+<pre><code>fly secrets set GDRIVE_PARENT_FOLDER_ID="&lt;new-folder-id&gt;"</code></pre>
       `
     },
 

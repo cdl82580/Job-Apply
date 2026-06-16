@@ -51,7 +51,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 
 ### Security
 - `Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, `Content-Security-Policy`, `Referrer-Policy` on every response
-- Rate limiting on login (10/min), register (5/hr), resend-verification (3/hr), change-password (5/hr), change-email (5/hr), resume-upload (10/hr)
+- Rate limiting on login (10/min), register (5/hr), resend-verification (3/hr), change-password (5/hr), change-email (5/hr), resume-upload (10/hr), forgot-password (3/hr), reset-password (5/hr)
 - SSRF guard on webhook URLs (DNS resolution + private-net check), re-applied at delivery time
 - Webhook HMAC secrets encrypted at rest with AES-256-GCM (key derived from `SESSION_SECRET`)
 - `safeHref()` scheme validation on all user-supplied URLs rendered as `href`/`src` in the frontend
@@ -327,6 +327,8 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/auth/google/callback` | — | Google OAuth callback |
 | GET | `/api/auth/verify-email?token=` | — | Consume email verification token |
 | POST | `/api/auth/resend-verification` | cookie | Resend verification email |
+| POST | `/api/auth/forgot-password` | — | Send password-reset link to email (always returns 200; rate-limited: 3/hr) |
+| POST | `/api/auth/reset-password` | — | Set new password using a one-time reset token (expires in 1 hour; rate-limited: 5/hr) |
 | GET | `/api/profile` | cookie | Profile + resume metadata |
 | PUT | `/api/profile` | cookie | Update display name or profile text |
 | POST | `/api/profile/resume` | cookie | Replace master resume (rate-limited: 10/hr) |
@@ -363,9 +365,9 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/stream` | cookie | SSE prep progress stream |
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
-| POST | `/api/optimize` | cookie | Optimize an existing run's resume/cover letter in place per a user prompt → returns `{optimize_id, machine_id}`; folder ownership verified via Tigris app records |
-| GET | `/api/optimize/{id}/stream` | cookie | SSE optimize progress stream (`done` event includes `change_summary` + `replacements_warning`) |
-| GET | `/api/optimize/{id}/status` | cookie | Poll optimize status |
+| POST | `/api/optimize` | cookie | Optimize an existing run's resume/cover letter in place per a user instruction → returns `{optimize_id, machine_id}`; folder ownership verified via Tigris app records; rate-limited to one active optimize per user |
+| GET | `/api/optimize/{id}/stream` | cookie | SSE optimize progress stream (`done` event includes `change_summary` list + `replacements_warning`) |
+| GET | `/api/optimize/{id}/status` | cookie | Poll optimize status: `queued | running | done | error` |
 | GET | `/api/optimize/{id}/files/{name}` | cookie | Download optimized DOCX |
 | POST | `/api/jd/format` | cookie | AI-format a raw job description (returns cleaned Markdown) |
 | GET | `/api/postman` | — | Download the Postman collection JSON |
@@ -388,10 +390,12 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | DELETE | `/api/admin/kb/categories/{id}` | admin | Delete KB category |
 | POST | `/api/admin/kb/seed` | admin | Replace entire KB from JSON payload |
 | POST | `/api/admin/kb/seed-from-file` | admin | Re-extract KB from `frontend/kb.html` via Node.js and seed to Tigris |
+| GET | `/api/notifications/action?token=` | — | Consume a signed one-time notification token (from nudge/follow-up emails) — executes `status` or `snooze` action; redirects to tracker on success |
 | GET | `/api/admin/users` | admin | List all users |
 | PUT | `/api/admin/users/{id}` | admin | Edit user (name, email, role, active, verified) — invalidates user cache |
-| PUT | `/api/admin/users/{id}/role` | admin | Set user role only (Slack bot compat) |
+| PUT | `/api/admin/users/{id}/role` | admin | Set user role only (`user`/`admin`) — Slack bot compat; invalidates user cache |
 | POST | `/api/admin/users/{id}/resend-verification` | admin | Resend verification as admin |
+| GET | `/api/admin/users/{id}/applications` | admin | List all applications for a specific user |
 | GET | `/api/admin/applications` | admin | All applications across all users |
 | GET | `/api/admin/applications/{uid}/{aid}` | admin | Full application record |
 | PUT | `/api/admin/applications/{uid}/{aid}` | admin | Admin update application |
