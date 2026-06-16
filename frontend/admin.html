@@ -372,6 +372,52 @@
     .owner-chip { display: inline-flex; align-items: center; gap: .375rem; font-size: .775rem;
                   color: var(--muted); background: var(--bg-page); border: 1px solid var(--card-border);
                   border-radius: 5px; padding: .2rem .55rem; margin-bottom: 1rem; }
+
+    /* ── Table wrapper (horizontal scroll) ───────────────────────── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* ── Date column select (admin tabs) ──────────────────────────── */
+    .admin-date-sel {
+      appearance: none; -webkit-appearance: none;
+      background: none; border: none;
+      font-size: .75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: inherit; cursor: pointer;
+      padding: 0; font-family: inherit;
+    }
+    .admin-date-sel:focus { outline: none; }
+    .admin-date-th { white-space: nowrap; min-width: 110px; cursor: default !important; }
+    .admin-date-th:hover { color: var(--primary); }
+
+    /* ── Admin mobile cards ───────────────────────────────────────── */
+    .admin-cards { display: none; margin-top: .25rem; }
+    .admin-card {
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: var(--radius); padding: .875rem 1rem; margin-bottom: .625rem;
+    }
+    .admin-card-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: .5rem; gap: .5rem;
+    }
+    .admin-card-name { font-weight: 700; font-size: .925rem; }
+    .admin-card-sub  { font-size: .775rem; color: var(--muted); margin-top: .125rem; }
+    .admin-card-row  {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: .8rem; margin-bottom: .3rem; gap: .5rem;
+    }
+    .admin-card-label {
+      color: var(--muted); font-size: .72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
+    }
+    .admin-card-actions { display: flex; gap: .375rem; margin-top: .625rem; flex-wrap: wrap; }
+
+    @media (max-width: 700px) {
+      .admin-table-section { display: none; }
+      .admin-cards { display: block; }
+    }
+    @media (max-height: 600px) and (orientation: landscape) {
+      .admin-table-section { display: none; }
+      .admin-cards { display: block; }
+    }
   </style>
 </head>
 <body>
@@ -473,6 +519,7 @@
       </div>
     </div>
     <div id="usersAlert"></div>
+    <div class="table-wrap admin-table-section">
     <table>
       <thead id="usersHead"><tr>
         <th class="usr-sort-th" data-col="display_name" style="cursor:pointer;white-space:nowrap">User <span class="sort-arrow">↕</span></th>
@@ -480,12 +527,18 @@
         <th class="usr-sort-th" data-col="app_count"    style="cursor:pointer;white-space:nowrap">Apps <span class="sort-arrow">↕</span></th>
         <th class="usr-sort-th" data-col="runs_count"   style="cursor:pointer;white-space:nowrap">Runs <span class="sort-arrow">↕</span></th>
         <th class="usr-sort-th" data-col="email_verified" style="cursor:pointer;white-space:nowrap">Email Verified <span class="sort-arrow">↕</span></th>
-        <th class="usr-sort-th" data-col="last_login"   style="cursor:pointer;white-space:nowrap">Last Login <span class="sort-arrow">↕</span></th>
-        <th class="usr-sort-th" data-col="created_at"   style="cursor:pointer;white-space:nowrap">Joined <span class="sort-arrow">↕</span></th>
+        <th class="admin-date-th">
+          <select id="userDateSel" class="admin-date-sel" title="Choose date to display">
+            <option value="last_login">Last Login</option>
+            <option value="created_at">Joined</option>
+          </select><span class="sort-arrow" id="userDateArrow">↕</span>
+        </th>
         <th>Actions</th>
       </tr></thead>
-      <tbody id="usersBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      <tbody id="usersBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
     </table>
+    </div>
+    <div class="admin-cards" id="usersCards"></div>
     <div class="pagination-bar hidden" id="usersPagBar" style="margin-top:.875rem">
       <div class="pagination-info" id="usersPagInfo"></div>
       <div class="pagination-controls">
@@ -540,18 +593,25 @@
       </div>
     </div>
     <div id="appsAlert"></div>
+    <div class="table-wrap admin-table-section">
     <table>
       <thead id="appsHead"><tr>
         <th class="app-sort-th" data-col="company"     style="cursor:pointer;white-space:nowrap">Company   <span class="sort-arrow">↕</span></th>
         <th class="app-sort-th" data-col="role_title"  style="cursor:pointer;white-space:nowrap">Role      <span class="sort-arrow">↕</span></th>
         <th class="app-sort-th" data-col="status"      style="cursor:pointer;white-space:nowrap">Status    <span class="sort-arrow">↕</span></th>
         <th class="app-sort-th" data-col="_user_email" style="cursor:pointer;white-space:nowrap">Owner     <span class="sort-arrow">↕</span></th>
-        <th class="app-sort-th" data-col="date_applied"style="cursor:pointer;white-space:nowrap">Applied   <span class="sort-arrow">↕</span></th>
-        <th class="app-sort-th" data-col="last_updated"style="cursor:pointer;white-space:nowrap">Updated   <span class="sort-arrow">↕</span></th>
+        <th class="admin-date-th">
+          <select id="appDateSel" class="admin-date-sel" title="Choose date to display">
+            <option value="last_updated">Updated</option>
+            <option value="date_applied">Applied</option>
+          </select><span class="sort-arrow" id="appDateArrow">↕</span>
+        </th>
         <th></th>
       </tr></thead>
-      <tbody id="appsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      <tbody id="appsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
+    </div>
+    <div class="admin-cards" id="appsCards"></div>
     <div class="pagination-bar hidden" id="appsPagBar" style="margin-top:.875rem">
       <div class="pagination-info" id="appsPagInfo"></div>
       <div class="pagination-controls">
@@ -608,6 +668,7 @@
       </div>
     </div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
+    <div class="table-wrap admin-table-section">
     <table>
       <thead><tr>
         <th>Type</th>
@@ -621,6 +682,8 @@
       </tr></thead>
       <tbody id="runsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
+    </div>
+    <div class="admin-cards" id="runsCards"></div>
     <div class="pagination-bar hidden" id="runsPagBar" style="margin-top:.875rem">
       <div class="pagination-info" id="runsPagInfo"></div>
       <div class="pagination-controls">
@@ -1261,6 +1324,10 @@ let _appsSortCol = '';
 let _appsSortDir = 'asc';
 let _usersSortCol = 'created_at';
 let _usersSortDir = 'asc';
+let _userDateKey = 'last_login';
+let _appDateKey  = 'last_updated';
+let _appsLoaded  = false;
+let _runsLoaded  = false;
 
 // Pagination state
 let _usersPage = 1; let _usersPerPage = 25;
@@ -1291,6 +1358,7 @@ async function loadUsers() {
     const res = await apiFetch('/api/admin/users');
     _users = await res.json();
     renderUsers();
+    updateStats();
 
     // Populate user filter on apps tab
     const sel = document.getElementById('appUserFilter');
@@ -1309,6 +1377,7 @@ async function loadApps() {
     const res = await apiFetch('/api/admin/applications');
     _allApps = await res.json();
     renderApps();
+    updateStats();
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
@@ -1323,6 +1392,7 @@ async function loadRuns() {
     sel.innerHTML = '<option value="">All users</option>';
     emails.forEach(e => { const o = document.createElement('option'); o.value = o.textContent = e; sel.appendChild(o); });
     filterAndRenderRuns();
+    updateStats();
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
@@ -1437,19 +1507,33 @@ function renderUsers() {
   const pages  = Math.max(1, Math.ceil(total / _usersPerPage));
   _usersPage   = Math.min(_usersPage, pages);
   const start  = (_usersPage - 1) * _usersPerPage;
-  list         = list.slice(start, start + _usersPerPage);
+  const pageItems = list.slice(start, start + _usersPerPage);
 
   const tbody = document.getElementById('usersBody');
   renderPagBar('users', _usersPage, pages, total, _usersPerPage);
 
-  if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>'; return; }
+  // Update date col arrow
+  const udArrow = document.getElementById('userDateArrow');
+  if (udArrow) {
+    const dateActive = _usersSortCol === _userDateKey;
+    udArrow.textContent = dateActive ? (_usersSortDir === 'asc' ? '↑' : '↓') : '↕';
+  }
+
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No users match.</td></tr>';
+    document.getElementById('usersCards').innerHTML = '<p class="empty">No users match.</p>';
+    return;
+  }
   tbody.innerHTML = '';
 
-  for (const u of list) {
+  for (const u of pageItems) {
     const isActive   = u.active !== false;
     const verifiedEl = u.email_verified === false
       ? '<span style="color:var(--error);font-size:.8rem">✗ No</span>'
       : '<span style="color:var(--success);font-size:.8rem">✓ Yes</span>';
+    const dateVal = _userDateKey === 'last_login'
+      ? (u.last_login ? fmtDateTime(u.last_login) : '—')
+      : fmtDateTime(u.created_at);
     const tr = document.createElement('tr');
     tr.style.cssText = isActive ? '' : 'opacity:.55';
     tr.innerHTML = `
@@ -1461,13 +1545,13 @@ function renderUsers() {
       <td style="color:var(--muted)">${u.app_count}</td>
       <td style="color:var(--muted)">${u.runs_count || '—'}</td>
       <td>${verifiedEl}</td>
-      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${u.last_login ? fmtDateTime(u.last_login) : '—'}</td>
-      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${fmtDateTime(u.created_at)}</td>
+      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${dateVal}</td>
       <td><div style="display:flex;gap:.375rem;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" data-action="edit-user" data-uid="${u.user_id}">Edit</button>
       </div></td>`;
     tbody.appendChild(tr);
   }
+  renderUserCards(pageItems);
 }
 
 // ── Render apps ──────────────────────────────────────────────────────
@@ -1516,9 +1600,23 @@ function renderApps() {
   const tbody = document.getElementById('appsBody');
   renderPagBar('apps', _appsPage, pages, total, _appsPerPage);
 
-  if (!total) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No applications match.</td></tr>'; return; }
+  // Update date col arrow
+  const adArrow = document.getElementById('appDateArrow');
+  if (adArrow) {
+    const dateActive = _appsSortCol === _appDateKey;
+    adArrow.textContent = dateActive ? (_appsSortDir === 'asc' ? '↑' : '↓') : '↕';
+  }
+
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No applications match.</td></tr>';
+    document.getElementById('appsCards').innerHTML = '<p class="empty">No applications match.</p>';
+    return;
+  }
   tbody.innerHTML = '';
   for (const a of pageItems) {
+    const dateVal = _appDateKey === 'date_applied'
+      ? fmtDateTime(a.date_applied)
+      : fmtDateTime(a.last_updated);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><div class="company-cell">
@@ -1529,8 +1627,7 @@ function renderApps() {
       <td>${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}</td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
-      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${fmtDateTime(a.date_applied)}</td>
-      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${fmtDateTime(a.last_updated)}</td>
+      <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${dateVal}</td>
       <td><div style="display:flex;gap:.3rem">
         ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app"
@@ -1542,6 +1639,7 @@ function renderApps() {
       </div></td>`;
     tbody.appendChild(tr);
   }
+  renderAppCards(pageItems);
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
@@ -1579,6 +1677,7 @@ function filterAndRenderRuns() {
 }
 
 function renderRuns(runs) {
+  renderRunCards(runs);
   const tbody = document.getElementById('runsBody');
   if (!runs.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No runs match.</td></tr>'; return; }
   tbody.innerHTML = '';
@@ -3321,8 +3420,160 @@ document.getElementById('kbCatDeleteBtn').addEventListener('click', async () => 
   }
 });
 
+// ── Mobile card renders ───────────────────────────────────────────────
+function renderUserCards(list) {
+  const el = document.getElementById('usersCards');
+  if (!list.length) { el.innerHTML = '<p class="empty">No users match.</p>'; return; }
+  const runsByEmail = {};
+  for (const r of _allRuns) if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email]||0)+1;
+  const dateLabel = _userDateKey === 'last_login' ? 'Last Login' : 'Joined';
+  el.innerHTML = list.map(u => {
+    const isActive = u.active !== false;
+    const dateVal  = _userDateKey === 'last_login'
+      ? (u.last_login ? fmtDateTime(u.last_login) : '—')
+      : fmtDateTime(u.created_at);
+    return `<div class="admin-card" style="${isActive ? '' : 'opacity:.55'}">
+      <div class="admin-card-header">
+        <div>
+          <div class="admin-card-name">${esc(u.display_name || u.email)}</div>
+          <div class="admin-card-sub">${esc(u.email)}</div>
+        </div>
+        <span class="badge role-${u.role}">${esc(u.role)}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">Apps / Runs</span>
+        <span>${u.app_count} / ${runsByEmail[u.email] || 0}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">Email Verified</span>
+        <span>${u.email_verified === false ? '<span style="color:var(--error)">✗ No</span>' : '<span style="color:var(--success)">✓ Yes</span>'}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">${dateLabel}</span>
+        <span style="color:var(--muted)">${dateVal}</span>
+      </div>
+      <div class="admin-card-actions">
+        <button class="btn btn-ghost btn-sm" data-action="edit-user" data-uid="${u.user_id}">Edit</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAppCards(list) {
+  const el = document.getElementById('appsCards');
+  if (!list.length) { el.innerHTML = '<p class="empty">No applications match.</p>'; return; }
+  const dateLabel = _appDateKey === 'date_applied' ? 'Applied' : 'Updated';
+  el.innerHTML = list.map(a => {
+    const dateVal = _appDateKey === 'date_applied' ? fmtDateTime(a.date_applied) : fmtDateTime(a.last_updated);
+    return `<div class="admin-card">
+      <div class="admin-card-header">
+        <div class="company-cell">
+          ${logoHtml(a.domain, a.company)}
+          <div>
+            <div class="admin-card-name">${esc(a.company)}</div>
+            <div class="admin-card-sub">${esc(a.role_title)}</div>
+          </div>
+        </div>
+        ${statusBadge(a.status)}
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">Owner</span>
+        <span style="color:var(--muted);font-size:.775rem">${esc(a._user_email || '')}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">${dateLabel}</span>
+        <span style="color:var(--muted);font-size:.775rem">${dateVal}</span>
+      </div>
+      <div class="admin-card-actions">
+        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
+        <button class="btn btn-ghost btn-sm" data-action="edit-app" data-uid="${a._user_id}" data-aid="${a.id}" data-uemail="${esc(a._user_email||'')}">Edit</button>
+        <button class="btn btn-danger btn-sm" data-action="del-app" data-uid="${a._user_id}" data-aid="${a.id}" data-label="${esc(a.company)} — ${esc(a.role_title)}">Del</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderRunCards(runs) {
+  const el = document.getElementById('runsCards');
+  if (!runs.length) { el.innerHTML = '<p class="empty">No runs match.</p>'; return; }
+  el.innerHTML = runs.map(r => {
+    const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
+                    : r.type === 'job_description' ? 'Job Description'
+                    : r.type === 'scoring' ? 'Scoring' : 'Resume';
+    const typeClass = RUN_TYPE_CLASS[r.type] || '';
+    const appLabel  = r.app_company
+      ? `${r.app_company} · ${r.app_role || ''}`.replace(/ · $/, '')
+      : (r.name || '—');
+    const statusColor = (r.status === 'running' || r.status === 'queued')
+      ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
+    return `<div class="admin-card">
+      <div class="admin-card-header">
+        <div>
+          <div class="admin-card-name">${esc(appLabel)}</div>
+          <div class="admin-card-sub">${esc(r.user_email || '—')}</div>
+        </div>
+        <span class="badge ${typeClass}" style="font-size:.7rem">${esc(typeLabel)}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">Status</span>
+        <span style="font-weight:600;color:${statusColor}">${esc(r.status)}</span>
+      </div>
+      <div class="admin-card-row">
+        <span class="admin-card-label">Created</span>
+        <span style="color:var(--muted);font-size:.775rem">${r.created_at ? fmtDateTime(r.created_at) : '—'}</span>
+      </div>
+      ${r.web_view_link ? `<div class="admin-card-actions"><a class="btn btn-ghost btn-sm" href="${esc(r.web_view_link)}" target="_blank" rel="noopener">Drive ↗</a></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Admin date column selects ─────────────────────────────────────────
+document.getElementById('userDateSel').addEventListener('click', e => e.stopPropagation());
+document.getElementById('userDateSel').addEventListener('change', () => {
+  _userDateKey  = document.getElementById('userDateSel').value;
+  _usersSortCol = _userDateKey;
+  _usersSortDir = 'desc';
+  _usersPage = 1;
+  renderUsers();
+});
+
+document.getElementById('appDateSel').addEventListener('click', e => e.stopPropagation());
+document.getElementById('appDateSel').addEventListener('change', () => {
+  _appDateKey  = document.getElementById('appDateSel').value;
+  _appsSortCol = _appDateKey;
+  _appsSortDir = 'desc';
+  _appsPage = 1;
+  renderApps();
+});
+
+// Date th click → sort by current date key
+document.getElementById('usersHead').addEventListener('click', e => {
+  if (e.target.closest('#userDateSel')) return;
+  if (!e.target.closest('.admin-date-th')) return;
+  _usersSortDir = (_usersSortCol === _userDateKey && _usersSortDir === 'asc') ? 'desc' : 'asc';
+  _usersSortCol = _userDateKey;
+  _usersPage = 1; renderUsers();
+});
+document.getElementById('appsHead').addEventListener('click', e => {
+  if (e.target.closest('#appDateSel')) return;
+  if (!e.target.closest('.admin-date-th')) return;
+  _appsSortDir = (_appsSortCol === _appDateKey && _appsSortDir === 'asc') ? 'desc' : 'asc';
+  _appsSortCol = _appDateKey;
+  _appsPage = 1; renderApps();
+});
+
+// ── Tab lazy loaders for applications and runs ────────────────────────
+document.querySelector('[data-tab="applications"]').addEventListener('click', () => {
+  if (!_appsLoaded) { _appsLoaded = true; loadApps(); }
+});
+document.querySelector('[data-tab="runs"]').addEventListener('click', () => {
+  if (!_runsLoaded) { _runsLoaded = true; loadRuns(); }
+});
+
 // ── Init ─────────────────────────────────────────────────────────────
-loadAll();
+loadUsers();
+if (_initialTab === 'applications') { _appsLoaded = true; loadApps(); }
+if (_initialTab === 'runs')         { _runsLoaded = true; loadRuns(); }
 if (_initialTab === 'kb') { _kbLoaded = true; loadKB(); }
 </script>
 </body>
