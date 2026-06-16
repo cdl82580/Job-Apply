@@ -105,9 +105,20 @@
     @media (max-width: 620px) {
       header { padding: 0 .75rem; margin-bottom: 1.5rem; }
       .header-inner { padding: 1rem 0 .875rem; }
+      .header-left { gap: .6rem; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; }
       header h1 { font-size: 1.15rem; }
+      header p  { font-size: .8rem; }
+      .header-actions { gap: .15rem; margin-top: 0; }
       .header-user { display: none; }
       .container { padding: 0 .75rem; }
+    }
+
+    @media (max-width: 400px) {
+      .app-logo, .app-logo img { width: 30px; height: 30px; }
+      header h1 { font-size: 1rem; }
+      header p  { display: none; }
+      .header-left { gap: .5rem; }
     }
 
     /* ── Toolbar ─────────────────────────────────────────────── */

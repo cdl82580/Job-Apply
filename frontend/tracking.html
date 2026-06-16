@@ -46,7 +46,7 @@
       --input-border: #2B2B2B;
     }
 
-    html, body { height: 100%; background: var(--bg-page); }
+    html, body { height: 100%; background: var(--bg-page); overflow-x: hidden; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg-page);
@@ -113,9 +113,20 @@
     @media (max-width: 620px) {
       header { padding: 0 .75rem; margin-bottom: 1.5rem; }
       .header-inner { padding: 1rem 0 .875rem; }
+      .header-left { gap: .6rem; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; }
       header h1 { font-size: 1.15rem; }
+      header p  { font-size: .8rem; }
+      .header-actions { gap: .15rem; margin-top: 0; }
       .header-user { display: none; }
       .container { padding: 0 .75rem; }
+    }
+
+    @media (max-width: 400px) {
+      .app-logo, .app-logo img { width: 30px; height: 30px; }
+      header h1 { font-size: 1rem; }
+      header p  { display: none; }
+      .header-left { gap: .5rem; }
     }
 
     /* ── Page toolbar ─────────────────────────────────────────────── */
@@ -151,8 +162,11 @@
       display: flex; align-items: center; gap: .625rem;
       margin-bottom: 1.25rem; flex-wrap: wrap;
     }
+    .filter-top-row {
+      display: flex; align-items: center; gap: .5rem; width: 100%;
+    }
     .search-wrap {
-      position: relative; flex: 1; min-width: 160px;
+      position: relative; flex: 1; min-width: 0;
     }
     .search-wrap input {
       width: 100%; padding: .45rem .75rem;
@@ -184,6 +198,47 @@
     .clear-filters-btn:hover { border-color: #EF4444; color: #EF4444; }
     .clear-filters-btn { display: none; }
     .clear-filters-btn.visible { display: inline-block; }
+
+    /* pill groups always shown on desktop */
+    .filter-pills { display: contents; }
+
+    /* ── Mobile filter toggle ────────────────────────────────────── */
+    .filter-toggle-btn {
+      display: none;
+      align-items: center; gap: .35rem;
+      padding: .4rem .75rem; border-radius: 6px;
+      border: 1px solid var(--input-border);
+      background: var(--input-bg); color: var(--muted);
+      font-size: .8rem; font-weight: 600; cursor: pointer;
+      white-space: nowrap; flex-shrink: 0;
+      transition: border-color .12s, color .12s;
+    }
+    .filter-toggle-btn:hover { border-color: var(--border); color: var(--text); }
+    .filter-toggle-btn.has-active { border-color: var(--primary); color: var(--primary); background: var(--fill); }
+    .filter-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      font-size: .65rem; font-weight: 700;
+    }
+
+    @media (max-width: 620px) {
+      .filter-toggle-btn { display: inline-flex; }
+      .filter-pills {
+        display: none; flex-direction: column; gap: .5rem; width: 100%;
+      }
+      .filter-pills.open { display: flex; }
+      .filter-pills .pill-group {
+        flex-wrap: nowrap; overflow-x: auto;
+        padding-bottom: .25rem;
+        /* hide scrollbar */
+        scrollbar-width: none;
+      }
+      .filter-pills .pill-group::-webkit-scrollbar { display: none; }
+      .filter-pills .clear-filters-btn { display: none !important; }
+      .filter-top-row .clear-filters-btn { display: none; }
+      .filter-top-row .clear-filters-btn.visible { display: inline-block; }
+    }
 
     /* ── Stats bar ────────────────────────────────────────────────── */
     .stats-bar {
@@ -662,6 +717,16 @@
     }
     .pipe-paste-actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
 
+    /* ── Date column select ─────────────────────────────────────── */
+    .date-sort-sel {
+      appearance: none; background: none; border: none;
+      font-size: .75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: inherit; cursor: pointer;
+      padding: 0; font-family: inherit;
+    }
+    .date-sort-sel:focus { outline: none; }
+    .date-th { white-space: nowrap; }
+
     .hidden { display: none !important; }
     .verify-banner {
       background: #FEF3C7; border: 1px solid #FCD34D; border-radius: var(--radius);
@@ -733,34 +798,43 @@
 
   <!-- ── Filters ──────────────────────────────────────────────────── -->
   <div class="filter-bar">
-    <div class="search-wrap">
-      <input type="text" id="searchInput" placeholder="Search company or role…">
+    <div class="filter-top-row">
+      <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="Search company or role…">
+      </div>
+      <button class="filter-toggle-btn" id="filterToggleBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+        Filters
+        <span class="filter-badge hidden" id="filterBadge">0</span>
+      </button>
+      <button class="clear-filters-btn" id="clearFiltersBtn">✕ Clear</button>
     </div>
-    <button class="clear-filters-btn" id="clearFiltersBtn">✕ Clear</button>
-    <div class="pill-group" id="statusPills">
-      <button class="pill active" data-status="">Status: All</button>
-      <button class="pill" data-status="Interviewing">Interviewing</button>
-      <button class="pill" data-status="Phone Screen">Phone Screen</button>
-      <button class="pill" data-status="Applied">Applied</button>
-      <button class="pill" data-status="Researching">Researching</button>
-      <button class="pill" data-status="On Hold">On Hold</button>
-      <button class="pill" data-status="Offer">Offer</button>
-      <button class="pill" data-status="Rejected">Rejected</button>
-      <button class="pill" data-status="No Response">No Response</button>
-      <button class="pill" data-status="Not Applying">Not Applying</button>
-    </div>
-    <div class="pill-group" id="matchPills">
-      <button class="pill active" data-match="">Match: All</button>
-      <button class="pill" data-match="Strong Match">Strong Match</button>
-      <button class="pill" data-match="Good Match">Good Match</button>
-      <button class="pill" data-match="Stretch">Stretch</button>
-      <button class="pill" data-match="Long Shot">Long Shot</button>
-      <button class="pill" data-match="Not scored">Not Scored</button>
-    </div>
-    <div class="pill-group" id="duaPills">
-      <button class="pill active" data-dua="">DUA: All</button>
-      <button class="pill" data-dua="yes">DUA Filed</button>
-      <button class="pill" data-dua="no">Not Filed</button>
+    <div class="filter-pills" id="filterPills">
+      <div class="pill-group" id="statusPills">
+        <button class="pill active" data-status="">Status: All</button>
+        <button class="pill" data-status="Interviewing">Interviewing</button>
+        <button class="pill" data-status="Phone Screen">Phone Screen</button>
+        <button class="pill" data-status="Applied">Applied</button>
+        <button class="pill" data-status="Researching">Researching</button>
+        <button class="pill" data-status="On Hold">On Hold</button>
+        <button class="pill" data-status="Offer">Offer</button>
+        <button class="pill" data-status="Rejected">Rejected</button>
+        <button class="pill" data-status="No Response">No Response</button>
+        <button class="pill" data-status="Not Applying">Not Applying</button>
+      </div>
+      <div class="pill-group" id="matchPills">
+        <button class="pill active" data-match="">Match: All</button>
+        <button class="pill" data-match="Strong Match">Strong Match</button>
+        <button class="pill" data-match="Good Match">Good Match</button>
+        <button class="pill" data-match="Stretch">Stretch</button>
+        <button class="pill" data-match="Long Shot">Long Shot</button>
+        <button class="pill" data-match="Not scored">Not Scored</button>
+      </div>
+      <div class="pill-group" id="duaPills">
+        <button class="pill active" data-dua="">DUA: All</button>
+        <button class="pill" data-dua="yes">DUA Filed</button>
+        <button class="pill" data-dua="no">Not Filed</button>
+      </div>
     </div>
   </div>
 
@@ -782,17 +856,20 @@
         <th class="sortable" data-col="role_title">Role<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="status">Status<span class="sort-arrow">↕</span></th>
         <th class="sortable" data-col="match_score">Match<span class="sort-arrow">↕</span></th>
-        <th class="sortable" data-col="created_at">Created<span class="sort-arrow">↕</span></th>
-        <th class="sortable" data-col="date_applied">Applied<span class="sort-arrow">↕</span></th>
-        <th class="sortable" data-col="last_updated">Updated<span class="sort-arrow">↕</span></th>
+        <th class="sortable date-th" data-col="last_updated">
+          <select id="dateSortSel" class="date-sort-sel" title="Choose date to display">
+            <option value="last_updated">Updated</option>
+            <option value="created_at">Created</option>
+            <option value="date_applied">Applied</option>
+          </select><span class="sort-arrow">↓</span></th>
         <th></th>
       </tr>
     </thead>
     <tbody id="appTableBody">
       <!-- skeleton rows -->
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:70%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:55%;height:14px"></div></td></tr>
-      <tr class="skel-row"><td colspan="8"><div class="skel" style="width:65%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:70%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:55%;height:14px"></div></td></tr>
+      <tr class="skel-row"><td colspan="6"><div class="skel" style="width:65%;height:14px"></div></td></tr>
     </tbody>
   </table>
 
@@ -1105,8 +1182,37 @@ function _updateSortHeaders() {
   });
 }
 
+// ── Date column helpers ─────────────────────────────────────────────
+function _dateColKey() {
+  return document.getElementById('dateSortSel')?.value || 'last_updated';
+}
+function _dateColVal(a) {
+  const k = _dateColKey();
+  return a[k] || '';
+}
+
+// Sync date-th data-col with the select so _sortVal and _updateSortHeaders work
+function _syncDateCol() {
+  const key = _dateColKey();
+  const th = document.querySelector('th.date-th');
+  if (th) th.dataset.col = key;
+}
+
+document.getElementById('dateSortSel')?.addEventListener('change', (e) => {
+  e.stopPropagation(); // don't bubble to th click handler
+  _syncDateCol();
+  _sortCol = _dateColKey();
+  _sortDir = 'desc';
+  _updateSortHeaders();
+  _filtered = _sortList(_filtered);
+  _page = 1;
+  renderTable();
+});
+
 // Column header click → sort
 document.addEventListener('click', (e) => {
+  // Don't trigger sort when clicking the select inside the date-th
+  if (e.target.closest('#dateSortSel')) return;
   const th = e.target.closest('th.sortable');
   if (!th) return;
   const col = th.dataset.col;
@@ -1114,13 +1220,44 @@ document.addEventListener('click', (e) => {
     _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
   } else {
     _sortCol = col;
-    _sortDir = 'asc';
+    _sortDir = col === 'last_updated' || col === 'created_at' || col === 'date_applied' ? 'desc' : 'asc';
   }
   _updateSortHeaders();
   _filtered = _sortList(_filtered);
   _page = 1;
   renderTable();
 });
+
+// ── Filter toggle (mobile) ──────────────────────────────────────────
+(function() {
+  const btn = document.getElementById('filterToggleBtn');
+  const pills = document.getElementById('filterPills');
+  const badge = document.getElementById('filterBadge');
+  if (!btn || !pills) return;
+
+  btn.addEventListener('click', () => {
+    pills.classList.toggle('open');
+    btn.setAttribute('aria-expanded', pills.classList.contains('open'));
+  });
+
+  // Update badge count when filters change
+  function updateFilterBadge() {
+    const statusActive = document.querySelector('#statusPills .pill.active')?.dataset.status !== '' ? 1 : 0;
+    const matchActive  = document.querySelector('#matchPills .pill.active')?.dataset.match  !== '' ? 1 : 0;
+    const duaActive    = document.querySelector('#duaPills .pill.active')?.dataset.dua      !== '' ? 1 : 0;
+    const searchActive = document.getElementById('searchInput')?.value.trim() ? 1 : 0;
+    const count = statusActive + matchActive + duaActive + searchActive;
+    if (badge) {
+      badge.textContent = count;
+      badge.classList.toggle('hidden', count === 0);
+    }
+    btn.classList.toggle('has-active', count > 0);
+  }
+
+  document.getElementById('filterPills')?.addEventListener('click', () => setTimeout(updateFilterBadge, 0));
+  document.getElementById('searchInput')?.addEventListener('input', updateFilterBadge);
+  document.getElementById('clearFiltersBtn')?.addEventListener('click', () => setTimeout(updateFilterBadge, 0), true);
+})();
 
 // ── Status helpers ──────────────────────────────────────────────────
 const STATUS_CLASS = {
@@ -1300,9 +1437,7 @@ function renderTable() {
       <td class="role-cell">${esc(a.role_title)}</td>
       <td>${statusBadge(a.status)}${a.dua ? ' <span class="dua-badge" title="Reported to DUA">DUA ✓</span>' : ''}</td>
       <td>${matchCell(a)}</td>
-      <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.created_at)}</td>
-      <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.date_applied)}</td>
-      <td style="color:var(--muted);font-size:.8rem">${fmtDate(a.last_updated)}</td>
+      <td style="color:var(--muted);font-size:.8rem">${fmtDate(_dateColVal(a))}</td>
       <td><div class="actions-cell">
         ${safeHref(a.url) ? `<a class="icon-btn" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener" title="Open job posting">&#x2197;</a>` : ''}
         ${folderUrl(a) ? `<a class="icon-btn" href="${esc(folderUrl(a))}" target="_blank" rel="noopener" title="Go to Drive folder">&#x1F4C1;</a>` : `<button class="icon-btn" data-id="${a.id}" data-action="setup-folder" title="Create Drive folder${a.url ? ' (attempts JD capture from URL)' : ''}">&#x2295;</button>`}
