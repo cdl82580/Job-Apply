@@ -23,7 +23,7 @@ from . import storage, user_audit
 logger = logging.getLogger(__name__)
 
 _FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
-_APP_URL      = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+_APP_URL      = os.environ.get("APP_URL", "https://apply.cdlav.us")
 _LOGO_URL     = f"{_APP_URL}/img/logo.png"
 
 

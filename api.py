@@ -378,7 +378,7 @@ def _verify_password(password: str, stored: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <hello@cdlav.us>")
-_APP_URL = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+_APP_URL = os.environ.get("APP_URL", "https://apply.cdlav.us")
 _LOGO_URL = f"{_APP_URL}/img/logo.png"
 
 
@@ -771,7 +771,7 @@ def _researching_nudge_email(
         f"Yes, but on a different date: {url_confirm}\n"
         f"Not applying: {url_no}\n"
         f"Still researching (remind me in 5 days): {url_snooze}\n\n"
-        f"View tracker: {base}/tracking.html"
+        f"View tracker: {base}/index.html#tracker"
     )
 
     body_html = f"""
@@ -869,7 +869,7 @@ def _follow_up_reminder_email(
         f"Mark follow-up sent (still waiting): {url_follow}\n"
         f"Mark as No Response: {url_no_resp}\n"
         f"Snooze 7 days: {url_snooze}\n\n"
-        f"View tracker: {base}/tracking.html"
+        f"View tracker: {base}/index.html#tracker"
     )
 
     body_html = f"""
@@ -954,7 +954,7 @@ def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
         f"Mark as No Response: {url_no_resp}\n"
         f"Archive (Not Applying): {url_archive}\n"
         f"Snooze 2 weeks: {url_snooze}\n\n"
-        f"View tracker: {base}/tracking.html"
+        f"View tracker: {base}/index.html#tracker"
     )
 
     body_html = f"""
@@ -1012,6 +1012,66 @@ def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Shared email helpers (used by daily + weekly digests)
+# ---------------------------------------------------------------------------
+
+_DIGEST_PILL_BG: dict[str, str] = {
+    "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
+    "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
+    "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
+    "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
+    "Not Applying": "#F3F4F6",
+}
+_DIGEST_PILL_COLOR: dict[str, str] = {
+    "Researching":  "#0369A1", "Applied":      "#92400E",
+    "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
+    "On Hold":      "#9A3412", "Offer":        "#065F46",
+    "Rejected":     "#991B1B",
+}
+_DIGEST_PILL_EMOJI: dict[str, str] = {
+    "Researching":   "&#128270;", "Applied":       "&#128228;",
+    "Phone Screen":  "&#128222;", "Interviewing":  "&#128101;",
+    "On Hold":       "&#9203;",   "Offer":         "&#127881;",
+    "No Response":   "&#128683;", "Not Applying":  "&#128465;",
+    "Rejected":      "&#10060;",
+}
+
+
+def _digest_status_pill(status: str) -> str:
+    bg    = _DIGEST_PILL_BG.get(status, "#F3F4F6")
+    color = _DIGEST_PILL_COLOR.get(status, "#374151")
+    emoji = _DIGEST_PILL_EMOJI.get(status, "")
+    return (
+        f'<span style="display:inline-block;background:{bg};color:{color};'
+        f'padding:.15rem .55rem;border-radius:999px;font-size:.8rem;font-weight:600;'
+        f'white-space:nowrap">{emoji}&nbsp;{status}</span>'
+    )
+
+
+def _digest_company_cell(a: dict) -> str:
+    import re as _re
+    company  = a.get("company", "")
+    logo_url = a.get("company_logo_url", "")
+    if not logo_url:
+        job_url = a.get("url") or a.get("job_url") or ""
+        if job_url:
+            m = _re.search(r'https?://([^/]+)', job_url)
+            if m:
+                logo_url = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz=32"
+    logo_html = (
+        f'<img src="{logo_url}" alt="" width="16" height="16" '
+        f'style="display:inline-block;vertical-align:middle;border-radius:3px;'
+        f'margin-right:.375rem;border:0">'
+        if logo_url else ""
+    )
+    return (
+        f'<td style="padding:.5rem .5rem;color:#374151;font-size:.875rem;'
+        f'vertical-align:middle;white-space:nowrap">'
+        f'{logo_html}<span style="vertical-align:middle">{company}</span></td>'
+    )
+
+
+# ---------------------------------------------------------------------------
 # Daily digest email
 # ---------------------------------------------------------------------------
 
@@ -1031,67 +1091,12 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
 
     subject = f"Job Apply daily — {len(active)} active, {len(follow_ups_due)} follow-up{'s' if len(follow_ups_due) != 1 else ''} due"
 
-    _pill_bg = {
-        "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
-        "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
-        "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
-        "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
-        "Not Applying": "#F3F4F6",
-    }
-    _pill_color = {
-        "Researching":  "#0369A1", "Applied":      "#92400E",
-        "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
-        "On Hold":      "#9A3412", "Offer":        "#065F46",
-        "Rejected":     "#991B1B",
-    }
-    _pill_emoji = {
-        "Researching":   "&#128270;", "Applied":       "&#128228;",
-        "Phone Screen":  "&#128222;", "Interviewing":  "&#128101;",
-        "On Hold":       "&#9203;",   "Offer":         "&#127881;",
-        "No Response":   "&#128683;", "Not Applying":  "&#128465;",
-        "Rejected":      "&#10060;",
-    }
-
-    def _status_pill(status: str) -> str:
-        bg    = _pill_bg.get(status, "#F3F4F6")
-        color = _pill_color.get(status, "#374151")
-        emoji = _pill_emoji.get(status, "")
-        return (
-            f'<span style="display:inline-block;background:{bg};color:{color};'
-            f'padding:.15rem .55rem;border-radius:999px;font-size:.8rem;font-weight:600;'
-            f'white-space:nowrap">{emoji}&nbsp;{status}</span>'
-        )
-
-    def _company_cell(a: dict) -> str:
-        company  = a.get("company", "")
-        logo_url = a.get("company_logo_url", "")
-        if not logo_url:
-            # fall back to Google favicon service using the job posting URL
-            job_url = a.get("url") or a.get("job_url") or ""
-            if job_url:
-                import re as _re
-                m = _re.search(r'https?://([^/]+)', job_url)
-                if m:
-                    logo_url = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz=32"
-        logo_html = ""
-        if logo_url:
-            logo_html = (
-                f'<img src="{logo_url}" alt="" width="16" height="16" '
-                f'style="display:inline-block;vertical-align:middle;border-radius:3px;'
-                f'margin-right:.375rem;border:0">'
-            )
-        return (
-            f'<td style="padding:.5rem .5rem;color:#374151;font-size:.875rem;'
-            f'vertical-align:middle;white-space:nowrap">'
-            f'{logo_html}<span style="vertical-align:middle">{company}</span></td>'
-        )
-
     def _app_row(a: dict) -> str:
         return (
             f"<tr>"
-            f"{_company_cell(a)}"
+            f"{_digest_company_cell(a)}"
             f"<td style='padding:.5rem .5rem;color:#6B7280;font-size:.875rem;vertical-align:middle'>{a.get('role_title','')}</td>"
-            f"<td style='padding:.5rem .5rem;vertical-align:middle'>{_status_pill(a.get('status',''))}</td>"
+            f"<td style='padding:.5rem .5rem;vertical-align:middle'>{_digest_status_pill(a.get('status',''))}</td>"
             f"</tr>"
         )
 
@@ -1184,8 +1189,8 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
     def _status_row(status: str, count: int) -> str:
         return (
             f"<tr>"
-            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{status}</td>"
-            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem;text-align:right'>{count}</td>"
+            f"<td style='padding:.375rem .5rem;vertical-align:middle'>{_digest_status_pill(status)}</td>"
+            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem;text-align:right;vertical-align:middle'>{count}</td>"
             f"</tr>"
         )
 
@@ -1203,9 +1208,9 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
     if silent:
         silent_rows = "".join(
             f"<tr>"
-            f"<td style='padding:.375rem .5rem;color:#374151;font-size:.875rem'>{a.get('company','')}</td>"
-            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('role_title','')}</td>"
-            f"<td style='padding:.375rem .5rem;color:#6B7280;font-size:.875rem'>{a.get('status','')}</td>"
+            f"{_digest_company_cell(a)}"
+            f"<td style='padding:.5rem .5rem;color:#6B7280;font-size:.875rem;vertical-align:middle'>{a.get('role_title','')}</td>"
+            f"<td style='padding:.5rem .5rem;vertical-align:middle'>{_digest_status_pill(a.get('status',''))}</td>"
             f"</tr>"
             for a in silent[:10]
         )
@@ -1245,7 +1250,7 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
       <tbody>{status_rows}</tbody>
     </table>
     {silent_section}
-    <a href="{base}/tracking.html"
+    <a href="{base}/index.html#tracker"
        style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
               padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem;
               margin-top:.75rem">
@@ -1256,7 +1261,7 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
     text = (
         f"Weekly summary: {len(apps)} total, {len(active)} active, {len(silent)} gone quiet.\n\n"
         + "\n".join(f"  {s}: {c}" for s, c in status_counts.most_common())
-        + f"\n\nView tracker: {base}/tracking.html"
+        + f"\n\nView tracker: {base}/index.html#tracker"
     )
 
     _send_email(user_email, subject, text, html=_email_html(body_html))
@@ -1780,7 +1785,7 @@ async def logout(request: Request):
 @app.get("/api/auth/verify-email")
 async def verify_email(token: str = ""):
     """Public — clicked from email link. Marks user verified and redirects."""
-    app_url = os.environ.get("APP_URL", "https://job-apply-corey.fly.dev")
+    app_url = os.environ.get("APP_URL", "https://apply.cdlav.us")
     fail_url = f"{app_url}/login.html?auth_error="
 
     if not token:
