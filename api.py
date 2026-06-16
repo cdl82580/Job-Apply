@@ -760,7 +760,7 @@ def _researching_nudge_email(
         f"Yes, but on a different date: {url_confirm}\n"
         f"Not applying: {url_no}\n"
         f"Still researching (remind me in 5 days): {url_snooze}\n\n"
-        f"View tracker: {base}/index.html#tracker"
+        f"View tracker: {base}/tracking.html"
     )
 
     body_html = f"""
@@ -858,7 +858,7 @@ def _follow_up_reminder_email(
         f"Mark follow-up sent (still waiting): {url_follow}\n"
         f"Mark as No Response: {url_no_resp}\n"
         f"Snooze 7 days: {url_snooze}\n\n"
-        f"View tracker: {base}/index.html#tracker"
+        f"View tracker: {base}/tracking.html"
     )
 
     body_html = f"""
@@ -943,7 +943,7 @@ def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
         f"Mark as No Response: {url_no_resp}\n"
         f"Archive (Not Applying): {url_archive}\n"
         f"Snooze 2 weeks: {url_snooze}\n\n"
-        f"View tracker: {base}/index.html#tracker"
+        f"View tracker: {base}/tracking.html"
     )
 
     body_html = f"""
@@ -1075,7 +1075,7 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
       </thead>
       <tbody>{active_rows}</tbody>
     </table>
-    <a href="{base}/index.html#tracker"
+    <a href="{base}/tracking.html"
        style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
               padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem">
       Open Tracker &rarr;
@@ -1085,7 +1085,7 @@ def _daily_digest_email(user_email: str, user_id: str, apps: list[dict]) -> None
     text = (
         f"Daily summary: {len(active)} active, {len(researching)} researching, "
         f"{len(follow_ups_due)} follow-ups due.\n\n"
-        f"View tracker: {base}/index.html#tracker"
+        f"View tracker: {base}/tracking.html"
     )
 
     _send_email(user_email, subject, text, html=_email_html(body_html))
@@ -1181,7 +1181,7 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
       <tbody>{status_rows}</tbody>
     </table>
     {silent_section}
-    <a href="{base}/index.html#tracker"
+    <a href="{base}/tracking.html"
        style="display:inline-block;background:#1A3C5E;color:#fff;text-decoration:none;
               padding:.625rem 1.25rem;border-radius:6px;font-weight:600;font-size:.9rem;
               margin-top:.75rem">
@@ -1192,7 +1192,7 @@ def _weekly_digest_email(user_email: str, user_id: str, apps: list[dict]) -> Non
     text = (
         f"Weekly summary: {len(apps)} total, {len(active)} active, {len(silent)} gone quiet.\n\n"
         + "\n".join(f"  {s}: {c}" for s, c in status_counts.most_common())
-        + f"\n\nView tracker: {base}/index.html#tracker"
+        + f"\n\nView tracker: {base}/tracking.html"
     )
 
     _send_email(user_email, subject, text, html=_email_html(body_html))

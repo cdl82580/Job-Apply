@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Apply Agents</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <!-- Anti-FOUC: apply saved theme before CSS renders -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ── Light mode tokens ───────────────────────────────────────── */
+    :root {
+      --primary:      #1A3C5E;
+      --border:       #2B6CB0;
+      --fill:         #EEF4FB;
+      --text:         #111827;
+      --muted:        #6B7280;
+      --error:        #DC2626;
+      --success:      #065F46;
+      --radius:       8px;
+      --bg-page:      #F9FAFB;
+      --bg-card:      #FFFFFF;
+      --card-border:  #E5E7EB;
+      --input-bg:     #FFFFFF;
+      --input-border: #D1D5DB;
+      --log-bg:       #0F172A;
+      --log-text:     #CBD5E1;
+      --framing-text: #2D4E6B;
+    }
+
+    /* ── Dark mode tokens ───────────────────────────────────────────
+       Backgrounds are neutral dark grays — no blue cast on large surfaces.
+       Indigo is reserved for interactive accents only (primary, border, fill).
+    ────────────────────────────────────────────────────────────────── */
+    [data-theme="dark"] { color-scheme: dark;
+      --primary:      #A5B4FC;
+      --border:       #6366F1;
+      --fill:         #1A1A2E;
+      --text:         #F0F0F5;
+      --muted:        #94A3B8;
+      --error:        #F87171;
+      --success:      #4ADE80;
+      --bg-page:      #0A0A0A;
+      --bg-card:      #111111;
+      --card-border:  #1E1E1E;
+      --input-bg:     #161616;
+      --input-border: #2B2B2B;
+      --log-bg:       #060606;
+      --log-text:     #8B9EB5;
+      --framing-text: #C7D2FE;
+    }
+
+    html, body { height: 100%; background: var(--bg-page); }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-page);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      transition: background .2s, color .2s;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 1rem 2rem; flex: 1; width: 100%; }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    header {
+      border-bottom: 2px solid var(--primary);
+      margin-bottom: 2rem;
+      padding: 0 1rem;
+    }
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.25rem 0 1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    .header-left   { display: flex; align-items: flex-start; gap: .875rem; }
+    header h1      { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
+    header p       { color: var(--muted); margin: 0; font-size: .9rem; }
+    @keyframes sparkle-pulse {
+      0%, 100% { opacity: .5; transform: scale(1);   }
+      50%       { opacity: 1;  transform: scale(1.2); }
+    }
+    .model-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      margin-left: .5rem;
+      font-size: .72rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--fill);
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: .1rem .45rem .1rem .3rem;
+      vertical-align: middle;
+      letter-spacing: .01em;
+    }
+    .model-badge-icon {
+      display: inline-block;
+      animation: sparkle-pulse 2.4s ease-in-out infinite;
+      line-height: 1;
+      font-size: .8rem;
+    }
+    .header-actions {
+      display: flex; align-items: center; gap: .25rem; flex-shrink: 0; margin-top: .125rem;
+    }
+    .header-user { font-size: .825rem; color: var(--muted); margin-right: .375rem; }
+    .header-icon-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      background: none; border: none; cursor: pointer; padding: 0;
+      color: var(--muted);
+      border-radius: 6px;
+      text-decoration: none;
+      transition: color .15s, background .15s;
+      position: relative;
+    }
+    .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
+    /* hidden admin link */
+    .header-link { display: none; }
+
+    /* ── Logo ────────────────────────────────────────────────────── */
+    .app-logo { width: 44px; height: 44px; flex-shrink: 0; }
+    .app-logo img { width: 44px; height: 44px; } .theme-toggle {
+      background: none;
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: .3rem .65rem;
+      cursor: pointer;
+      font-size: .8rem;
+      color: var(--muted);
+      display: flex; align-items: center; gap: .3rem;
+      transition: border-color .15s, color .15s;
+      line-height: 1;
+    }
+    .theme-toggle:hover { border-color: var(--border); color: var(--text); }
+
+    /* ── Responsive header ───────────────────────────────────────── */
+    @media (max-width: 620px) {
+      header { padding: 0 .75rem; margin-bottom: 1.5rem; }
+      .header-inner { padding: 1rem 0 .875rem; }
+      .header-left { gap: .6rem; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; }
+      header h1 { font-size: 1.15rem; }
+      header p  { font-size: .8rem; }
+      .header-actions { gap: .15rem; margin-top: 0; }
+      .header-user { display: none; }
+      .container { padding: 0 .75rem; }
+    }
+
+    @media (max-width: 400px) {
+      .app-logo, .app-logo img { width: 30px; height: 30px; }
+      header h1 { font-size: 1rem; }
+      header p  { display: none; }
+      .header-left { gap: .5rem; }
+    }
+
+    /* ── Card ────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      border: 1px solid var(--card-border);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      transition: background .2s, border-color .2s;
+    }
+
+    .field { margin-bottom: 1.25rem; }
+    .field:last-child { margin-bottom: 0; }
+
+    label { display: block; font-weight: 600; font-size: .875rem; margin-bottom: .375rem; }
+    label .opt { font-weight: 400; color: var(--muted); font-size: .8rem; }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: .5rem .75rem;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      font-size: .9rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--input-bg);
+      transition: border-color .15s, background .2s, color .2s;
+    }
+    input[type="text"]:focus, textarea:focus {
+      outline: none;
+      border-color: var(--border);
+      box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    }
+    textarea { resize: vertical; min-height: 180px; line-height: 1.5; }
+
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+    @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .625rem 1.5rem;
+      background: var(--primary); color: white;
+      border: none; border-radius: 6px;
+      font-size: .95rem; font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    .btn:hover:not(:disabled) { filter: brightness(1.12); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: var(--bg-card);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--fill); }
+
+    /* ── Progress ─────────────────────────────────────────────────── */
+    .progress-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem;
+    }
+    .progress-header h2 { font-size: 1rem; font-weight: 600; margin: 0; color: var(--primary); }
+
+    .badge {
+      font-size: .72rem; padding: .2rem .6rem;
+      border-radius: 999px; font-weight: 700;
+      letter-spacing: .02em; text-transform: uppercase;
+    }
+    .badge-running { background: #DBEAFE; color: #1D4ED8; }
+    .badge-queued  { background: #FEF3C7; color: #92400E; }
+    .badge-done    { background: #D1FAE5; color: #065F46; }
+    .badge-error   { background: #FEE2E2; color: #DC2626; }
+
+    [data-theme="dark"] .badge-running { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .badge-queued  { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .badge-done    { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .badge-error   { background: #2B1010; color: #F87171; }
+
+    .log {
+      background: var(--log-bg);
+      color: var(--log-text);
+      border-radius: 6px; padding: 1rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: .78rem; line-height: 1.6;
+      max-height: 380px; overflow-y: auto;
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    .inline-err {
+      background: #FEF2F2; border: 1px solid #FECACA;
+      border-radius: 6px; padding: .75rem 1rem;
+      color: var(--error); font-size: .875rem;
+      margin-top: .75rem; display: none;
+    }
+    [data-theme="dark"] .inline-err { background: #2B1010; border-color: #7F1D1D; }
+
+    /* ── Results ──────────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .results-appear { animation: fadeUp .25s ease; }
+
+    .result-meta { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
+    .result-check {
+      width: 30px; height: 30px;
+      background: #D1FAE5; color: #065F46;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; flex-shrink: 0;
+    }
+    [data-theme="dark"] .result-check { background: #0D2B1E; color: #4ADE80; }
+
+    .result-job    { font-size: .95rem; line-height: 1.4; }
+    .result-sep    { color: var(--muted); margin: 0 .35rem; }
+    .result-role   { color: var(--muted); }
+
+    .framing {
+      background: var(--fill);
+      border-left: 3px solid var(--border);
+      padding: .75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      font-size: .875rem; line-height: 1.6;
+      margin-bottom: 1.25rem;
+      font-style: italic;
+      color: var(--framing-text);
+    }
+
+    .file-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: .75rem; margin-bottom: 1.25rem;
+    }
+    @media (max-width: 520px) { .file-grid { grid-template-columns: 1fr; } }
+
+    .file-card {
+      display: flex; flex-direction: column;
+      border: 1px solid var(--card-border);
+      border-radius: 8px; padding: 1rem;
+      background: var(--bg-card);
+      text-decoration: none; color: var(--text);
+      transition: border-color .15s, box-shadow .15s, transform .12s;
+    }
+    .file-card:hover {
+      border-color: var(--border);
+      box-shadow: 0 4px 12px rgba(99,102,241,.15);
+      transform: translateY(-2px);
+    }
+    .file-card:active { transform: translateY(0); }
+    .file-card-icon  { font-size: 1.4rem; margin-bottom: .5rem; line-height: 1; }
+    .file-card-label { font-weight: 700; font-size: .875rem; margin-bottom: .2rem; }
+    .file-card-desc  { font-size: .775rem; color: var(--muted); flex: 1; margin-bottom: .875rem; }
+    .file-card-dl    { font-size: .775rem; font-weight: 600; color: var(--border); display: flex; align-items: center; gap: .25rem; }
+
+    .drive-btn {
+      display: flex; align-items: center; gap: .875rem;
+      padding: .875rem 1.125rem;
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      text-decoration: none; color: var(--primary);
+      font-weight: 600; font-size: .9rem;
+      margin-bottom: 1.25rem;
+      transition: background .15s, box-shadow .15s;
+    }
+    .drive-btn:hover { background: var(--fill); box-shadow: 0 2px 8px rgba(99,102,241,.15); }
+    .drive-btn-icon  { font-size: 1.15rem; }
+    .drive-btn-text  { flex: 1; }
+    .drive-btn-arrow { color: var(--muted); }
+
+    /* ── Spinner ──────────────────────────────────────────────────── */
+    .spin {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.4); border-top-color: white;
+      border-radius: 50%; animation: rot .7s linear infinite;
+    }
+    @keyframes rot { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+
+    /* ── Email verification banner ───────────────────────────────── */
+    .verify-banner {
+      background: #FEF3C7; border: 1px solid #FCD34D; border-radius: var(--radius);
+      padding: .75rem 1rem; margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    }
+    [data-theme="dark"] .verify-banner { background: #2D2010; border-color: #92400E; }
+    .verify-banner-text { flex: 1; font-size: .875rem; color: #92400E; min-width: 0; }
+    [data-theme="dark"] .verify-banner-text { color: #FCD34D; }
+    .verify-banner-text strong { font-weight: 700; }
+    .verify-resend-btn {
+      font-size: .8rem; font-weight: 600; padding: .3rem .85rem;
+      border: 1px solid #D97706; border-radius: 5px; background: none;
+      color: #92400E; cursor: pointer; white-space: nowrap; transition: background .12s;
+    }
+    [data-theme="dark"] .verify-resend-btn { color: #FCD34D; border-color: #92400E; }
+    .verify-resend-btn:hover { background: rgba(217,119,6,.1); }
+    .verify-resend-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Select ──────────────────────────────────────────────────── */
+    select {
+      width: 100%; padding: .5rem .75rem;
+      border: 1px solid var(--input-border);
+      border-radius: 6px; font-size: .9rem; font-family: inherit;
+      color: var(--text); background-color: var(--input-bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right .75rem center;
+      appearance: none; cursor: pointer;
+      transition: background-color .2s, border-color .15s, color .2s;
+    }
+    select:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+
+    /* ── Prep card collapsible ───────────────────────────────────── */
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .card-head h2 { font-size: 1rem; font-weight: 700; color: var(--primary); margin: 0; }
+    .card-head:hover h2 { color: var(--border); }
+    .chevron { font-size: .7rem; color: var(--muted); transition: transform .2s; }
+    .chevron.open { transform: rotate(180deg); }
+    .card-body { margin-top: 1.25rem; }
+
+    /* ── App picker combobox ─────────────────────────────────────── */
+    .app-picker-wrap { position: relative; margin-bottom: 1.25rem; }
+    .app-picker-label {
+      display: flex; align-items: center; gap: .5rem;
+      font-weight: 600; font-size: .875rem; margin-bottom: .375rem; color: var(--text);
+    }
+    .app-picker-label .opt { font-weight: 400; color: var(--muted); }
+    .app-picker-selected {
+      display: flex; align-items: center; gap: .625rem;
+      padding: .5rem .75rem;
+      border: 1px solid var(--border); border-radius: 6px;
+      background: var(--fill); font-size: .875rem;
+      cursor: pointer;
+    }
+    .app-picker-selected .sel-logo {
+      width: 22px; height: 22px; border-radius: 3px; object-fit: contain; flex-shrink: 0;
+    }
+    .app-picker-selected .sel-name { font-weight: 600; flex: 1; }
+    .app-picker-selected .sel-clear {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: .9rem; padding: 0 .1rem; line-height: 1;
+    }
+    .app-picker-selected .sel-clear:hover { color: var(--error); }
+    .app-picker-input-row { position: relative; }
+    .app-picker-input-row input[type="text"] {
+      width: 100%; padding: .5rem .75rem;
+      border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .875rem; font-family: inherit;
+      background: var(--input-bg); color: var(--text);
+    }
+    .app-picker-input-row input:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .app-picker-hint { font-size: .775rem; color: var(--muted); margin-top: .35rem; }
+    .app-suggestions {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      z-index: 50; overflow: hidden; max-height: 280px; overflow-y: auto;
+    }
+    .app-suggestions.hidden { display: none; }
+    .app-sugg-item {
+      display: flex; align-items: center; gap: .625rem;
+      padding: .6rem .875rem; cursor: pointer; transition: background .1s;
+    }
+    .app-sugg-item:hover, .app-sugg-item.focused { background: var(--fill); }
+    .app-sugg-logo {
+      width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0;
+      object-fit: contain; background: var(--bg-page); border: 1px solid var(--card-border);
+    }
+    .app-sugg-logo-ph {
+      width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0;
+      background: var(--fill); border: 1px solid var(--card-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    }
+    .app-sugg-body { flex: 1; min-width: 0; }
+    .app-sugg-company { font-weight: 600; font-size: .875rem; color: var(--text); }
+    .app-sugg-role    { font-size: .775rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .app-sugg-status  {
+      font-size: .65rem; padding: .15rem .45rem; border-radius: 999px;
+      font-weight: 700; flex-shrink: 0; white-space: nowrap;
+    }
+    .app-sugg-empty, .app-sugg-loading { padding: .75rem .875rem; font-size: .825rem; color: var(--muted); text-align: center; }
+    /* status colours (mini) */
+    .sc-interviewing  { background: #FEF3C7; color: #92400E; }
+    .sc-phone-screen  { background: #CFFAFE; color: #0E7490; }
+    .sc-applied       { background: #DBEAFE; color: #1D4ED8; }
+    .sc-on-hold       { background: #FED7AA; color: #9A3412; }
+    .sc-researching   { background: #EDE9FE; color: #7C3AED; }
+    .sc-offer         { background: #D1FAE5; color: #065F46; }
+    .sc-rejected      { background: #FEE2E2; color: #991B1B; }
+    .sc-not-applying  { background: #F3F4F6; color: #6B7280; }
+    [data-theme="dark"] .sc-interviewing { background: #2D2010; color: #FCD34D; }
+    [data-theme="dark"] .sc-phone-screen { background: #083344; color: #67E8F9; }
+    [data-theme="dark"] .sc-applied      { background: #1E2D56; color: #93C5FD; }
+    [data-theme="dark"] .sc-on-hold      { background: #3D1A0A; color: #FDBA74; }
+    [data-theme="dark"] .sc-researching  { background: #2E1065; color: #C4B5FD; }
+    [data-theme="dark"] .sc-offer        { background: #0D2B1E; color: #4ADE80; }
+    [data-theme="dark"] .sc-rejected     { background: #2B1010; color: #F87171; }
+    [data-theme="dark"] .sc-not-applying { background: #1F2937; color: #9CA3AF; }
+    .jd-status {
+      font-size: .775rem; color: var(--muted); margin-top: .3rem;
+      display: flex; align-items: center; gap: .3rem;
+    }
+    .jd-status.loaded { color: var(--success); }
+    .spin-xs {
+      display: inline-block; width: 10px; height: 10px;
+      border: 2px solid var(--card-border); border-top-color: var(--muted);
+      border-radius: 50%; animation: rot .7s linear infinite;
+    }
+
+    /* ── Source mode toggle ──────────────────────────────────────── */
+    .src-toggle { display: flex; gap: .5rem; margin-bottom: .75rem; flex-wrap: wrap; }
+    .src-btn {
+      padding: .3rem .85rem;
+      border: 1px solid var(--input-border);
+      border-radius: 6px; font-size: .825rem; font-weight: 500;
+      background: var(--input-bg); color: var(--muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .src-btn.active {
+      background: var(--fill); border-color: var(--border);
+      color: var(--primary); font-weight: 600;
+    }
+
+    #prepFocus  { min-height: 60px; }
+
+    /* ── Past Runs list ──────────────────────────────────────────── */
+    .run-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: .6rem 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .run-row:last-child { border-bottom: none; }
+    .run-row-name {
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .run-row-badge {
+      font-size: .7rem;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+      background: var(--fill);
+      color: var(--muted);
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .run-row-link {
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--border);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .run-row-link:hover { text-decoration: underline; }
+    .past-runs-empty {
+      color: var(--muted);
+      font-size: .875rem;
+      padding: .5rem 0;
+    }
+    .past-runs-loading {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      color: var(--muted);
+      font-size: .875rem;
+      padding: .5rem 0;
+    }
+    .spin-muted {
+      display: inline-block;
+      width: 13px; height: 13px;
+      border: 2px solid var(--card-border);
+      border-top-color: var(--muted);
+      border-radius: 50%;
+      animation: rot .7s linear infinite;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+    <div class="header-left">
+      <div class="app-logo">
+        <img class="logo-img" src="/img/logo.png" alt="Logo">
+      </div>
+      <div>
+        <h1>Job Apply Agents</h1>
+        <p style="white-space: nowrap;">Generate a tailored resume, ATS resume, cover letter, and interview prep.<span class="model-badge hidden" id="modelBadge"><span class="model-badge-icon">✦</span><span id="modelBadgeText"></span></span></p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+        <span id="themeIcon"></span>
+      </button>
+      <span class="header-user" id="headerUser"></span>
+      <a class="header-link hidden" id="adminLink" href="/admin.html" title="Admin">Admin</a>
+      <a class="header-icon-btn" href="/tracking.html" title="Application Tracker" aria-label="Application Tracker">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/agents.html" title="Agents" aria-label="Agents">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/calendar.html" title="Calendar" aria-label="Calendar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/kb.html" title="Knowledge Base" aria-label="Knowledge Base">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      </a>
+      <a class="header-icon-btn" href="/profile.html" title="Profile" aria-label="Profile">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+      <button class="header-icon-btn" id="logoutBtn" title="Sign Out" aria-label="Sign Out">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+    </div><!-- /.header-inner -->
+  </header>
+
+<div class="container">
+
+  <!-- ── Email verification banner ──────────────────────────────── -->
+  <div class="verify-banner hidden" id="verifyBanner">
+    <div class="verify-banner-text">
+      ✉️ <strong>Please verify your email address.</strong>
+      Check your inbox for a verification link — or
+    </div>
+    <button class="verify-resend-btn" id="resendVerifyBtn">Resend verification email</button>
+  </div>
+
+  <!-- ── Input form ──────────────────────────────────────────────── -->
+  <div class="card" id="formCard">
+    <form id="runForm">
+
+      <!-- App picker -->
+      <div class="app-picker-wrap" id="runAppPickerWrap">
+        <div class="app-picker-label">
+          Select Application <span class="opt">(required — choose an existing tracker application)</span>
+        </div>
+        <!-- selected state -->
+        <div class="app-picker-selected hidden" id="runAppSelected">
+          <img class="sel-logo" id="runSelLogo" alt="">
+          <span class="sel-name" id="runSelName"></span>
+          <button type="button" class="sel-clear" id="runSelClear" title="Clear">&#x2715;</button>
+        </div>
+        <!-- search input -->
+        <div class="app-picker-input-row" id="runAppInputRow">
+          <input type="text" id="runAppSearch" autocomplete="off" placeholder="Search by company or role…">
+          <div class="app-suggestions hidden" id="runAppSuggestions"></div>
+        </div>
+        <div class="jd-status hidden" id="runJdStatus"></div>
+      </div>
+
+      <div class="field">
+        <label for="job_posting">Job Posting</label>
+        <textarea id="job_posting" name="job_posting" rows="10"
+          placeholder="Paste the full job description here…" required></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="company">Company</label>
+          <input id="company" name="company" type="text"
+            placeholder="e.g. Acme Corp" required>
+        </div>
+        <div class="field">
+          <label for="role">Role Title</label>
+          <input id="role" name="role" type="text"
+            placeholder="e.g. Solutions Engineer" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="contact">Hiring Manager <span class="opt">(optional)</span></label>
+        <input id="contact" name="contact" type="text"
+          placeholder="Name if known — defaults to 'Hiring Team'">
+      </div>
+      <div style="display:flex;gap:.75rem;align-items:center;margin-top:.25rem">
+        <button class="btn" type="submit" id="submitBtn">Generate</button>
+        <span id="queueNote" class="hidden"
+          style="font-size:.8rem;color:var(--muted)">
+          Another run is in progress — yours will start automatically.
+        </span>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Progress ───────────────────────────────────────────────── -->
+  <div class="card hidden" id="progressCard">
+    <div class="progress-header">
+      <h2>Progress</h2>
+      <span class="badge badge-running" id="statusBadge">Running</span>
+    </div>
+    <div class="log" id="logEl"></div>
+    <div class="inline-err" id="inlineErr"></div>
+  </div>
+
+  <!-- ── Results ────────────────────────────────────────────────── -->
+  <div class="card hidden" id="resultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="resultCompany"></strong><span class="result-sep">&middot;</span><span class="result-role" id="resultRole"></span>
+      </div>
+    </div>
+    <div class="framing hidden" id="framingEl"></div>
+    <div class="file-grid" id="fileGrid"></div>
+    <a class="drive-btn hidden" id="driveAnchor" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <div id="trackerNote" style="display:none;font-size:.8rem;color:var(--success);margin-bottom:.875rem;font-weight:600"></div>
+    <button class="btn btn-ghost" id="newRunBtn">&#x2190; New Application</button>
+  </div>
+
+  <!-- ── Past Runs ────────────────────────────────────────────── -->
+  <div class="card" id="pastRunsCard">
+    <div class="card-head" id="pastRunsToggle">
+      <h2>Past Runs</h2>
+      <span class="chevron" id="pastRunsChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="pastRunsBody">
+      <div class="past-runs-loading" id="pastRunsLoading">
+        <span class="spin-muted"></span> Loading from Google Drive…
+      </div>
+      <div id="pastRunsList"></div>
+      <div class="past-runs-empty hidden" id="pastRunsEmpty">
+        No past runs found in Google Drive.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Optimize Run Form ────────────────────────────────────── -->
+  <div class="card" id="optCard">
+    <div class="card-head" id="optToggle">
+      <h2>Optimize Run</h2>
+      <span class="chevron" id="optChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="optBody">
+      <div class="field">
+        <label>Application <span class="opt">(required — must have a completed resume run)</span></label>
+        <div class="app-picker-wrap" id="optAppPickerWrap" style="margin-bottom:.75rem">
+          <div class="app-picker-selected hidden" id="optAppSelected">
+            <img class="sel-logo" id="optSelLogo" alt="">
+            <span class="sel-name" id="optSelName"></span>
+            <button type="button" class="sel-clear" id="optSelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="optAppInputRow">
+            <input type="text" id="optAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="optAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="optJdStatus"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Documents to optimize</label>
+        <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;cursor:pointer">
+            <input type="checkbox" id="optResumeChk" checked> Resume <span class="opt">(ATS resume auto-synced)</span>
+          </label>
+          <label style="display:flex;gap:.4rem;align-items:center;font-weight:400;cursor:pointer">
+            <input type="checkbox" id="optCoverChk" checked> Cover Letter
+          </label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="optInstruction">What should change?</label>
+        <textarea id="optInstruction" rows="3"
+          placeholder="e.g. emphasize Kubernetes more, shorten the summary, mention their Series B in the cover letter"></textarea>
+      </div>
+      <button class="btn" type="button" id="optSubmitBtn">Optimize Documents</button>
+      <div class="inline-err" id="optFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── Optimize Progress ────────────────────────────────────── -->
+  <div class="card hidden" id="optProgressCard">
+    <div class="progress-header">
+      <h2>Optimize Run</h2>
+      <span class="badge badge-running" id="optBadge">Running</span>
+    </div>
+    <div class="log" id="optLog"></div>
+    <div class="inline-err" id="optErr"></div>
+  </div>
+
+  <!-- ── Optimize Results ─────────────────────────────────────── -->
+  <div class="card hidden" id="optResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="optResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="optResRole"></span>
+      </div>
+    </div>
+    <div class="framing hidden" id="optSummaryEl"></div>
+    <div class="inline-err" id="optWarnEl" style="margin-bottom:.875rem"></div>
+    <div class="file-grid" id="optFileGrid"></div>
+    <a class="drive-btn hidden" id="optDriveBtn" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <button class="btn btn-ghost" id="newOptBtn">&#x2190; New Optimization</button>
+  </div>
+
+  <!-- ── Interview Prep Form ──────────────────────────────────── -->
+  <div class="card" id="prepCard">
+    <div class="card-head" id="prepToggle">
+      <h2>Interview Prep</h2>
+      <span class="chevron" id="prepChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="prepBody">
+      <div class="field">
+        <label>Application <span class="opt">(required — must have a saved job description)</span></label>
+        <div class="app-picker-wrap" id="prepAppPickerWrap" style="margin-bottom:.75rem">
+          <div class="app-picker-selected hidden" id="prepAppSelected">
+            <img class="sel-logo" id="prepSelLogo" alt="">
+            <span class="sel-name" id="prepSelName"></span>
+            <button type="button" class="sel-clear" id="prepSelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="prepAppInputRow">
+            <input type="text" id="prepAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="prepAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="prepJdStatus"></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="prepCompany">Company</label>
+          <input id="prepCompany" type="text" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="field">
+          <label for="prepRole">Role Title</label>
+          <input id="prepRole" type="text" placeholder="e.g. Solutions Engineer">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="prepRound">Interview Round</label>
+          <select id="prepRound">
+            <option>Phone Screen</option>
+            <option>Hiring Manager</option>
+            <option>Peer</option>
+            <option>Technical</option>
+            <option>Executive</option>
+            <option>Panel</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="prepFocus">Focus / Slant <span class="opt">(optional)</span></label>
+        <textarea id="prepFocus" rows="2"
+          placeholder="e.g. lean into the agentic AI angle, they mentioned MCP"></textarea>
+      </div>
+      <button class="btn" type="button" id="prepSubmitBtn">Generate Prep Doc</button>
+      <div class="inline-err" id="prepFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── Prep Progress ─────────────────────────────────────────── -->
+  <div class="card hidden" id="prepProgressCard">
+    <div class="progress-header">
+      <h2>Interview Prep</h2>
+      <span class="badge badge-running" id="prepBadge">Running</span>
+    </div>
+    <div class="log" id="prepLog"></div>
+    <div class="inline-err" id="prepErr"></div>
+  </div>
+
+  <!-- ── Prep Results ──────────────────────────────────────────── -->
+  <div class="card hidden" id="prepResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="prepResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="prepResRole"></span>
+        <span class="result-sep">&middot;</span>
+        <span style="color:var(--muted);font-size:.875rem" id="prepResRound"></span>
+      </div>
+    </div>
+    <div class="file-grid" id="prepFileGrid"></div>
+    <a class="drive-btn hidden" id="prepDriveBtn" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <button class="btn btn-ghost" id="newPrepBtn">&#x2190; New Prep</button>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+  // ── Theme ─────────────────────────────────────────────────────────
+  const ICONS = { light: '☀', dark: '🌙' };
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('theme', t);
+    document.getElementById('themeIcon').textContent = ICONS[t];
+  }
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  // Init icon (theme already set by anti-FOUC script in <head>)
+  document.getElementById('themeIcon').textContent =
+    ICONS[document.documentElement.getAttribute('data-theme')] || ICONS.light;
+
+  // ── Auth helpers ─────────────────────────────────────────────────
+  async function apiFetch(url, opts = {}) {
+    const res = await fetch(url, opts);
+    if (res.status === 401) { window.location.href = '/login.html'; throw new Error('401'); }
+    return res;
+  }
+
+  // Load user info + all apps on startup, then wire pickers
+  (async () => {
+    try {
+      const res = await apiFetch('/api/auth/me');
+      const u   = await res.json();
+      if (u.role === 'admin') { window.location.replace('/admin.html'); return; }
+      document.getElementById('headerUser').textContent = u.display_name || u.email;
+      if (u.model) {
+        document.getElementById('modelBadgeText').textContent = u.model;
+        document.getElementById('modelBadge').classList.remove('hidden');
+      }
+      if (u.email_verified === false) document.getElementById('verifyBanner').classList.remove('hidden');
+    } catch (_) {}
+    await loadAllApps();
+    const runPicker = initRunPicker();
+    initOptimizePicker();
+    initPrepPicker();
+
+    // Handle ?app_id=&autorun=1 redirect from the tracker's "run agent now?" prompt
+    const params = new URLSearchParams(location.search);
+    const autorunAppId = params.get('app_id');
+    if (autorunAppId && params.get('autorun') === '1') {
+      history.replaceState(null, '', location.pathname);
+      autorunAgent(autorunAppId, runPicker);
+    }
+  })();
+
+  // ── Autorun: select an app, wait for its JD to be extracted in Drive, then submit ──
+  async function autorunAgent(appId, runPicker) {
+    const jdStatusEl = document.getElementById('runJdStatus');
+    let app = _allApps.find(a => a.id === appId);
+    if (!app) {
+      try {
+        const r = await apiFetch(`/api/applications/${encodeURIComponent(appId)}`);
+        if (r.ok) app = await r.json();
+      } catch (_) {}
+    }
+    if (!app) return;
+
+    await selectApp(app, runPicker);
+
+    // If selectApp already loaded a JD from Drive, submit immediately
+    if (document.getElementById('job_posting').value.trim()) {
+      form.requestSubmit();
+      return;
+    }
+
+    // Pass the JD folder ID directly to the backend — skip all frontend fetching
+    const jdRun = (app.linked_runs || []).find(r => r.type === 'job_description');
+    const jdFolderId = jdRun?.gdrive_folder_id;
+    if (jdFolderId) {
+      _runJdFolderId = jdFolderId;
+      if (jdStatusEl) {
+        jdStatusEl.innerHTML = '<span class="spin-xs"></span> Loading saved job description from Drive…';
+        jdStatusEl.className = 'jd-status';
+        jdStatusEl.classList.remove('hidden');
+      }
+      try {
+        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(jdFolderId)}/job_posting`);
+        if (r.ok) {
+          const body = await r.json();
+          if (body.job_posting) document.getElementById('job_posting').value = body.job_posting;
+        }
+      } catch (_) {}
+      if (jdStatusEl) {
+        jdStatusEl.innerHTML = '✓ Using saved job description from Drive';
+        jdStatusEl.className = 'jd-status loaded';
+      }
+      form.requestSubmit();
+      return;
+    }
+
+    // No JD folder — extract from the posting URL
+    if (jdStatusEl) {
+      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Extracting job description from the posting URL…';
+      jdStatusEl.className = 'jd-status';
+      jdStatusEl.classList.remove('hidden');
+    }
+    try {
+      const r = await apiFetch(`/api/applications/${encodeURIComponent(appId)}/extract-jd`, { method: 'POST' });
+      if (r.ok) {
+        const { job_posting } = await r.json();
+        if (job_posting && job_posting.trim()) {
+          document.getElementById('job_posting').value = job_posting;
+          if (jdStatusEl) { jdStatusEl.innerHTML = '✓ Job description extracted'; jdStatusEl.className = 'jd-status loaded'; }
+          form.requestSubmit();
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // Extraction failed — fall back to manual entry
+    if (jdStatusEl) {
+      const linkHtml = app.url
+        ? `<a href="${esc(safeHref(app.url))}" target="_blank" rel="noopener" style="color:var(--border);font-weight:600;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Open the job posting ↗</a>`
+        : 'Open the job posting';
+      jdStatusEl.innerHTML = `Couldn't extract the job description — ${linkHtml}, copy the description, and paste it below, then click Generate.`;
+      jdStatusEl.className = 'jd-status';
+    }
+  }
+
+  // ── App picker shared state ──────────────────────────────────────
+  let _allApps   = [];
+  let _runAppId  = null;   // selected app_id for the run form
+  let _prepAppId = null;   // selected app_id for the prep form
+  const APP_STATUS_ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
+
+  const STATUS_SC = {
+    'Interviewing': 'sc-interviewing', 'Phone Screen': 'sc-phone-screen',
+    'Applied': 'sc-applied', 'On Hold': 'sc-on-hold', 'Researching': 'sc-researching',
+    'Offer': 'sc-offer', 'Rejected': 'sc-rejected', 'Not Applying': 'sc-not-applying',
+  };
+
+  async function loadAllApps() {
+    try {
+      const res  = await apiFetch('/api/applications');
+      const data = await res.json();
+      _allApps = data.items ?? data;   // handle both envelope and legacy flat array
+      _allApps.sort((a, b) => {
+        const oa = APP_STATUS_ORDER.indexOf(a.status), ob = APP_STATUS_ORDER.indexOf(b.status);
+        return oa !== ob ? oa - ob : a.company.localeCompare(b.company);
+      });
+    } catch (_) { _allApps = []; }
+  }
+
+  function filterApps(q) {
+    if (!q.trim()) return _allApps.slice(0, 8);
+    const lq = q.toLowerCase();
+    return _allApps.filter(a =>
+      a.company.toLowerCase().includes(lq) ||
+      a.role_title.toLowerCase().includes(lq)
+    ).slice(0, 8);
+  }
+
+  function logoError(img) {
+    const fallback = img.dataset.fallback;
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
+    } else {
+      const ph = document.createElement('div');
+      ph.className = img.dataset.phClass || 'app-sugg-logo-ph';
+      ph.textContent = (img.dataset.company || '?').slice(0, 2).toUpperCase();
+      img.replaceWith(ph);
+    }
+  }
+
+  function appLogoHtml(a, cls = 'app-sugg-logo') {
+    const src = a.domain ? `/api/companies/logo?domain=${encodeURIComponent(a.domain)}` : null;
+    if (src) {
+      return `<img class="${cls}" src="${esc(src)}" alt="${esc(a.company)}" data-company="${esc(a.company)}" data-fallback="" data-ph-class="app-sugg-logo-ph" onerror="logoError(this)">`;
+    }
+    return `<div class="app-sugg-logo-ph">${esc(a.company).slice(0,2).toUpperCase()}</div>`;
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function safeHref(url) {
+    if (!url) return null;
+    try {
+      const u = new URL(String(url), location.origin);
+      return (u.protocol === 'http:' || u.protocol === 'https:') ? url : null;
+    } catch (_) { return null; }
+  }
+
+  function renderAppSuggestions(list, dropEl) {
+    dropEl.innerHTML = '';
+    if (!list.length) {
+      dropEl.innerHTML = '<div class="app-sugg-empty">No matching applications</div>';
+      return;
+    }
+    for (const a of list) {
+      const item = document.createElement('div');
+      item.className = 'app-sugg-item';
+      item.innerHTML = `
+        ${appLogoHtml(a)}
+        <div class="app-sugg-body">
+          <div class="app-sugg-company">${esc(a.company)}</div>
+          <div class="app-sugg-role">${esc(a.role_title)}</div>
+        </div>
+        <span class="app-sugg-status ${STATUS_SC[a.status]||''}">${esc(a.status)}</span>`;
+      item.addEventListener('mousedown', e => { e.preventDefault(); item._app = a; });
+      item.dataset.appId = a.id;
+      dropEl.appendChild(item);
+    }
+  }
+
+  // ── Generic picker init ──────────────────────────────────────────
+  function initAppPicker({
+    searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, selClearEl,
+    inputRowEl, jdStatusEl, onSelect, onClear,
+  }) {
+    let _timer = null;
+
+    searchEl.addEventListener('input', () => {
+      clearTimeout(_timer);
+      const q = searchEl.value;
+      _timer = setTimeout(() => {
+        const list = filterApps(q);
+        renderAppSuggestions(list, suggestionsEl);
+        suggestionsEl.classList.toggle('hidden', !_allApps.length);
+      }, 150);
+    });
+
+    searchEl.addEventListener('focus', () => {
+      const list = filterApps(searchEl.value);
+      renderAppSuggestions(list, suggestionsEl);
+      suggestionsEl.classList.toggle('hidden', !_allApps.length);
+    });
+
+    searchEl.addEventListener('blur', () => {
+      setTimeout(() => suggestionsEl.classList.add('hidden'), 160);
+    });
+
+    suggestionsEl.addEventListener('click', e => {
+      const item = e.target.closest('.app-sugg-item');
+      if (!item) return;
+      const app = _allApps.find(a => a.id === item.dataset.appId);
+      if (app) selectApp(app, { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect });
+    });
+
+    if (selClearEl) {
+      selClearEl.addEventListener('click', () => {
+        selectedEl.classList.add('hidden');
+        inputRowEl.classList.remove('hidden');
+        searchEl.value = '';
+        if (jdStatusEl) jdStatusEl.classList.add('hidden');
+        if (onClear) onClear();
+      });
+    }
+
+    return { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect };
+  }
+
+  async function selectApp(app, { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect }) {
+    suggestionsEl.classList.add('hidden');
+
+    // Show selected chip — always use proxy to avoid expired signed URLs
+    const selLogoSrc = app.domain ? `/api/companies/logo?domain=${encodeURIComponent(app.domain)}` : null;
+    const selLogoFallback = '';
+    if (selLogoSrc) {
+      selLogoEl.src = selLogoSrc;
+      selLogoEl.dataset.fallback = selLogoFallback;
+      selLogoEl.dataset.company = app.company;
+      selLogoEl.dataset.phClass = 'app-sugg-logo-ph';
+      selLogoEl.onerror = () => logoError(selLogoEl);
+      selLogoEl.style.display = 'block';
+    } else {
+      selLogoEl.style.display = 'none';
+    }
+    selNameEl.textContent = `${app.company} · ${app.role_title}`;
+    selectedEl.classList.remove('hidden');
+    inputRowEl.classList.add('hidden');
+
+    // Attempt to load job posting from Drive via linked_runs
+    if (jdStatusEl) {
+      jdStatusEl.innerHTML = '<span class="spin-xs"></span> Loading saved job posting…';
+      jdStatusEl.className = 'jd-status';
+      jdStatusEl.classList.remove('hidden');
+    }
+
+    let jd = null;
+    const runs = app.linked_runs || [];
+    const jdRun = runs.find(r => r.type === 'job_description') || runs[0];
+    const orderedFolderIds = jdRun
+      ? [jdRun.gdrive_folder_id, ...runs.filter(r => r !== jdRun).map(r => r.gdrive_folder_id)]
+      : runs.map(r => r.gdrive_folder_id);
+    for (const folderId of orderedFolderIds.filter(Boolean)) {
+      try {
+        const r = await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`);
+        if (r.ok) { const body = await r.json(); if (body.job_posting) { jd = body.job_posting; break; } }
+      } catch (_) {}
+    }
+
+    if (jdStatusEl) {
+      if (jd) {
+        jdStatusEl.innerHTML = '✓ Job description loaded from Drive';
+        jdStatusEl.className = 'jd-status loaded';
+      } else {
+        const linkHtml = app.url
+          ? `<a href="${esc(safeHref(app.url))}" target="_blank" rel="noopener" style="color:var(--border);font-weight:600;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Open the job posting ↗</a>`
+          : 'Open the job posting';
+        jdStatusEl.innerHTML = `${linkHtml}, copy the description, and paste it in the field below.`;
+        jdStatusEl.className = 'jd-status';
+      }
+    }
+
+    if (onSelect) onSelect(app, jd);
+  }
+
+  // ── Run form picker ──────────────────────────────────────────────
+  function initRunPicker() {
+    return initAppPicker({
+      searchEl:     document.getElementById('runAppSearch'),
+      suggestionsEl: document.getElementById('runAppSuggestions'),
+      selectedEl:   document.getElementById('runAppSelected'),
+      selLogoEl:    document.getElementById('runSelLogo'),
+      selNameEl:    document.getElementById('runSelName'),
+      selClearEl:   document.getElementById('runSelClear'),
+      inputRowEl:   document.getElementById('runAppInputRow'),
+      jdStatusEl:   document.getElementById('runJdStatus'),
+      onSelect: (app, jd) => {
+        _runAppId = app.id;
+        document.getElementById('company').value = app.company;
+        document.getElementById('role').value    = app.role_title;
+        if (jd) document.getElementById('job_posting').value = jd;
+        // Store folder ID so JD can be saved back after a successful run
+        _runLinkedFolderId = (app.linked_runs || [])[0]?.gdrive_folder_id || null;
+      },
+      onClear: () => {
+        _runAppId = null;
+        document.getElementById('company').value    = '';
+        document.getElementById('role').value       = '';
+        document.getElementById('job_posting').value = '';
+      },
+    });
+  }
+
+  // ── Optimize form picker ─────────────────────────────────────────
+  function initOptimizePicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('optAppSearch'),
+      suggestionsEl: document.getElementById('optAppSuggestions'),
+      selectedEl:    document.getElementById('optAppSelected'),
+      selLogoEl:     document.getElementById('optSelLogo'),
+      selNameEl:     document.getElementById('optSelName'),
+      selClearEl:    document.getElementById('optSelClear'),
+      inputRowEl:    document.getElementById('optAppInputRow'),
+      jdStatusEl:    document.getElementById('optJdStatus'),
+      onSelect: (app, _jd) => {
+        _optAppId      = app.id;
+        _optCompanyCtx = app.company;
+        _optRoleCtx    = app.role_title;
+        const runs = app.linked_runs || [];
+        _optFolderId = runs.find(r => r.type === 'resume')?.gdrive_folder_id
+                    || runs.find(r => r.gdrive_folder_id)?.gdrive_folder_id
+                    || null;
+        const statusEl = document.getElementById('optJdStatus');
+        if (_optFolderId) {
+          statusEl.innerHTML = '✓ Found a completed run to optimize';
+          statusEl.className = 'jd-status loaded';
+        } else {
+          statusEl.innerHTML = 'No completed resume run found for this application — run the resume agent first.';
+          statusEl.className = 'jd-status';
+        }
+        statusEl.classList.remove('hidden');
+      },
+      onClear: () => {
+        _optAppId      = null;
+        _optFolderId   = null;
+        _optCompanyCtx = '';
+        _optRoleCtx    = '';
+      },
+    });
+  }
+
+  // ── Prep form picker ─────────────────────────────────────────────
+  function initPrepPicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('prepAppSearch'),
+      suggestionsEl: document.getElementById('prepAppSuggestions'),
+      selectedEl:    document.getElementById('prepAppSelected'),
+      selLogoEl:     document.getElementById('prepSelLogo'),
+      selNameEl:     document.getElementById('prepSelName'),
+      selClearEl:    document.getElementById('prepSelClear'),
+      inputRowEl:    document.getElementById('prepAppInputRow'),
+      jdStatusEl:    document.getElementById('prepJdStatus'),
+      onSelect: (app, jd) => {
+        _prepAppId = app.id;
+        _prepLinkedFolderId = (app.linked_runs || [])[0]?.gdrive_folder_id || null;
+        document.getElementById('prepCompany').value = app.company;
+        document.getElementById('prepRole').value    = app.role_title;
+        if (jd) _prepJobPosting = jd;
+      },
+      onClear: () => {
+        _prepAppId = null;
+        _prepLinkedFolderId = null;
+        document.getElementById('prepCompany').value = '';
+        document.getElementById('prepRole').value    = '';
+        _prepJobPosting = '';
+      },
+    });
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  document.getElementById('resendVerifyBtn').addEventListener('click', async function() {
+    this.disabled = true; this.textContent = 'Sending…';
+    try {
+      await fetch('/api/auth/resend-verification', { method: 'POST' });
+      this.textContent = '✓ Sent! Check your inbox.';
+    } catch (_) { this.textContent = 'Failed — try again'; this.disabled = false; }
+  });
+
+  const form       = document.getElementById('runForm');
+  const submitBtn  = document.getElementById('submitBtn');
+  const logEl      = document.getElementById('logEl');
+  const badge      = document.getElementById('statusBadge');
+  const inlineErr  = document.getElementById('inlineErr');
+
+  const show = (id) => document.getElementById(id).classList.remove('hidden');
+  const hide = (id) => document.getElementById(id).classList.add('hidden');
+
+  // Captured from the form so the results header can show context
+  let _company = '', _role = '';
+
+  function appendLog(msg) {
+    logEl.textContent += msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setBadge(status) {
+    badge.className = `badge badge-${status}`;
+    badge.textContent = { running: 'Running…', queued: 'Queued', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  // ── Form submit ──────────────────────────────────────────────────
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const raw = Object.fromEntries(new FormData(e.target));
+    if (!_runAppId) {
+      const pickerWrap = document.getElementById('runAppPickerWrap');
+      pickerWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('runAppSearch').focus();
+      return;
+    }
+    const jobPosting = document.getElementById('job_posting').value;
+    if (!jobPosting.trim() && !_runJdFolderId) {
+      document.getElementById('job_posting').focus();
+      return;
+    }
+    const body = { job_posting: jobPosting, company: raw.company, role: raw.role };
+    if (raw.contact && raw.contact.trim()) body.contact = raw.contact.trim();
+    if (_runAppId)      body.app_id       = _runAppId;
+    if (_runJdFolderId) body.jd_folder_id = _runJdFolderId;
+    _company = raw.company;
+    _role    = raw.role;
+
+    // Reset
+    logEl.textContent = '';
+    inlineErr.style.display = 'none';
+    hide('resultsCard');
+    show('progressCard');
+    hide('queueNote');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spin"></span> Generating…';
+    setBadge('running');
+
+    // Start run
+    let run_id;
+    try {
+      const res = await apiFetch('/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const runData = await res.json();
+      run_id = runData.run_id;
+      if (runData.machine_id) document.cookie = `fly-force-instance-id=${runData.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      appendLog('❌ Failed to start: ' + err.message);
+      setBadge('error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Generate';
+      return;
+    }
+
+    // Show queue note if another run is in progress
+    const st = await apiFetch(`/api/run/${run_id}/status`).then(r => r.json());
+    if (st.status === 'queued') {
+      setBadge('queued');
+      show('queueNote');
+    }
+
+    // Stream SSE progress
+    const es = new EventSource(`/api/run/${run_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        if (badge.className.includes('queued')) { setBadge('running'); hide('queueNote'); }
+        appendLog(msg.message);
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setBadge('done');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate';
+        showResults(run_id, msg);
+        // Save JD to Drive so it auto-loads next time (tracker mode with known folder)
+        const runJd = document.getElementById('job_posting').value.trim();
+        if (_runLinkedFolderId && runJd) saveJdToDrive(_runLinkedFolderId, runJd);
+        // Refresh past runs — reset flag so next open re-fetches; reload now if open
+        _pastRunsLoaded = false;
+        if (!document.getElementById('pastRunsBody').classList.contains('hidden')) {
+          loadPastRuns();
+        }
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setBadge('error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate';
+        inlineErr.textContent = '❌ ' + msg.message;
+        inlineErr.style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      if (badge.className.includes('done') || badge.className.includes('error')) return;
+      es.close();
+      setBadge('error');
+      appendLog('\n⚠ Connection lost. Your run may still be processing.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Generate';
+    };
+  });
+
+  // ── Show results ─────────────────────────────────────────────────
+  function showResults(run_id, msg) {
+    const card = document.getElementById('resultsCard');
+    show('resultsCard');
+    card.classList.add('results-appear');
+
+    // Job context header
+    document.getElementById('resultCompany').textContent = _company;
+    document.getElementById('resultRole').textContent    = _role;
+
+    // Framing angle
+    if (msg.framing_angle) {
+      document.getElementById('framingEl').textContent = msg.framing_angle;
+      show('framingEl');
+    }
+
+    // File cards
+    const grid = document.getElementById('fileGrid');
+    grid.innerHTML = '';
+    const fileTypes = [
+      { key: 'resume',       icon: '📄', label: 'Resume',       desc: 'Styled DOCX — branded, formatted'  },
+      { key: 'ats',          icon: '📋', label: 'ATS Resume',   desc: 'Plain DOCX — parser-safe'          },
+      { key: 'cover_letter', icon: '📝', label: 'Cover Letter', desc: 'DOCX — tailored to this role'      },
+    ];
+    for (const { key, icon, label, desc } of fileTypes) {
+      const name = msg.files?.[key];
+      if (!name) continue;
+      const a = document.createElement('a');
+      a.className = 'file-card';
+      a.href     = `/api/run/${run_id}/files/${encodeURIComponent(name)}`;
+      a.download = name;
+      a.title    = name;
+      a.innerHTML = `
+        <div class="file-card-icon">${icon}</div>
+        <div class="file-card-label">${label}</div>
+        <div class="file-card-desc">${desc}</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    // Drive link
+    if (msg.folder_url) {
+      const btn = document.getElementById('driveAnchor');
+      btn.href = msg.folder_url;
+      show('driveAnchor');
+    }
+
+    // Tracker link indicator
+    const trackerNote = document.getElementById('trackerNote');
+    if (msg.app_id) {
+      const sel = document.getElementById('appLink');
+      const opt = sel.querySelector(`option[value="${msg.app_id}"]`);
+      trackerNote.textContent = `✓ Linked to: ${opt ? opt.textContent : 'tracker record'}`;
+      trackerNote.style.display = 'block';
+    } else {
+      trackerNote.style.display = 'none';
+    }
+  }
+
+  // ── New run ───────────────────────────────────────────────────────
+  document.getElementById('newRunBtn').addEventListener('click', () => {
+    const card = document.getElementById('resultsCard');
+    card.classList.remove('results-appear');
+    hide('resultsCard');
+    hide('framingEl');
+    hide('driveAnchor');
+    document.getElementById('fileGrid').innerHTML = '';
+    document.getElementById('trackerNote').style.display = 'none';
+    document.getElementById('runJdStatus').classList.add('hidden');
+    document.getElementById('runAppSelected').classList.add('hidden');
+    document.getElementById('runAppInputRow').classList.remove('hidden');
+    document.getElementById('runAppSearch').value = '';
+    _runAppId = null;
+    hide('progressCard');
+    hide('queueNote');
+    form.reset();
+    logEl.textContent = '';
+  });
+
+  // ── Past Runs ─────────────────────────────────────────────────────
+  let _pastRunsLoaded = false;
+
+  document.getElementById('pastRunsToggle').addEventListener('click', async () => {
+    const body    = document.getElementById('pastRunsBody');
+    const chevron = document.getElementById('pastRunsChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open');
+                  if (!_pastRunsLoaded) await loadPastRuns(); }
+  });
+
+  async function loadPastRuns() {
+    _pastRunsLoaded = true;
+    const listEl  = document.getElementById('pastRunsList');
+    const emptyEl = document.getElementById('pastRunsEmpty');
+    const loadEl  = document.getElementById('pastRunsLoading');
+    listEl.innerHTML = '';
+    emptyEl.classList.add('hidden');
+    try {
+      const res  = await apiFetch('/api/gdrive/runs');
+      const data = await res.json();
+      loadEl.classList.add('hidden');
+      if (!data.runs || data.runs.length === 0) {
+        emptyEl.classList.remove('hidden'); return;
+      }
+      for (const r of data.runs) {
+        const idx     = r.name.indexOf('_');
+        const company = idx > 0 ? r.name.slice(0, idx) : r.name;
+        const role    = idx > 0 ? r.name.slice(idx + 1) : '';
+        const label   = role ? `${company} · ${role}` : company;
+        const row = document.createElement('div');
+        row.className = 'run-row';
+        row.innerHTML = `
+          <span class="run-row-name" title="${r.name}">${label}</span>
+          ${r.source === 'legacy' ? '<span class="run-row-badge">legacy</span>' : ''}
+          ${r.web_view_link
+            ? `<a class="run-row-link" href="${r.web_view_link}" target="_blank" rel="noopener">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open in Drive</a>`
+            : ''}`;
+        listEl.appendChild(row);
+      }
+    } catch (e) {
+      loadEl.classList.add('hidden');
+      emptyEl.textContent = 'Could not load from Google Drive.';
+      emptyEl.classList.remove('hidden');
+    }
+  }
+
+  // ── Optimize Run ──────────────────────────────────────────────────
+
+  let _optAppId      = null;   // selected app_id for the optimize form
+  let _optFolderId   = null;   // gdrive folder ID of the run to optimize
+  let _optCompanyCtx = '';
+  let _optRoleCtx    = '';
+
+  document.getElementById('optToggle').addEventListener('click', () => {
+    const body    = document.getElementById('optBody');
+    const chevron = document.getElementById('optChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open'); }
+  });
+
+  function setOptBadge(status) {
+    const b = document.getElementById('optBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  document.getElementById('optSubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('optFormErr');
+    errEl.style.display = 'none';
+
+    const instruction = document.getElementById('optInstruction').value.trim();
+    const doResume    = document.getElementById('optResumeChk').checked;
+    const doCover     = document.getElementById('optCoverChk').checked;
+
+    if (!_optAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('optAppSearch').focus();
+      return;
+    }
+    if (!_optFolderId) {
+      errEl.textContent = 'No completed resume run found for this application — run the resume agent first.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!doResume && !doCover) {
+      errEl.textContent = 'Select at least one document to optimize.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!instruction) {
+      errEl.textContent = 'Describe what should change.';
+      errEl.style.display = 'block';
+      document.getElementById('optInstruction').focus();
+      return;
+    }
+
+    const optLog = document.getElementById('optLog');
+    optLog.textContent = '';
+    document.getElementById('optErr').style.display = 'none';
+    hide('optResultsCard');
+    hide('optDriveBtn');
+    show('optProgressCard');
+    setOptBadge('running');
+    const btn = document.getElementById('optSubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Optimizing…';
+
+    let optimize_id;
+    try {
+      const res = await apiFetch('/api/optimize', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          app_id:                _optAppId,
+          folder_id:             _optFolderId,
+          instruction,
+          company:               _optCompanyCtx,
+          role:                  _optRoleCtx,
+          optimize_resume:       doResume,
+          optimize_cover_letter: doCover,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const optData = await res.json();
+      optimize_id = optData.optimize_id;
+      if (optData.machine_id) document.cookie = `fly-force-instance-id=${optData.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      optLog.textContent += '❌ Failed to start: ' + err.message + '\n';
+      setOptBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Optimize Documents';
+      return;
+    }
+
+    const es = new EventSource(`/api/optimize/${optimize_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        optLog.textContent += msg.message + '\n';
+        optLog.scrollTop = optLog.scrollHeight;
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setOptBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Optimize Documents';
+        showOptResults(optimize_id, msg);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setOptBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Optimize Documents';
+        document.getElementById('optErr').textContent = '❌ ' + msg.message;
+        document.getElementById('optErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('optBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setOptBadge('error');
+      optLog.textContent += '\n⚠ Connection lost. Your run may still be processing.';
+      btn.disabled = false;
+      btn.textContent = 'Optimize Documents';
+    };
+  });
+
+  function showOptResults(optimize_id, msg) {
+    show('optResultsCard');
+    document.getElementById('optResultsCard').classList.add('results-appear');
+
+    document.getElementById('optResCompany').textContent = _optCompanyCtx;
+    document.getElementById('optResRole').textContent    = _optRoleCtx;
+
+    const summaryEl = document.getElementById('optSummaryEl');
+    if (msg.change_summary) {
+      summaryEl.textContent = msg.change_summary;
+      show('optSummaryEl');
+    } else {
+      hide('optSummaryEl');
+    }
+
+    const warnEl = document.getElementById('optWarnEl');
+    if (msg.replacements_warning) {
+      warnEl.textContent = '⚠ ' + msg.replacements_warning;
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+
+    const grid = document.getElementById('optFileGrid');
+    grid.innerHTML = '';
+    const fileTypes = [
+      { key: 'resume',       icon: '📄', label: 'Optimized Resume',       desc: 'Styled DOCX — updated in Drive'   },
+      { key: 'ats',          icon: '📋', label: 'ATS Resume',             desc: 'Regenerated from the new resume'  },
+      { key: 'cover_letter', icon: '📝', label: 'Optimized Cover Letter', desc: 'DOCX — updated in Drive'          },
+    ];
+    for (const { key, icon, label, desc } of fileTypes) {
+      const name = msg.files?.[key];
+      if (!name) continue;
+      const a = document.createElement('a');
+      a.className = 'file-card';
+      a.href     = `/api/optimize/${optimize_id}/files/${encodeURIComponent(name)}`;
+      a.download = name;
+      a.title    = name;
+      a.innerHTML = `
+        <div class="file-card-icon">${icon}</div>
+        <div class="file-card-label">${label}</div>
+        <div class="file-card-desc">${desc}</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    if (msg.folder_url) {
+      const driveBtn = document.getElementById('optDriveBtn');
+      driveBtn.href = msg.folder_url;
+      show('optDriveBtn');
+    }
+  }
+
+  document.getElementById('newOptBtn').addEventListener('click', () => {
+    document.getElementById('optResultsCard').classList.remove('results-appear');
+    hide('optResultsCard');
+    hide('optDriveBtn');
+    document.getElementById('optFileGrid').innerHTML = '';
+    hide('optProgressCard');
+    document.getElementById('optLog').textContent = '';
+    document.getElementById('optInstruction').value = '';
+  });
+
+  // ── Interview Prep ────────────────────────────────────────────────
+
+  let _prepJobPosting    = '';
+  let _prepCompanyCtx   = '';
+  let _prepRoleCtx      = '';
+  let _prepRoundCtx     = '';
+  let _prepLinkedFolderId = null;  // gdrive folder ID from selected tracker app
+  let _runLinkedFolderId  = null;  // gdrive folder ID from selected tracker app (run form)
+  let _runJdFolderId      = null;  // gdrive folder ID to load JD from server-side
+
+  // Collapsible toggle
+  document.getElementById('prepToggle').addEventListener('click', async () => {
+    const body    = document.getElementById('prepBody');
+    const chevron = document.getElementById('prepChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) {
+      body.classList.add('hidden');
+      chevron.classList.remove('open');
+    } else {
+      body.classList.remove('hidden');
+      chevron.classList.add('open');
+    }
+  });
+
+  // Submit prep
+  document.getElementById('prepSubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('prepFormErr');
+    errEl.style.display = 'none';
+
+    const company = document.getElementById('prepCompany').value.trim();
+    const role    = document.getElementById('prepRole').value.trim();
+    const round   = document.getElementById('prepRound').value;
+    const focus   = document.getElementById('prepFocus').value.trim();
+
+    if (!_prepAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('prepAppSearch').focus();
+      return;
+    }
+
+    const jd = _prepJobPosting;
+    if (!jd) {
+      errEl.textContent = 'No job description found for this application. Run the resume agent first to save one.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (!company || !role) {
+      errEl.textContent = 'Company and role are required.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    _prepCompanyCtx = company;
+    _prepRoleCtx    = role;
+    _prepRoundCtx   = round;
+
+    document.getElementById('prepLog').textContent = '';
+    document.getElementById('prepErr').style.display = 'none';
+    hide('prepResultsCard');
+    hide('prepDriveBtn');
+    show('prepProgressCard');
+    setPrepBadge('running');
+    const btn = document.getElementById('prepSubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Generating…';
+
+    let prep_id;
+    try {
+      const res = await apiFetch('/api/prep', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          job_posting: jd, company, role,
+          round_type:  round,
+          focus:       focus || null,
+          ...(_prepAppId ? { app_id: _prepAppId } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const prepData = await res.json();
+      prep_id = prepData.prep_id;
+      if (prepData.machine_id) document.cookie = `fly-force-instance-id=${prepData.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      document.getElementById('prepLog').textContent += '❌ Failed to start: ' + err.message + '\n';
+      setPrepBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Generate Prep Doc';
+      return;
+    }
+
+    const prepLog = document.getElementById('prepLog');
+    const es = new EventSource(`/api/prep/${prep_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        prepLog.textContent += msg.message + '\n';
+        prepLog.scrollTop = prepLog.scrollHeight;
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setPrepBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Generate Prep Doc';
+        showPrepResults(prep_id, msg);
+        // Save JD to Drive so it auto-loads next time (tracker mode with known folder)
+        if (_prepLinkedFolderId && _prepJobPosting) saveJdToDrive(_prepLinkedFolderId, _prepJobPosting);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setPrepBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Prep Doc';
+        document.getElementById('prepErr').textContent = '❌ ' + msg.message;
+        document.getElementById('prepErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('prepBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setPrepBadge('error');
+      prepLog.textContent += '\n⚠ Connection lost.';
+      btn.disabled = false;
+      btn.textContent = 'Generate Prep Doc';
+    };
+  });
+
+  // Fire-and-forget: format JD as markdown via AI then save to Drive for future auto-load
+  async function saveJdToDrive(folderId, jdText) {
+    if (!folderId || !jdText) return;
+    try {
+      const fmtRes = await apiFetch('/api/jd/format', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_posting: jdText }),
+      });
+      const markdown = fmtRes.ok ? (await fmtRes.json()).markdown : jdText;
+      await apiFetch(`/api/gdrive/runs/${encodeURIComponent(folderId)}/job_posting`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_posting: markdown }),
+      });
+    } catch (_) {}
+  }
+
+  function setPrepBadge(status) {
+    const b = document.getElementById('prepBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  function showPrepResults(prep_id, msg) {
+    show('prepResultsCard');
+    document.getElementById('prepResultsCard').classList.add('results-appear');
+
+    document.getElementById('prepResCompany').textContent = _prepCompanyCtx;
+    document.getElementById('prepResRole').textContent    = _prepRoleCtx;
+    document.getElementById('prepResRound').textContent   = _prepRoundCtx;
+
+    const grid = document.getElementById('prepFileGrid');
+    grid.innerHTML = '';
+    if (msg.files?.prep) {
+      const a     = document.createElement('a');
+      a.className = 'file-card';
+      a.href      = `/api/prep/${prep_id}/files/${encodeURIComponent(msg.files.prep)}`;
+      a.download  = msg.files.prep;
+      a.title     = msg.files.prep;
+      a.innerHTML = `
+        <div class="file-card-icon">📋</div>
+        <div class="file-card-label">Interview Prep</div>
+        <div class="file-card-desc">Questions, stories &amp; what to ask — ${_prepRoundCtx}</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    if (msg.folder_url) {
+      const btn = document.getElementById('prepDriveBtn');
+      btn.href = msg.folder_url;
+      show('prepDriveBtn');
+    }
+  }
+
+  document.getElementById('newPrepBtn').addEventListener('click', () => {
+    document.getElementById('prepResultsCard').classList.remove('results-appear');
+    hide('prepResultsCard');
+    hide('prepDriveBtn');
+    document.getElementById('prepFileGrid').innerHTML = '';
+    hide('prepProgressCard');
+    document.getElementById('prepLog').textContent = '';
+  });
+</script>
+</div><!-- /.container -->
+</body>
+</html>
