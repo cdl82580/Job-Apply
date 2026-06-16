@@ -2762,10 +2762,12 @@ async def get_postman_collection():
 # ---------------------------------------------------------------------------
 # Static frontend — mounted last; auth middleware handles redirects
 # ---------------------------------------------------------------------------
-# Wrap StaticFiles so HTML pages are never cached and never return 304.
-# Strip conditional request headers (If-None-Match, If-Modified-Since) for HTML
-# requests so the server always returns a fresh 200, then add Cache-Control:
-# no-store so the browser never stores it in the first place.
+# Wrap StaticFiles so HTML pages are never cached, never return 304, and are
+# excluded from bfcache. Chrome doesn't reliably honour Cache-Control: no-store
+# for bfcache, so we also inject a pageshow listener into every HTML response
+# that forces a real reload whenever the page is restored from bfcache.
+_BFCACHE_SCRIPT = b'<script>window.addEventListener("pageshow",function(e){if(e.persisted)location.reload();});</script>'
+
 class NoCacheHTMLStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         is_html = path.endswith(".html") or path in ("", "/")
@@ -2778,6 +2780,11 @@ class NoCacheHTMLStaticFiles(StaticFiles):
         response = await super().get_response(path, scope)
         if is_html:
             response.headers["Cache-Control"] = "no-store"
+            # Stream the body and inject the bfcache-bust script before </body>
+            if hasattr(response, "body"):
+                body = response.body
+                response.body = body.replace(b"</body>", _BFCACHE_SCRIPT + b"</body>", 1)
+                response.headers["content-length"] = str(len(response.body))
         return response
 
 app.mount("/", NoCacheHTMLStaticFiles(directory="frontend", html=True), name="frontend")
