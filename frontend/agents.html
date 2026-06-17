@@ -1017,6 +1017,9 @@
   let _allApps   = [];
   let _runAppId  = null;   // selected app_id for the run form
   let _prepAppId = null;   // selected app_id for the prep form
+  const LOGODEV_PK = 'pk_U3oIYbhyTvinmftvOvCTJg';
+  function logodevUrl(domain, size) { return `https://img.logo.dev/${encodeURIComponent(domain)}?token=${LOGODEV_PK}&size=${size}&format=png&retina=true`; }
+
   const APP_STATUS_ORDER = ['Interviewing','Phone Screen','Applied','On Hold','Researching','Offer','Rejected','Not Applying'];
 
   const STATUS_SC = {
@@ -1067,7 +1070,7 @@
   }
 
   function appLogoHtml(a, cls = 'app-sugg-logo') {
-    const src = a.domain ? `/api/companies/logo?domain=${encodeURIComponent(a.domain)}` : null;
+    const src = a.domain ? logodevUrl(a.domain, 28) : null;
     if (src) {
       return `<img class="${cls}" src="${esc(src)}" alt="${esc(a.company)}" data-company="${esc(a.company)}" data-fallback="" data-ph-class="app-sugg-logo-ph" onerror="logoError(this)">`;
     }
@@ -1157,8 +1160,7 @@
   async function selectApp(app, { searchEl, suggestionsEl, selectedEl, selLogoEl, selNameEl, inputRowEl, jdStatusEl, onSelect }) {
     suggestionsEl.classList.add('hidden');
 
-    // Show selected chip — always use proxy to avoid expired signed URLs
-    const selLogoSrc = app.domain ? `/api/companies/logo?domain=${encodeURIComponent(app.domain)}` : null;
+    const selLogoSrc = app.domain ? logodevUrl(app.domain, 22) : null;
     const selLogoFallback = '';
     // Reset placeholder sibling before showing/hiding img
     const selLogoPh = selLogoEl.nextElementSibling;
