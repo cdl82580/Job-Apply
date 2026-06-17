@@ -22,9 +22,10 @@ from . import storage, user_audit
 
 logger = logging.getLogger(__name__)
 
-_FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
-_APP_URL      = os.environ.get("APP_URL", "https://apply.cdlav.us")
-_LOGO_URL     = f"{_APP_URL}/img/logo.png"
+_FROM_ADDRESS     = os.environ.get("RESEND_FROM", "Job Apply <onboarding@resend.dev>")
+_APP_URL          = os.environ.get("APP_URL", "https://apply.cdlav.us")
+_LOGO_URL         = f"{_APP_URL}/img/logo.png"
+_LOGODEV_PUB_KEY  = os.environ.get("LOGODEV_PUBLIC_KEY", "")
 
 
 # ---------------------------------------------------------------------------
@@ -281,15 +282,12 @@ def _status_pill(status: str) -> str:
 
 
 def _company_logo_html(record: dict[str, Any], size: int = 32) -> str:
-    """Return an <img> tag for the company logo, or empty string if unavailable."""
-    import re as _re
+    """Return an <img> tag for the company logo via Logo.dev, or empty string."""
     logo = record.get("company_logo_url", "")
     if not logo:
-        job_url = record.get("url") or record.get("job_url") or ""
-        if job_url:
-            m = _re.search(r'https?://([^/]+)', job_url)
-            if m:
-                logo = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz={size}"
+        domain = record.get("domain", "")
+        if domain and _LOGODEV_PUB_KEY:
+            logo = f"https://img.logo.dev/{domain}?token={_LOGODEV_PUB_KEY}&size={size}"
     if not logo:
         return ""
     return (

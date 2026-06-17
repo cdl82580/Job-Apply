@@ -377,9 +377,10 @@ def _verify_password(password: str, stored: str) -> bool:
 # Email helper (Resend)
 # ---------------------------------------------------------------------------
 
-_FROM_ADDRESS = os.environ.get("RESEND_FROM", "Job Apply <hello@cdlav.us>")
-_APP_URL = os.environ.get("APP_URL", "https://apply.cdlav.us")
-_LOGO_URL = f"{_APP_URL}/img/logo.png"
+_FROM_ADDRESS    = os.environ.get("RESEND_FROM", "Job Apply <hello@cdlav.us>")
+_APP_URL         = os.environ.get("APP_URL", "https://apply.cdlav.us")
+_LOGO_URL        = f"{_APP_URL}/img/logo.png"
+_LOGODEV_PUB_KEY = os.environ.get("LOGODEV_PUBLIC_KEY", "")
 
 
 def _email_html(body_html: str) -> str:
@@ -1043,15 +1044,12 @@ def _digest_status_pill(status: str) -> str:
 
 
 def _digest_company_cell(a: dict) -> str:
-    import re as _re
     company  = a.get("company", "")
     logo_url = a.get("company_logo_url", "")
     if not logo_url:
-        job_url = a.get("url") or a.get("job_url") or ""
-        if job_url:
-            m = _re.search(r'https?://([^/]+)', job_url)
-            if m:
-                logo_url = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz=32"
+        domain = a.get("domain", "")
+        if domain and _LOGODEV_PUB_KEY:
+            logo_url = f"https://img.logo.dev/{domain}?token={_LOGODEV_PUB_KEY}&size=16"
     logo_html = (
         f'<img src="{logo_url}" alt="" width="16" height="16" '
         f'style="display:inline-block;vertical-align:middle;border-radius:3px;'
@@ -1066,15 +1064,12 @@ def _digest_company_cell(a: dict) -> str:
 
 
 def _app_logo_html(app: dict, size: int = 32) -> str:
-    """Return an <img> tag for the app's company logo, or empty string if unavailable."""
-    import re as _re
+    """Return an <img> tag for the app's company logo via Logo.dev, or empty string."""
     logo = app.get("company_logo_url", "")
     if not logo:
-        job_url = app.get("url") or app.get("job_url") or ""
-        if job_url:
-            m = _re.search(r'https?://([^/]+)', job_url)
-            if m:
-                logo = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz={size}"
+        domain = app.get("domain", "")
+        if domain and _LOGODEV_PUB_KEY:
+            logo = f"https://img.logo.dev/{domain}?token={_LOGODEV_PUB_KEY}&size={size}"
     if not logo:
         return ""
     return (
