@@ -2138,6 +2138,26 @@ def _build_prep_docx_js(
     header_tbl = table([header_row], [CONTENT])
 
     # =========================================================================
+    # ELEVATOR PITCH BAND — full width, between header and 2-col body
+    # =========================================================================
+    ep_script = data.get("elevator_pitch", "")
+
+    ep_hdr_row = row([
+        cell(
+            [para([tr("TELL ME ABOUT YOURSELF · ~60-Second Elevator Pitch",
+                       bold=True, size=18, color=WHITE)], before=50, after=50)],
+            fill=TEAL, width=CONTENT,
+        )
+    ])
+    ep_script_row = row([
+        cell(
+            [para([tr(ep_script, size=17)], before=60, after=60, left=120)],
+            fill=FILL_T, width=CONTENT,
+        )
+    ])
+    ep_band_tbl = table([ep_hdr_row, ep_script_row], [CONTENT])
+
+    # =========================================================================
     # LEFT COLUMN CONTENT
     # =========================================================================
     left_paras: list[str] = []
@@ -2344,6 +2364,7 @@ def _build_prep_docx_js(
     # =========================================================================
     children_js = f"""
       {header_tbl},
+      {ep_band_tbl},
       {main_tbl},
       {band_hdr_tbl},
       {q_band_tbl},
@@ -2501,6 +2522,7 @@ WORD LIMITS ARE HARD CONSTRAINTS. Count the words. Do not exceed them. A long an
 
 Produce a JSON object with EXACTLY these keys (no extras, no omissions):
 {{
+  "elevator_pitch": "string — 130 to 150 WORDS. A natural, first-person spoken script the candidate can deliver verbatim in about 60 seconds. Cover: (1) career arc and how they got here, (2) most relevant recent experience for THIS role with specific tools or environments, (3) one quantified accomplishment, and — for Hiring Manager / Peer / Technical rounds — (4) a granular technical detail. Direct, no corporate filler. No bullet points. One flowing paragraph.",
   "know_your_interviewer": [
     "string — MAX 20 WORDS. One framing insight about this interviewer. No filler."
   ],
@@ -2548,6 +2570,7 @@ Produce a JSON object with EXACTLY these keys (no extras, no omissions):
 }}
 
 Constraints:
+- elevator_pitch: 130–150 words exactly; calibrated to the round type — include technical depth for Peer/Technical/Hiring Manager, keep higher-level for Phone Screen/Executive
 - know_your_interviewer: exactly 4 bullets calibrated to {interviewer} and round: {config.round_type}
 - role_fit_map: exactly 6 rows, covering the most critical JD requirements
 - gap_bridge: exactly 1-2 items (only real gaps, not invented ones)
