@@ -21,6 +21,8 @@ Environment variables (optional):
 Slash commands handled:
   /apply           — generate resume + cover letter for a job
   /prep            — generate interview prep doc
+  /optimize        — refine an existing run's documents from a prompt
+  /rescore         — re-score resume/JD match for an application
   /runs            — list recent Drive run folders
   /jobstatus       — check API health
 
@@ -42,11 +44,9 @@ Slash commands handled:
   /whoami          — show account details
   /activity        — show 10 most recent audit events
 
-  /profile-name    — update display name (modal)
-  /profile-email   — change email address with re-verification (modal)
-  /profile-password — change password (modal)
   /profile-resume  — upload a new master resume (.docx via DM file upload)
   /profile-guide   — edit profile & voice guide (modal)
+  /notifications   — view and toggle email notification preferences
 
   /help            — full command reference
 """
@@ -1522,163 +1522,8 @@ def track_view_view_submit(ack, body, client, view):
 
 
 # ---------------------------------------------------------------------------
-# Profile edit commands
+# Profile commands
 # ---------------------------------------------------------------------------
-
-@app.command("/profile-name")
-def profile_name_command(ack, body, client):
-    ack()
-    client.views_open(
-        trigger_id=body["trigger_id"],
-        view={
-            "type": "modal",
-            "callback_id": "profile_name_submit",
-            "title": {"type": "plain_text", "text": "Update Display Name"},
-            "submit": {"type": "plain_text", "text": "Save"},
-            "close": {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "name_block",
-                    "label": {"type": "plain_text", "text": "Display Name"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "name_input",
-                        "placeholder": {"type": "plain_text", "text": "Your name"},
-                    },
-                }
-            ],
-        },
-    )
-
-
-@app.view("profile_name_submit")
-def profile_name_submit(ack, body, client):
-    ack()
-    name = body["view"]["state"]["values"]["name_block"]["name_input"]["value"].strip()
-    user_id = body["user"]["id"]
-    try:
-        r = _api("put", "/api/profile", json={"display_name": name})
-        r.raise_for_status()
-        client.chat_postMessage(channel=user_id, text=f":white_check_mark: Display name updated to *{name}*.")
-    except Exception as exc:
-        client.chat_postMessage(channel=user_id, text=f":x: Failed to update name: {exc}")
-
-
-@app.command("/profile-email")
-def profile_email_command(ack, body, client):
-    ack()
-    client.views_open(
-        trigger_id=body["trigger_id"],
-        view={
-            "type": "modal",
-            "callback_id": "profile_email_submit",
-            "title": {"type": "plain_text", "text": "Change Email Address"},
-            "submit": {"type": "plain_text", "text": "Change Email"},
-            "close": {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": ":warning: A verification email will be sent to the new address. Your account will be marked unverified until you click the link.",
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "email_block",
-                    "label": {"type": "plain_text", "text": "New Email Address"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "email_input",
-                        "placeholder": {"type": "plain_text", "text": "you@example.com"},
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "password_block",
-                    "label": {"type": "plain_text", "text": "Current Password (to confirm)"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "password_input",
-                    },
-                },
-            ],
-        },
-    )
-
-
-@app.view("profile_email_submit")
-def profile_email_submit(ack, body, client):
-    ack()
-    vals = body["view"]["state"]["values"]
-    new_email = vals["email_block"]["email_input"]["value"].strip()
-    password  = vals["password_block"]["password_input"]["value"]
-    user_id   = body["user"]["id"]
-    try:
-        r = _api("post", "/api/profile/email",
-                 json={"new_email": new_email, "current_password": password})
-        r.raise_for_status()
-        client.chat_postMessage(
-            channel=user_id,
-            text=f":white_check_mark: Email changed to *{new_email}*. Check your inbox for a verification link.",
-        )
-    except Exception as exc:
-        msg = exc.response.json().get("detail", str(exc)) if hasattr(exc, "response") else str(exc)
-        client.chat_postMessage(channel=user_id, text=f":x: {msg}")
-
-
-@app.command("/profile-password")
-def profile_password_command(ack, body, client):
-    ack()
-    client.views_open(
-        trigger_id=body["trigger_id"],
-        view={
-            "type": "modal",
-            "callback_id": "profile_password_submit",
-            "title": {"type": "plain_text", "text": "Change Password"},
-            "submit": {"type": "plain_text", "text": "Update Password"},
-            "close": {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "current_block",
-                    "label": {"type": "plain_text", "text": "Current Password"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "current_input",
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "new_block",
-                    "label": {"type": "plain_text", "text": "New Password (min 8 characters)"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "new_input",
-                    },
-                },
-            ],
-        },
-    )
-
-
-@app.view("profile_password_submit")
-def profile_password_submit(ack, body, client):
-    ack()
-    vals     = body["view"]["state"]["values"]
-    current  = vals["current_block"]["current_input"]["value"]
-    new_pw   = vals["new_block"]["new_input"]["value"]
-    user_id  = body["user"]["id"]
-    try:
-        r = _api("post", "/api/profile/password",
-                 json={"current_password": current, "new_password": new_pw})
-        r.raise_for_status()
-        client.chat_postMessage(channel=user_id, text=":white_check_mark: Password updated successfully.")
-    except Exception as exc:
-        msg = exc.response.json().get("detail", str(exc)) if hasattr(exc, "response") else str(exc)
-        client.chat_postMessage(channel=user_id, text=f":x: {msg}")
-
 
 @app.command("/profile-resume")
 def profile_resume_command(ack, respond):
@@ -1787,6 +1632,353 @@ def profile_guide_submit(ack, body, client):
         client.chat_postMessage(channel=user_id, text=":white_check_mark: Profile & voice guide saved.")
     except Exception as exc:
         client.chat_postMessage(channel=user_id, text=f":x: Failed to save guide: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# /optimize — refine an existing run's documents from a prompt
+# ---------------------------------------------------------------------------
+
+def _poll_optimize(optimize_id: str, timeout: int = 300) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = _api("get", f"/api/optimize/{optimize_id}/status")
+        r.raise_for_status()
+        data = r.json()
+        if data["status"] in ("done", "error"):
+            return data
+        time.sleep(5)
+    return {"status": "timeout", "error": "Timed out waiting for optimize to complete"}
+
+
+@app.command("/optimize")
+def optimize_command(ack, body, client):
+    ack()
+    options = _app_options(active_only=True)
+    if not options:
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text=":x: No active applications found. Add one with `/track-add` first.",
+        )
+        return
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "optimize_submit",
+            "title": {"type": "plain_text", "text": "Optimize Run"},
+            "submit": {"type": "plain_text", "text": "Optimize"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Refine the documents from an existing agent run. The bot will look up the most recent Drive run folder for the selected application.",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "app_block",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "app_select",
+                        "placeholder": {"type": "plain_text", "text": "Select application…"},
+                        "options": options,
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "instruction_block",
+                    "label": {"type": "plain_text", "text": "Optimization prompt"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "instruction_input",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text",
+                                        "text": "e.g. Strengthen the eHealth bullets to emphasize platform scalability. Tighten the cover letter opening."},
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "docs_block",
+                    "label": {"type": "plain_text", "text": "Documents to optimize"},
+                    "element": {
+                        "type": "checkboxes",
+                        "action_id": "docs_input",
+                        "initial_options": [
+                            {"text": {"type": "plain_text", "text": "Resume"}, "value": "resume"},
+                            {"text": {"type": "plain_text", "text": "Cover letter"}, "value": "cover_letter"},
+                        ],
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "Resume"}, "value": "resume"},
+                            {"text": {"type": "plain_text", "text": "Cover letter"}, "value": "cover_letter"},
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("optimize_submit")
+def optimize_view_submit(ack, body, client, view):
+    ack()
+    vals        = view["state"]["values"]
+    app_id      = vals["app_block"]["app_select"]["selected_option"]["value"]
+    instruction = vals["instruction_block"]["instruction_input"]["value"].strip()
+    selected    = [o["value"] for o in (vals["docs_block"]["docs_input"].get("selected_options") or [])]
+    channel     = body["user"]["id"]
+
+    def _run():
+        try:
+            record = _get_app(app_id)
+        except Exception as exc:
+            client.chat_postMessage(channel=channel, text=f":x: Could not load application: {exc}")
+            return
+
+        company = record.get("company", "?")
+        role    = record.get("role_title", "?")
+
+        runs = [r for r in (record.get("linked_runs") or []) if r.get("gdrive_folder_id")]
+        if not runs:
+            client.chat_postMessage(
+                channel=channel,
+                text=f":x: *{role} @ {company}* has no linked Drive run folder. Run `/apply` for this application first.",
+            )
+            return
+
+        runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+        preferred = next((r for r in runs if r.get("type") in ("resume", "optimize")), None)
+        folder_id = (preferred or runs[0])["gdrive_folder_id"]
+
+        client.chat_postMessage(
+            channel=channel,
+            text=f":hourglass_flowing_sand: Optimizing *{role}* @ *{company}*…",
+        )
+        try:
+            r = _api("post", "/api/optimize", json={
+                "app_id": app_id,
+                "folder_id": folder_id,
+                "instruction": instruction,
+                "company": company,
+                "role": role,
+                "optimize_resume": "resume" in selected,
+                "optimize_cover_letter": "cover_letter" in selected,
+            })
+            r.raise_for_status()
+            optimize_id = r.json()["optimize_id"]
+        except Exception as exc:
+            client.chat_postMessage(channel=channel, text=f":x: Failed to start optimization: {exc}")
+            return
+
+        status = _poll_optimize(optimize_id)
+        if status["status"] == "done":
+            client.chat_postMessage(
+                channel=channel,
+                text=(
+                    f":white_check_mark: *{role} @ {company}* — optimization complete!\n"
+                    f"Updated documents are in your Google Drive run folder.\n"
+                    f"<{API_BASE}|Open the app> to download the files."
+                ),
+            )
+        elif status["status"] == "timeout":
+            client.chat_postMessage(
+                channel=channel,
+                text=f":warning: Optimization is taking longer than expected. Check <{API_BASE}|the app> for status.",
+            )
+        else:
+            client.chat_postMessage(
+                channel=channel,
+                text=f":x: Optimization failed: {status.get('error', 'Unknown error')}",
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# /rescore — re-score resume/JD match for an application
+# ---------------------------------------------------------------------------
+
+@app.command("/rescore")
+def rescore_command(ack, body, client):
+    ack()
+    options = _app_options(active_only=True)
+    if not options:
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text=":x: No active applications found.",
+        )
+        return
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "rescore_submit",
+            "title": {"type": "plain_text", "text": "Rescore Match"},
+            "submit": {"type": "plain_text", "text": "Rescore"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Re-score how well your resume matches this application's job posting. Requires a linked job description.",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "app_block",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "app_select",
+                        "placeholder": {"type": "plain_text", "text": "Select application…"},
+                        "options": options,
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("rescore_submit")
+def rescore_view_submit(ack, body, client, view):
+    ack()
+    app_id  = view["state"]["values"]["app_block"]["app_select"]["selected_option"]["value"]
+    channel = body["user"]["id"]
+
+    def _run():
+        try:
+            record = _get_app(app_id)
+            company = record.get("company", "?")
+            role    = record.get("role_title", "?")
+            client.chat_postMessage(
+                channel=channel,
+                text=f":hourglass_flowing_sand: Scoring *{role}* @ *{company}*…",
+            )
+            r = _api("post", f"/api/applications/{app_id}/score")
+            r.raise_for_status()
+            result = r.json()
+        except Exception as exc:
+            msg = ""
+            if hasattr(exc, "response") and exc.response is not None:
+                try:
+                    msg = exc.response.json().get("detail", str(exc))
+                except Exception:
+                    msg = str(exc)
+            else:
+                msg = str(exc)
+            client.chat_postMessage(channel=channel, text=f":x: Rescore failed: {msg}")
+            return
+
+        score    = result.get("score", "?")
+        category = result.get("category", "?")
+        summary  = result.get("summary", "")
+        emoji    = ":large_green_circle:" if category == "strong" else (
+                   ":large_yellow_circle:" if category == "good" else ":red_circle:")
+        text = (
+            f"{emoji} *{company} · {role}* — match score: *{score}/100* ({category})"
+            + (f"\n_{summary}_" if summary else "")
+        )
+        client.chat_postMessage(channel=channel, text=text)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# /notifications — view and toggle email notification preferences
+# ---------------------------------------------------------------------------
+
+_NOTIF_LABELS = {
+    "researching_nudge":  "Researching nudge — remind me when an app stays in Researching too long",
+    "follow_up_reminder": "Follow-up reminder — nudge me to follow up after applying",
+    "gone_silent":        "Gone silent — alert when a company has not responded in a while",
+    "status_changed":     "Status changed — email on every status update",
+    "new_application":    "New application — email when a new app is added",
+    "daily_digest":       "Daily digest — one summary email each morning",
+    "weekly_digest":      "Weekly digest — one summary email each Sunday",
+}
+
+
+@app.command("/notifications")
+def notifications_command(ack, body, client):
+    ack()
+    prefs = {}
+    try:
+        r = _api("get", "/api/profile")
+        if r.ok:
+            prefs = r.json().get("notification_prefs", {})
+    except Exception:
+        pass
+
+    initial = [
+        {"text": {"type": "plain_text", "text": label}, "value": key}
+        for key, label in _NOTIF_LABELS.items()
+        if prefs.get(key, True)
+    ]
+    all_options = [
+        {"text": {"type": "plain_text", "text": label}, "value": key}
+        for key, label in _NOTIF_LABELS.items()
+    ]
+
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "notifications_submit",
+            "title": {"type": "plain_text", "text": "Email Notifications"},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Choose which email notifications you want to receive.",
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "prefs_block",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Enabled notifications"},
+                    "element": {
+                        "type": "checkboxes",
+                        "action_id": "prefs_input",
+                        "initial_options": initial or None,
+                        "options": all_options,
+                    },
+                },
+            ],
+        },
+    )
+
+
+@app.view("notifications_submit")
+def notifications_view_submit(ack, body, client, view):
+    ack()
+    selected = {
+        o["value"]
+        for o in (view["state"]["values"]["prefs_block"]["prefs_input"].get("selected_options") or [])
+    }
+    prefs   = {key: (key in selected) for key in _NOTIF_LABELS}
+    user_id = body["user"]["id"]
+    try:
+        r = _api("put", "/api/profile", json={"notification_prefs": prefs})
+        r.raise_for_status()
+        enabled  = [_NOTIF_LABELS[k] for k, v in prefs.items() if v]
+        disabled = [_NOTIF_LABELS[k] for k, v in prefs.items() if not v]
+        lines = [":white_check_mark: *Notification preferences saved.*"]
+        if enabled:
+            lines.append("*On:* " + ", ".join(k.split(" —")[0] for k in enabled))
+        if disabled:
+            lines.append("*Off:* " + ", ".join(k.split(" —")[0] for k in disabled))
+        client.chat_postMessage(channel=user_id, text="\n".join(lines))
+    except Exception as exc:
+        client.chat_postMessage(channel=user_id, text=f":x: Failed to save preferences: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -2413,6 +2605,8 @@ def help_command(ack, respond):
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             "*/apply* — Generate resume, ATS resume & cover letter for a job\n"
             "*/prep* — Generate an interview prep document\n"
+            "*/optimize* — Refine an existing run's documents from a prompt\n"
+            "*/rescore* — Re-score resume/JD match for an application\n"
             "*/runs* — List your recent agent run folders from Drive"
         )}},
         {"type": "divider"},
@@ -2453,11 +2647,9 @@ def help_command(ack, respond):
         # Profile
         {"type": "section", "text": {"type": "mrkdwn", "text": "*👤  Profile*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
-            "*/profile-name* — Update your display name\n"
-            "*/profile-email* — Change your email address (triggers re-verification)\n"
-            "*/profile-password* — Change your password\n"
             "*/profile-resume* — Upload a new master resume (.docx)\n"
-            "*/profile-guide* — Edit your profile & voice guide"
+            "*/profile-guide* — Edit your profile & voice guide\n"
+            "*/notifications* — View and toggle email notification preferences"
         )}},
         {"type": "divider"},
 

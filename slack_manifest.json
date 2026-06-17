@@ -5,9 +5,9 @@
   },
   "display_information": {
     "name": "Job Apply",
-    "description": "AI-powered job application agent \u2014 resumes, cover letters, interview prep, calendar, and application tracking, all from Slack.",
+    "description": "AI-powered job application agent — resumes, cover letters, interview prep, calendar, and application tracking, all from Slack.",
     "background_color": "#1A3C5E",
-    "long_description": "Job Apply lets you run the full application workflow without leaving Slack.\n\n\ud83e\udd16 Agent Runs\n  /apply \u2014 Generate tailored resume, ATS resume & cover letter\n  /prep \u2014 Generate an interview prep reference card\n  /runs \u2014 List your recent Drive run folders\n\n\ud83d\udcc5 Calendar\n  /cal-today \u2014 Show today's events\n  /cal-week \u2014 Show events in the next 7 days\n  /cal-add \u2014 Add a calendar event with reminders\n  /cal-view \u2014 View full details of an event\n  /cal-delete \u2014 Delete a calendar event (with confirmation)\n\n\ud83d\udccb Application Tracker\n  /tracker \u2014 Pipeline summary grouped by status\n  /track-list \u2014 List applications (optional: filter by status)\n  /track-view \u2014 View full details of an application\n  /track-add \u2014 Add application (BrandFetch search, all fields)\n  /track-update \u2014 Two-step edit: all fields pre-filled\n  /track-note \u2014 Add a comment to an application\n  /track-delete \u2014 Delete an application (with confirmation)\n\n\ud83d\udd0d Lookup & Info\n  /company \u2014 Search company info (logo, domain, description)\n  /whoami \u2014 Show your account details\n  /activity \u2014 Show your 10 most recent audit events\n\n\ud83d\udc64 Profile\n  /profile-name \u2014 Update your display name\n  /profile-email \u2014 Change your email (triggers re-verification)\n  /profile-password \u2014 Change your password\n  /profile-resume \u2014 Upload a new master resume (.docx)\n  /profile-guide \u2014 Edit your profile & voice guide\n\n\ud83d\udee0\ufe0f System\n  /jobstatus \u2014 Check API health\n  /help \u2014 Full command reference\n\n:microscope: Test Runner (owner only)\n  /run-tests   \u2014 Run test suite: unit | api | slack | all\n  /test-status \u2014 Check if a test run is in progress"
+    "long_description": "Job Apply lets you run the full application workflow without leaving Slack.\n\n🤖 Agent Runs\n  /apply — Generate tailored resume, ATS resume & cover letter\n  /prep — Generate an interview prep reference card\n  /optimize — Refine an existing run's documents from a prompt\n  /rescore — Re-score resume/JD match for an application\n  /runs — List your recent Drive run folders\n\n📅 Calendar\n  /cal-today — Show today's events\n  /cal-week — Show events in the next 7 days\n  /cal-add — Add a calendar event with reminders\n  /cal-view — View full details of an event\n  /cal-delete — Delete a calendar event (with confirmation)\n\n📋 Application Tracker\n  /tracker — Pipeline summary grouped by status\n  /track-list — List applications (optional: filter by status)\n  /track-view — View full details of an application\n  /track-add — Add application (company search, all fields)\n  /track-update — Two-step edit: all fields pre-filled\n  /track-note — Add a comment to an application\n  /track-delete — Delete an application (with confirmation)\n\n🔍 Lookup & Info\n  /company — Search company info (logo, domain, description)\n  /whoami — Show your account details\n  /activity — Show your 10 most recent audit events\n\n👤 Profile\n  /profile-resume — Upload a new master resume (.docx)\n  /profile-guide — Edit your profile & voice guide\n  /notifications — View and toggle email notification preferences\n\n🛠️ System\n  /jobstatus — Check API health\n  /help — Full command reference"
   },
   "features": {
     "bot_user": {
@@ -25,6 +25,18 @@
         "command": "/prep",
         "description": "Generate an interview prep reference card for an upcoming round",
         "usage_hint": "(opens a form)",
+        "should_escape": false
+      },
+      {
+        "command": "/optimize",
+        "description": "Refine an existing run’s documents from a prompt",
+        "usage_hint": "(opens a form)",
+        "should_escape": false
+      },
+      {
+        "command": "/rescore",
+        "description": "Re-score resume/JD match for an application",
+        "usage_hint": "(opens a selector)",
         "should_escape": false
       },
       {
@@ -83,7 +95,7 @@
       },
       {
         "command": "/track-add",
-        "description": "Add a new application \u2014 BrandFetch company search, all fields",
+        "description": "Add a new application — BrandFetch company search, all fields",
         "usage_hint": "(opens a form)",
         "should_escape": false
       },
@@ -107,7 +119,7 @@
       },
       {
         "command": "/company",
-        "description": "Search company info \u2014 name, domain, and description via BrandFetch",
+        "description": "Search company info — name, domain, and description via BrandFetch",
         "usage_hint": "[company name] e.g. Salesforce",
         "should_escape": false
       },
@@ -124,24 +136,6 @@
         "should_escape": false
       },
       {
-        "command": "/profile-name",
-        "description": "Update your display name",
-        "usage_hint": "(opens a form)",
-        "should_escape": false
-      },
-      {
-        "command": "/profile-email",
-        "description": "Change your email address \u2014 sends a verification email to the new address",
-        "usage_hint": "(opens a form)",
-        "should_escape": false
-      },
-      {
-        "command": "/profile-password",
-        "description": "Change your account password",
-        "usage_hint": "(opens a form)",
-        "should_escape": false
-      },
-      {
         "command": "/profile-resume",
         "description": "Instructions for uploading a new master resume (.docx) via DM",
         "usage_hint": "(no arguments)",
@@ -154,26 +148,20 @@
         "should_escape": false
       },
       {
+        "command": "/notifications",
+        "description": "View and toggle email notification preferences",
+        "usage_hint": "(no arguments)",
+        "should_escape": false
+      },
+      {
         "command": "/jobstatus",
-        "description": "Check service health \u2014 storage, email, Drive, Anthropic key, active model, API latency",
+        "description": "Check service health — storage, email, Drive, Anthropic key, active model, API latency",
         "usage_hint": "(no arguments)",
         "should_escape": false
       },
       {
         "command": "/help",
         "description": "Show the full Job Apply command reference",
-        "usage_hint": "(no arguments)",
-        "should_escape": false
-      },
-      {
-        "command": "/run-tests",
-        "description": "Run automated test suites and report results (owner only)",
-        "usage_hint": "[unit | api | slack | all]",
-        "should_escape": false
-      },
-      {
-        "command": "/test-status",
-        "description": "Check if a test run is currently in progress (owner only)",
         "usage_hint": "(no arguments)",
         "should_escape": false
       }

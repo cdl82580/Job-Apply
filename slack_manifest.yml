@@ -12,6 +12,8 @@ display_information:
     🤖 Agent Runs
       /apply        — Generate tailored resume, ATS resume & cover letter
       /prep         — Generate an interview prep reference card
+      /optimize     — Refine an existing run's documents from a prompt
+      /rescore      — Re-score resume/JD match for an application
       /runs         — List your recent Drive run folders
 
     📅 Calendar
@@ -25,7 +27,7 @@ display_information:
       /tracker      — Pipeline summary grouped by status
       /track-list   — List applications (optional: filter by status)
       /track-view   — View full details of an application
-      /track-add    — Add application (BrandFetch search, all fields)
+      /track-add    — Add application (company search, all fields)
       /track-update — Two-step edit: all fields pre-filled
       /track-note   — Add a comment to an application
       /track-delete — Delete an application (with confirmation)
@@ -36,11 +38,9 @@ display_information:
       /activity     — Show your 10 most recent audit events
 
     👤 Profile
-      /profile-name     — Update your display name
-      /profile-email    — Change your email (triggers re-verification)
-      /profile-password — Change your password
       /profile-resume   — Upload a new master resume (.docx)
       /profile-guide    — Edit your profile & voice guide
+      /notifications    — View and toggle email notification preferences
 
     🛠️ System
       /jobstatus    — Check API health
@@ -59,6 +59,14 @@ features:
     - command: /prep
       description: Generate an interview prep reference card for an upcoming round
       usage_hint: (opens a form)
+      should_escape: false
+    - command: /optimize
+      description: Refine an existing run’s documents from a prompt
+      usage_hint: (opens a form)
+      should_escape: false
+    - command: /rescore
+      description: Re-score resume/JD match for an application
+      usage_hint: (opens a selector)
       should_escape: false
     - command: /runs
       description: List your recent agent run folders from Google Drive
@@ -128,18 +136,6 @@ features:
       usage_hint: (no arguments)
       should_escape: false
     # Profile
-    - command: /profile-name
-      description: Update your display name
-      usage_hint: (opens a form)
-      should_escape: false
-    - command: /profile-email
-      description: Change your email address — sends a verification email to the new address
-      usage_hint: (opens a form)
-      should_escape: false
-    - command: /profile-password
-      description: Change your account password
-      usage_hint: (opens a form)
-      should_escape: false
     - command: /profile-resume
       description: Instructions for uploading a new master resume (.docx) via DM
       usage_hint: (no arguments)
@@ -148,6 +144,10 @@ features:
       description: View and edit your profile & voice guide
       usage_hint: (opens a form)
       should_escape: false
+    - command: /notifications
+      description: View and toggle email notification preferences
+      usage_hint: (no arguments)
+      should_escape: false
     # System
     - command: /jobstatus
       description: Check service health — storage, email, Drive, Anthropic key, active model, API latency
@@ -155,15 +155,6 @@ features:
       should_escape: false
     - command: /help
       description: Show the full Job Apply command reference
-      usage_hint: (no arguments)
-      should_escape: false
-    # Test runner (owner-only)
-    - command: /run-tests
-      description: Run automated test suites and report results (owner only)
-      usage_hint: "[unit | api | slack | all]"
-      should_escape: false
-    - command: /test-status
-      description: Check if a test run is currently in progress (owner only)
       usage_hint: (no arguments)
       should_escape: false
 
