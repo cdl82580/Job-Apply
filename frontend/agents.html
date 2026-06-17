@@ -1032,16 +1032,13 @@
     try {
       const res  = await apiFetch('/api/applications');
       const data = await res.json();
-      _allApps = data.items ?? data;   // handle both envelope and legacy flat array
-      _allApps.sort((a, b) => {
-        const oa = APP_STATUS_ORDER.indexOf(a.status), ob = APP_STATUS_ORDER.indexOf(b.status);
-        return oa !== ob ? oa - ob : a.company.localeCompare(b.company);
-      });
+      _allApps = data.items ?? data;
+      _allApps.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } catch (_) { _allApps = []; }
   }
 
   function filterApps(q) {
-    if (!q.trim()) return _allApps.slice(0, 8);
+    if (!q.trim()) return _allApps.slice(0, 10);
     const lq = q.toLowerCase();
     return _allApps.filter(a =>
       a.company.toLowerCase().includes(lq) ||
