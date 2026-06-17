@@ -163,6 +163,8 @@ job-apply/
 |---|---|---|
 | 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter |
 | 🤖 Agent | `/prep` | Generate interview prep document |
+| 🤖 Agent | `/optimize` | Refine an existing run's documents from a prompt (picks most recent Drive folder) |
+| 🤖 Agent | `/rescore` | Re-score resume/JD match for an application |
 | 🤖 Agent | `/runs` | List recent Drive run folders |
 | 📅 Calendar | `/cal-today` | Show today's events |
 | 📅 Calendar | `/cal-week` | Show next 7 days |
@@ -179,11 +181,9 @@ job-apply/
 | 🔍 Lookup | `/company [name]` | Search company info via Logo.dev |
 | 🔍 Lookup | `/whoami` | Show your account details |
 | 🔍 Lookup | `/activity` | Show your 10 most recent audit events |
-| 👤 Profile | `/profile-name` | Update display name (modal) |
-| 👤 Profile | `/profile-email` | Change email address — requires current password, triggers re-verification |
-| 👤 Profile | `/profile-password` | Change password (modal) |
 | 👤 Profile | `/profile-resume` | Instructions for uploading a new master resume via DM |
 | 👤 Profile | `/profile-guide` | Edit your profile & voice guide (modal, pre-filled) |
+| 👤 Profile | `/notifications` | View and toggle email notification preferences |
 | 🛠️ System | `/jobstatus` | Check API health |
 | 🛠️ System | `/help` | Full command reference |
 

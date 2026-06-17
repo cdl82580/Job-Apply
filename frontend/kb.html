@@ -1448,8 +1448,8 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       id: 'slack-job-commands',
       category: 'slack',
       title: 'Job & Run Commands',
-      snippet: '/apply, /prep, /runs, /jobstatus — running document generation and checking status from Slack.',
-      readTime: '3 min',
+      snippet: '/apply, /prep, /optimize, /rescore, /runs — running document generation and checking status from Slack.',
+      readTime: '4 min',
       body: `
 <h2>/apply</h2>
 <p>Generates a tailored resume, ATS resume, and cover letter for a job posting.</p>
@@ -1458,14 +1458,22 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>/prep</h2>
 <p>Generates interview prep materials for a role. Same modal pattern as <code>/apply</code> — paste the job posting, company, and role. The bot polls and posts the prep document link when complete.</p>
 
+<h2>/optimize</h2>
+<p>Refines the documents from an existing agent run based on a freeform instruction — e.g. "strengthen the eHealth bullets to emphasize platform scalability, tighten the cover letter opening."</p>
+<p>Opens a modal where you select an active application, write the optimization prompt, and choose whether to optimize the resume, cover letter, or both. The bot automatically uses the most recent linked Drive run folder for the selected application. Polls for completion and confirms when the updated files are ready in Drive.</p>
+
+<h2>/rescore</h2>
+<p>Re-scores how well your resume matches a specific application's job posting. Useful after running <code>/optimize</code> or uploading a new resume to see if the match improved.</p>
+<p>Select an application from the list — the application must have a linked job description (either from the posting URL or a saved <code>job_description.md</code> in Drive). Returns the score (0–100), category (strong / good / fair / weak), and a one-line summary.</p>
+
 <h2>/runs</h2>
 <p>Lists your 10 most recent Drive run folders — company, role, date, and a link to the folder. Quick way to find output files without opening the web app or Drive.</p>
 
 <h2>/jobstatus</h2>
-<p>Pings the API health endpoint and reports whether the app is up. Shows a summary of recent run stats (completed, failed, in-progress). Useful for confirming the bot can reach the API before kicking off a long run.</p>
+<p>Pings the API health endpoint and reports whether the app is up. Useful for confirming the bot can reach the API before kicking off a long run.</p>
 
 <h2>Polling Behavior</h2>
-<p>After submitting a run or prep request, the bot polls the API every few seconds (up to a 5-minute timeout). While polling it posts a "Working…" message to Slack that updates in place — you don't get spammed with notifications. If the run times out or fails, the bot posts the error details.</p>
+<p>After submitting a run, prep, or optimize request, the bot polls the API every few seconds (up to a 5-minute timeout). If the run times out or fails, the bot posts the error details.</p>
       `
     },
     {
@@ -1539,7 +1547,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       id: 'slack-profile-utility',
       category: 'slack',
       title: 'Profile & Utility Commands',
-      snippet: '/whoami, /activity, /company, /profile-*, /help — account management and utilities from Slack.',
+      snippet: '/whoami, /activity, /company, /profile-*, /notifications, /help — account management and utilities from Slack.',
       readTime: '3 min',
       body: `
 <h2>/whoami</h2>
@@ -1554,12 +1562,12 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>Profile Commands</h2>
 <table>
   <tr><th>Command</th><th>What it does</th></tr>
-  <tr><td><code>/profile-name</code></td><td>Update your display name via a modal</td></tr>
-  <tr><td><code>/profile-email</code></td><td>Change email address — triggers re-verification flow</td></tr>
-  <tr><td><code>/profile-password</code></td><td>Change password via a modal (current + new)</td></tr>
   <tr><td><code>/profile-resume</code></td><td>Instructions for uploading a new master resume by DMing the bot a <code>.docx</code> file</td></tr>
   <tr><td><code>/profile-guide</code></td><td>Edit your profile &amp; voice guide (the <code>profile.md</code> content) via a large text modal</td></tr>
+  <tr><td><code>/notifications</code></td><td>View and toggle email notification preferences — researching nudge, follow-up reminder, gone silent, status changed, new application, daily digest, weekly digest</td></tr>
 </table>
+
+<p>To change your display name, email, or password, use the <a href="/profile.html">Profile page</a> in the web app.</p>
 
 <h2>Uploading a Resume via DM</h2>
 <p>To replace your master resume: DM the bot a <code>.docx</code> file directly in Slack. The bot detects the file upload, downloads it, and calls the API to replace <code>resumes/master.docx</code>. Confirmation is sent in the same DM thread.</p>
