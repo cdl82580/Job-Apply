@@ -1514,7 +1514,7 @@ function handleRowAction(e) {
   if (!btn) return;
   const id     = btn.dataset.id;
   const action = btn.dataset.action;
-  if (action === 'run')          window.location.href = `/?app_id=${encodeURIComponent(id)}&autorun=1`;
+  if (action === 'run')          window.location.href = `/agents.html?app_id=${encodeURIComponent(id)}&autorun=1`;
   if (action === 'edit')         openDrawer(id);
   if (action === 'delete')       confirmDelete(id);
   if (action === 'score')        scoreApplication(id, btn);
