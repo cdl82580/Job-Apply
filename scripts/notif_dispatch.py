@@ -173,9 +173,20 @@ def notify_new_application(user_id: str, record: dict[str, Any]) -> None:
         score_line = ""
         ms = record.get("match_score")
         if ms:
+            _score_pill_style: dict[str, tuple[str, str]] = {
+                "Strong Match": ("#D1FAE5", "#065F46"),
+                "Good Match":   ("#DBEAFE", "#1E40AF"),
+                "Stretch":      ("#FEF3C7", "#92400E"),
+                "Long Shot":    ("#FEE2E2", "#991B1B"),
+            }
+            cat = ms.get("category", "")
+            s_bg, s_color = _score_pill_style.get(cat, ("#F3F4F6", "#374151"))
             score_line = (
-                f"<p style='color:#374151;font-size:.875rem;margin:.75rem 0 0'>"
-                f"Match score: <strong>{ms['score']}</strong> &mdash; {ms.get('category','')}</p>"
+                f'<p style="margin:.75rem 0 0;font-size:.875rem">'
+                f'Match score: <strong>{ms["score"]}</strong> &nbsp;'
+                f'<span style="display:inline-block;background:{s_bg};color:{s_color};'
+                f'padding:.15rem .55rem;border-radius:999px;font-size:.8rem;font-weight:600">'
+                f'{cat}</span></p>'
             )
 
         company_heading = (

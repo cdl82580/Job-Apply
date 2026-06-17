@@ -244,6 +244,7 @@ def _evict_stale_pipelines() -> None:
 def _start_application_pipeline(
     user_id: str, app_id: str, company: str, role_title: str, url: str, actor: str,
     jd_text: str = "",
+    on_complete: Any = None,
 ) -> None:
     """Best-effort, async post-create/update pipeline:
       1. ensure the application's Drive folder exists and link it to the record
@@ -375,6 +376,12 @@ def _start_application_pipeline(
                     done["score"] = score_payload
                 q.put(done)
                 q.put(None)
+                if on_complete:
+                    try:
+                        fresh = app_store.get_application(user_id, app_id) or {}
+                        on_complete(fresh)
+                    except Exception:
+                        _log.exception("pipeline: on_complete callback failed app_id=%s", app_id)
 
         threading.Thread(target=_run, daemon=True).start()
     except Exception as _exc:
@@ -431,19 +438,20 @@ async def create_application(body: ApplicationCreate, request: Request, response
     user_audit.log(user_id, "created", actor, app_id=record["id"],
                    company=record["company"], role_title=record["role_title"])
 
-    import threading as _threading
-    _threading.Thread(
-        target=notif_dispatch.notify_new_application,
-        args=(user_id, record),
-        daemon=True,
-    ).start()
-
     pipeline_started = False
     if record.get("url"):
         _start_application_pipeline(
             user_id, record["id"], record["company"], record["role_title"], record["url"], actor,
+            on_complete=lambda r: notif_dispatch.notify_new_application(user_id, r),
         )
         pipeline_started = True
+    else:
+        import threading as _threading
+        _threading.Thread(
+            target=notif_dispatch.notify_new_application,
+            args=(user_id, record),
+            daemon=True,
+        ).start()
         # Pin this browser to the machine holding the pipeline's in-memory queue
         if FLY_MACHINE_ID:
             response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID,
