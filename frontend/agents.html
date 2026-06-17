@@ -1040,6 +1040,9 @@
     const fallback = img.dataset.fallback;
     if (fallback && img.src !== fallback) {
       img.src = fallback;
+    } else if (img.classList.contains('sel-logo')) {
+      // Don't replace sel-logo — it's referenced by closure; just hide it
+      img.style.display = 'none';
     } else {
       const ph = document.createElement('div');
       ph.className = img.dataset.phClass || 'app-sugg-logo-ph';
