@@ -103,15 +103,18 @@
     }
     .theme-toggle:hover { border-color: var(--border); color: var(--text); }
     @media (max-width: 620px) {
-      header { padding: 0 .75rem; margin-bottom: 1.5rem; }
+      header { padding: 0 .75rem; margin-bottom: 1.5rem; overflow: hidden; }
       .header-inner { padding: 1rem 0 .875rem; }
-      .header-left { gap: .6rem; }
-      .app-logo, .app-logo img { width: 36px; height: 36px; }
-      header h1 { font-size: 1.15rem; }
+      .header-left { gap: .6rem; flex: 1; min-width: 0; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; flex-shrink: 0; }
+      header h1 { font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       header p  { font-size: .8rem; }
-      .header-actions { gap: .15rem; margin-top: 0; }
+      .header-actions { gap: .15rem; margin-top: 0; flex-shrink: 0; }
       .header-user { display: none; }
       .container { padding: 0 .75rem; }
+      .header-icon-btn[aria-label="Agents"],
+      .header-icon-btn[aria-label="Calendar"],
+      .header-icon-btn[aria-label="Knowledge Base"] { display: none; }
     }
 
     @media (max-width: 400px) {
@@ -119,6 +122,7 @@
       header h1 { font-size: 1rem; }
       header p  { display: none; }
       .header-left { gap: .5rem; }
+      .header-icon-btn[aria-label="Application Tracker"] { display: none; }
     }
 
     /* ── Toolbar ─────────────────────────────────────────────── */

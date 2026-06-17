@@ -85,19 +85,24 @@
     .header-icon-btn:hover { color: var(--primary); background: var(--fill); }
 
     @media (max-width: 620px) {
-      header { padding: 0 .75rem; margin-bottom: 1.5rem; }
+      header { padding: 0 .75rem; margin-bottom: 1.5rem; overflow: hidden; }
       .header-inner { padding: .9rem 0 .75rem; }
-      .logo-img { width: 30px; height: 30px; }
-      .logo { font-size: 1rem; }
-      .header-right { gap: .15rem; }
+      .header-left { flex: 1; min-width: 0; }
+      .logo-img { width: 30px; height: 30px; flex-shrink: 0; }
+      .logo { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .header-right { gap: .15rem; flex-shrink: 0; }
       .header-user { display: none; }
       .container { padding: 0 .75rem; }
+      .header-icon-btn[aria-label="Agents"],
+      .header-icon-btn[aria-label="Calendar"],
+      .header-icon-btn[aria-label="Knowledge Base"] { display: none; }
     }
 
     @media (max-width: 400px) {
       .logo-img { width: 26px; height: 26px; }
       .logo { font-size: .9rem; }
       .logo-subtitle { display: none; }
+      .header-icon-btn[aria-label="Application Tracker"] { display: none; }
     }
 
     .theme-toggle {
