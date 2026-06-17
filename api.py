@@ -775,11 +775,9 @@ def _researching_nudge_email(
     )
 
     body_html = f"""
-    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
-      Did you apply to {company}?
-    </h2>
-    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
-      {role} &mdash; in Researching for {days} day{'s' if days != 1 else ''}
+    {_company_heading_html(app, f"Did you apply to {company}?")}
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 .625rem">
+      {role} &mdash; {_digest_status_pill("Researching")} &mdash; {days} day{'s' if days != 1 else ''}
     </p>
     <p style="color:#374151;margin:0 0 1.5rem">
       You&rsquo;ve had this one open for a while. What&rsquo;s the status?
@@ -873,11 +871,9 @@ def _follow_up_reminder_email(
     )
 
     body_html = f"""
-    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
-      Have you heard back from {company}?
-    </h2>
-    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
-      {role} &mdash; applied {days} day{'s' if days != 1 else ''} ago
+    {_company_heading_html(app, f"Have you heard back from {company}?")}
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 .625rem">
+      {role} &mdash; {_digest_status_pill("Applied")} &mdash; {days} day{'s' if days != 1 else ''} ago
     </p>
     <p style="color:#374151;margin:0 0 1.5rem">
       No movement yet. Time to follow up or move on?
@@ -958,11 +954,9 @@ def _gone_silent_email(user_email: str, user_id: str, app: dict) -> None:
     )
 
     body_html = f"""
-    <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
-      Gone quiet: {company}
-    </h2>
-    <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
-      {role} &mdash; {status} for {days} day{'s' if days != 1 else ''} with no update
+    {_company_heading_html(app, f"Gone quiet: {company}")}
+    <p style="color:#6B7280;font-size:.875rem;margin:0 0 .625rem">
+      {role} &mdash; {_digest_status_pill(status)} &mdash; {days} day{'s' if days != 1 else ''} with no update
     </p>
     <p style="color:#374151;margin:0 0 1.5rem">
       No activity in a while. Time to close this one out or snooze it?
@@ -1068,6 +1062,41 @@ def _digest_company_cell(a: dict) -> str:
         f'<td style="padding:.5rem .5rem;color:#374151;font-size:.875rem;'
         f'vertical-align:middle;white-space:nowrap">'
         f'{logo_html}<span style="vertical-align:middle">{company}</span></td>'
+    )
+
+
+def _app_logo_html(app: dict, size: int = 32) -> str:
+    """Return an <img> tag for the app's company logo, or empty string if unavailable."""
+    import re as _re
+    logo = app.get("company_logo_url", "")
+    if not logo:
+        job_url = app.get("url") or app.get("job_url") or ""
+        if job_url:
+            m = _re.search(r'https?://([^/]+)', job_url)
+            if m:
+                logo = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz={size}"
+    if not logo:
+        return ""
+    return (
+        f'<img src="{logo}" alt="" width="{size}" height="{size}" '
+        f'style="display:inline-block;vertical-align:middle;border-radius:6px;'
+        f'border:1px solid #E5E7EB">'
+    )
+
+
+def _company_heading_html(app: dict, title: str) -> str:
+    """Return a table-based company logo + heading block for single-company emails."""
+    logo_html = _app_logo_html(app)
+    logo_cell = (
+        f'<td style="vertical-align:middle;padding-right:.5rem">{logo_html}</td>'
+        if logo_html else ""
+    )
+    return (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:.375rem">'
+        f'<tr>{logo_cell}'
+        f'<td style="vertical-align:middle">'
+        f'<h2 style="color:#1A3C5E;margin:0;font-size:1.1rem">{title}</h2>'
+        f'</td></tr></table>'
     )
 
 

@@ -46,8 +46,19 @@ def email_html(body_html: str) -> str:
         <!-- Header -->
         <tr>
           <td style="background:#1A3C5E;padding:1.25rem 1.75rem">
-            <img src="{_LOGO_URL}" alt="Job Apply" height="32"
-                 style="display:block;border:0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;padding-right:.625rem">
+                  <img src="{_LOGO_URL}" alt="Job Apply" height="32"
+                       style="display:block;border:0">
+                </td>
+                <td style="vertical-align:middle">
+                  <span style="font-family:system-ui,-apple-system,sans-serif;
+                               font-size:1.125rem;font-weight:600;color:#FFFFFF;
+                               line-height:32px">Job Apply</span>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
         <!-- Body -->
@@ -142,26 +153,8 @@ def notify_new_application(user_id: str, record: dict[str, Any]) -> None:
 
         subject = f"New application added: {company}"
 
-        # Status pill colours (shared with notify_status_changed)
-        _bg = {
-            "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
-            "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
-            "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
-            "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
-            "Not Applying": "#F3F4F6",
-        }
-        _color = {
-            "Researching":  "#0369A1", "Applied":      "#92400E",
-            "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
-            "On Hold":      "#9A3412", "Offer":        "#065F46",
-            "Rejected":     "#991B1B",
-        }
-        status_pill = (
-            f'<span style="display:inline-block;background:{_bg.get(status,"#F3F4F6")};'
-            f'color:{_color.get(status,"#374151")};padding:.2rem .65rem;border-radius:999px;'
-            f'font-size:.85rem;font-weight:600">'
-            f'{_STATUS_EMOJI.get(status,"")} {status}</span>'
-        )
+        logo_html   = _company_logo_html(record)
+        status_pill = _status_pill(status)
 
         # Friendly applied date: "Monday, June 16, 2026"
         applied_html = ""
@@ -185,10 +178,17 @@ def notify_new_application(user_id: str, record: dict[str, Any]) -> None:
                 f"Match score: <strong>{ms['score']}</strong> &mdash; {ms.get('category','')}</p>"
             )
 
+        company_heading = (
+            f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:.375rem">'
+            f'<tr>'
+            f'{"<td style=\"vertical-align:middle;padding-right:.5rem\">" + logo_html + "</td>" if logo_html else ""}'
+            f'<td style="vertical-align:middle">'
+            f'<h2 style="color:#1A3C5E;margin:0;font-size:1.1rem">New application added</h2>'
+            f'</td></tr></table>'
+        )
+
         body_html = f"""
-        <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
-          New application added
-        </h2>
+        {company_heading}
         <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.25rem">
           {company} &mdash; {role}
         </p>
@@ -243,6 +243,50 @@ _STATUS_EMOJI: dict[str, str] = {
     "Rejected":      "&#10060;",
 }
 
+_STATUS_BG: dict[str, str] = {
+    "Researching":  "#F0F9FF", "Applied":      "#FEF3C7",
+    "Phone Screen": "#EDE9FE", "Interviewing": "#DBEAFE",
+    "On Hold":      "#FFF7ED", "Offer":        "#D1FAE5",
+    "Rejected":     "#FEE2E2", "No Response":  "#F3F4F6",
+    "Not Applying": "#F3F4F6",
+}
+_STATUS_COLOR: dict[str, str] = {
+    "Researching":  "#0369A1", "Applied":      "#92400E",
+    "Phone Screen": "#5B21B6", "Interviewing": "#1E40AF",
+    "On Hold":      "#9A3412", "Offer":        "#065F46",
+    "Rejected":     "#991B1B",
+}
+
+
+def _status_pill(status: str) -> str:
+    bg    = _STATUS_BG.get(status, "#F3F4F6")
+    color = _STATUS_COLOR.get(status, "#374151")
+    emoji = _STATUS_EMOJI.get(status, "")
+    return (
+        f'<span style="display:inline-block;background:{bg};color:{color};'
+        f'padding:.2rem .65rem;border-radius:999px;font-size:.85rem;font-weight:600">'
+        f'{emoji}&nbsp;{status}</span>'
+    )
+
+
+def _company_logo_html(record: dict[str, Any], size: int = 32) -> str:
+    """Return an <img> tag for the company logo, or empty string if unavailable."""
+    import re as _re
+    logo = record.get("company_logo_url", "")
+    if not logo:
+        job_url = record.get("url") or record.get("job_url") or ""
+        if job_url:
+            m = _re.search(r'https?://([^/]+)', job_url)
+            if m:
+                logo = f"https://www.google.com/s2/favicons?domain={m.group(1)}&sz={size}"
+    if not logo:
+        return ""
+    return (
+        f'<img src="{logo}" alt="" width="{size}" height="{size}" '
+        f'style="display:inline-block;vertical-align:middle;border-radius:6px;'
+        f'border:1px solid #E5E7EB">'
+    )
+
 
 def notify_status_changed(
     user_id: str, record: dict[str, Any], old_status: str, new_status: str
@@ -265,36 +309,21 @@ def notify_status_changed(
         emoji_old = _STATUS_EMOJI.get(old_status, "&#8594;")
         subject   = f"{company}: {old_status} → {new_status}"
 
-        _bg = {
-            "Researching":  "#F0F9FF",
-            "Applied":      "#FEF3C7",
-            "Phone Screen": "#EDE9FE",
-            "Interviewing": "#DBEAFE",
-            "On Hold":      "#FFF7ED",
-            "Offer":        "#D1FAE5",
-            "Rejected":     "#FEE2E2",
-            "No Response":  "#F3F4F6",
-            "Not Applying": "#F3F4F6",
-        }
-        _color = {
-            "Researching":  "#0369A1",
-            "Applied":      "#92400E",
-            "Phone Screen": "#5B21B6",
-            "Interviewing": "#1E40AF",
-            "On Hold":      "#9A3412",
-            "Offer":        "#065F46",
-            "Rejected":     "#991B1B",
-        }
+        logo_html       = _company_logo_html(record)
+        from_pill       = _status_pill(old_status)
+        to_pill         = _status_pill(new_status)
 
-        badge_bg    = _bg.get(new_status, "#F3F4F6")
-        badge_color = _color.get(new_status, "#374151")
-        from_bg     = _bg.get(old_status, "#F3F4F6")
-        from_color  = _color.get(old_status, "#374151")
+        company_heading = (
+            f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:.375rem">'
+            f'<tr>'
+            f'{"<td style=\"vertical-align:middle;padding-right:.5rem\">" + logo_html + "</td>" if logo_html else ""}'
+            f'<td style="vertical-align:middle">'
+            f'<h2 style="color:#1A3C5E;margin:0;font-size:1.1rem">Status update: {company}</h2>'
+            f'</td></tr></table>'
+        )
 
         body_html = f"""
-        <h2 style="color:#1A3C5E;margin:0 0 .375rem;font-size:1.1rem">
-          Status update: {company}
-        </h2>
+        {company_heading}
         <p style="color:#6B7280;font-size:.875rem;margin:0 0 1.5rem">
           {role}
         </p>
@@ -302,23 +331,11 @@ def notify_status_changed(
                style="border-collapse:collapse;margin-bottom:1.5rem">
           <tr>
             <td style="padding:.375rem 0;color:#6B7280;font-size:.875rem;width:80px">From</td>
-            <td style="padding:.375rem 0">
-              <span style="display:inline-block;background:{from_bg};color:{from_color};
-                           padding:.2rem .65rem;border-radius:999px;font-size:.85rem;
-                           font-weight:600">
-                {emoji_old}&nbsp; {old_status}
-              </span>
-            </td>
+            <td style="padding:.375rem 0">{from_pill}</td>
           </tr>
           <tr>
             <td style="padding:.375rem 0;color:#6B7280;font-size:.875rem">To</td>
-            <td style="padding:.375rem 0">
-              <span style="display:inline-block;background:{badge_bg};color:{badge_color};
-                           padding:.2rem .65rem;border-radius:999px;font-size:.85rem;
-                           font-weight:600">
-                {emoji_new}&nbsp; {new_status}
-              </span>
-            </td>
+            <td style="padding:.375rem 0">{to_pill}</td>
           </tr>
         </table>
         <a href="{base}/index.html#tracker"
