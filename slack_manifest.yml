@@ -50,6 +50,10 @@ features:
   bot_user:
     display_name: Job Apply
     always_online: true
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
   slash_commands:
     # Agent
     - command: /apply

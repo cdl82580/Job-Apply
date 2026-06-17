@@ -165,7 +165,12 @@
         "usage_hint": "(no arguments)",
         "should_escape": false
       }
-    ]
+    ],
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    }
   },
   "oauth_config": {
     "scopes": {
