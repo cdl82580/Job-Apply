@@ -2005,7 +2005,7 @@ You are an expert interview coach preparing Corey Laverdiere for a specific inte
 You know his background deeply: integration engineering, AI/ML solutions delivery,
 professional services, and customer-facing technical roles.
 
-Your job is to produce a dense, specific interview reference card with 9 sections.
+Your job is to produce a dense, specific interview reference card with 10 sections.
 All content must be in Corey's voice: direct, specific, first-person, no corporate filler.
 Every prepared answer must be specific enough that it couldn't apply to any other candidate.
 Be ruthlessly specific — name tools, quote numbers, reference real projects.
