@@ -411,6 +411,13 @@
     .app-picker-selected .sel-logo {
       width: 22px; height: 22px; border-radius: 3px; object-fit: contain; flex-shrink: 0;
     }
+    .app-picker-selected .sel-logo-ph {
+      width: 22px; height: 22px; border-radius: 3px; flex-shrink: 0;
+      background: var(--fill); border: 1px solid var(--card-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    }
+    .app-picker-selected .sel-logo-ph.hidden { display: none; }
     .app-picker-selected .sel-name { font-weight: 600; flex: 1; }
     .app-picker-selected .sel-clear {
       background: none; border: none; cursor: pointer; color: var(--muted);
@@ -629,6 +636,7 @@
         <!-- selected state -->
         <div class="app-picker-selected hidden" id="runAppSelected">
           <img class="sel-logo" id="runSelLogo" alt="">
+          <span class="sel-logo-ph hidden" id="runSelLogoPh"></span>
           <span class="sel-name" id="runSelName"></span>
           <button type="button" class="sel-clear" id="runSelClear" title="Clear">&#x2715;</button>
         </div>
@@ -730,6 +738,7 @@
         <div class="app-picker-wrap" id="optAppPickerWrap" style="margin-bottom:.75rem">
           <div class="app-picker-selected hidden" id="optAppSelected">
             <img class="sel-logo" id="optSelLogo" alt="">
+            <span class="sel-logo-ph hidden" id="optSelLogoPh"></span>
             <span class="sel-name" id="optSelName"></span>
             <button type="button" class="sel-clear" id="optSelClear" title="Clear">&#x2715;</button>
           </div>
@@ -804,6 +813,7 @@
         <div class="app-picker-wrap" id="prepAppPickerWrap" style="margin-bottom:.75rem">
           <div class="app-picker-selected hidden" id="prepAppSelected">
             <img class="sel-logo" id="prepSelLogo" alt="">
+            <span class="sel-logo-ph hidden" id="prepSelLogoPh"></span>
             <span class="sel-name" id="prepSelName"></span>
             <button type="button" class="sel-clear" id="prepSelClear" title="Clear">&#x2715;</button>
           </div>
@@ -1041,8 +1051,13 @@
     if (fallback && img.src !== fallback) {
       img.src = fallback;
     } else if (img.classList.contains('sel-logo')) {
-      // Don't replace sel-logo — it's referenced by closure; just hide it
+      // Hide img, show sibling placeholder — keeps closure reference intact
       img.style.display = 'none';
+      const ph = img.nextElementSibling;
+      if (ph && ph.classList.contains('sel-logo-ph')) {
+        ph.textContent = (img.dataset.company || '?').slice(0, 2).toUpperCase();
+        ph.classList.remove('hidden');
+      }
     } else {
       const ph = document.createElement('div');
       ph.className = img.dataset.phClass || 'app-sugg-logo-ph';
@@ -1145,6 +1160,11 @@
     // Show selected chip — always use proxy to avoid expired signed URLs
     const selLogoSrc = app.domain ? `/api/companies/logo?domain=${encodeURIComponent(app.domain)}` : null;
     const selLogoFallback = '';
+    // Reset placeholder sibling before showing/hiding img
+    const selLogoPh = selLogoEl.nextElementSibling;
+    if (selLogoPh && selLogoPh.classList.contains('sel-logo-ph')) {
+      selLogoPh.classList.add('hidden');
+    }
     if (selLogoSrc) {
       selLogoEl.src = selLogoSrc;
       selLogoEl.dataset.fallback = selLogoFallback;
