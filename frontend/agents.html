@@ -801,6 +801,97 @@
     <button class="btn btn-ghost" id="newOptBtn">&#x2190; New Optimization</button>
   </div>
 
+  <!-- ── Application Questions Form ────────────────────────────── -->
+  <div class="card" id="aqCard">
+    <div class="card-head" id="aqToggle">
+      <h2>Application Questions</h2>
+      <span class="chevron" id="aqChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="aqBody">
+      <div class="field">
+        <label>Application <span class="opt">(required — must have a saved job description)</span></label>
+        <div class="app-picker-wrap" id="aqAppPickerWrap" style="margin-bottom:.75rem">
+          <div class="app-picker-selected hidden" id="aqAppSelected">
+            <img class="sel-logo" id="aqSelLogo" alt="">
+            <span class="sel-logo-ph hidden" id="aqSelLogoPh"></span>
+            <span class="sel-name" id="aqSelName"></span>
+            <button type="button" class="sel-clear" id="aqSelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="aqAppInputRow">
+            <input type="text" id="aqAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="aqAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="aqJdStatus"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="aqQuestion">Application Question</label>
+        <textarea id="aqQuestion" rows="3"
+          placeholder="Paste the question from the application form…"></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="aqTone">Tone</label>
+          <select id="aqTone">
+            <option value="professional">Professional</option>
+            <option value="conversational">Conversational</option>
+            <option value="technical">Technical</option>
+            <option value="concise">Concise</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="aqCharLimit">Character Limit <span class="opt">(optional)</span></label>
+          <input id="aqCharLimit" type="number" min="50" step="50" placeholder="e.g. 500">
+        </div>
+      </div>
+      <button class="btn" type="button" id="aqSubmitBtn">Generate Answer</button>
+      <div class="inline-err" id="aqFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── AQ Progress ─────────────────────────────────────────── -->
+  <div class="card hidden" id="aqProgressCard">
+    <div class="progress-header">
+      <h2>Application Questions</h2>
+      <span class="badge badge-running" id="aqBadge">Running</span>
+    </div>
+    <div class="log" id="aqLog"></div>
+    <div class="inline-err" id="aqErr"></div>
+  </div>
+
+  <!-- ── AQ Clarification ───────────────────────────────────── -->
+  <div class="card hidden" id="aqClarifyCard">
+    <div class="progress-header">
+      <h2>Application Questions</h2>
+      <span class="badge badge-running">Follow-up</span>
+    </div>
+    <p style="color:var(--muted);margin:0 0 1rem">The agent needs a bit more context before answering:</p>
+    <div id="aqClarifyFields"></div>
+    <button class="btn" type="button" id="aqClarifySubmitBtn">Submit Answers</button>
+  </div>
+
+  <!-- ── AQ Results ──────────────────────────────────────────── -->
+  <div class="card hidden" id="aqResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="aqResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="aqResRole"></span>
+      </div>
+    </div>
+    <div class="field" style="margin-top:1rem">
+      <label>Answer <span id="aqCharCount" style="font-weight:normal"></span></label>
+      <textarea id="aqAnswerText" rows="8" style="font-family:inherit;font-size:.925rem;line-height:1.5"></textarea>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+      <button class="btn" type="button" id="aqCopyBtn">&#x1f4cb; Copy to Clipboard</button>
+      <span id="aqCopiedMsg" style="color:var(--success);font-size:.85rem;display:none">Copied!</span>
+    </div>
+    <div id="aqFollowUps" style="margin-bottom:1rem"></div>
+    <button class="btn btn-ghost" type="button" id="aqNewBtn">&#x2190; Ask Another Question</button>
+  </div>
+
   <!-- ── Interview Prep Form ──────────────────────────────────── -->
   <div class="card" id="prepCard">
     <div class="card-head" id="prepToggle">
@@ -928,6 +1019,7 @@
     await loadAllApps();
     const runPicker = initRunPicker();
     initOptimizePicker();
+    initAQPicker();
     initPrepPicker();
 
     // Handle ?app_id=&autorun=1 redirect from the tracker's "run agent now?" prompt
@@ -1304,6 +1396,34 @@
         document.getElementById('prepCompany').value = '';
         document.getElementById('prepRole').value    = '';
         _prepJobPosting = '';
+      },
+    });
+  }
+
+  // ── AQ form picker ───────────────────────────────────────────────
+  let _aqAppId          = null;
+  let _aqJobPosting     = '';
+  let _aqLinkedFolderId = null;
+
+  function initAQPicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('aqAppSearch'),
+      suggestionsEl: document.getElementById('aqAppSuggestions'),
+      selectedEl:    document.getElementById('aqAppSelected'),
+      selLogoEl:     document.getElementById('aqSelLogo'),
+      selNameEl:     document.getElementById('aqSelName'),
+      selClearEl:    document.getElementById('aqSelClear'),
+      inputRowEl:    document.getElementById('aqAppInputRow'),
+      jdStatusEl:    document.getElementById('aqJdStatus'),
+      onSelect: (app, jd) => {
+        _aqAppId = app.id;
+        _aqLinkedFolderId = (app.linked_runs || [])[0]?.gdrive_folder_id || null;
+        if (jd) _aqJobPosting = jd;
+      },
+      onClear: () => {
+        _aqAppId = null;
+        _aqLinkedFolderId = null;
+        _aqJobPosting = '';
       },
     });
   }
@@ -1767,6 +1887,254 @@
     hide('optProgressCard');
     document.getElementById('optLog').textContent = '';
     document.getElementById('optInstruction').value = '';
+  });
+
+  // ── Application Questions ─────────────────────────────────────────
+
+  let _aqCompanyCtx = '';
+  let _aqRoleCtx    = '';
+  let _aqCurrentId  = null;
+
+  // Collapsible toggle
+  document.getElementById('aqToggle').addEventListener('click', () => {
+    const body    = document.getElementById('aqBody');
+    const chevron = document.getElementById('aqChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) {
+      body.classList.add('hidden');
+      chevron.classList.remove('open');
+    } else {
+      body.classList.remove('hidden');
+      chevron.classList.add('open');
+    }
+  });
+
+  function setAQBadge(status) {
+    const b = document.getElementById('aqBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  function updateAQCharCount() {
+    const text  = document.getElementById('aqAnswerText').value;
+    const limit = parseInt(document.getElementById('aqCharLimit').value) || null;
+    const el    = document.getElementById('aqCharCount');
+    if (!limit) {
+      el.textContent = `(${text.length} chars)`;
+      el.style.color = 'var(--muted)';
+    } else {
+      el.textContent = `(${text.length} / ${limit} chars)`;
+      el.style.color = text.length <= limit ? 'var(--success)' : 'var(--danger, #e53e3e)';
+    }
+  }
+
+  // Submit AQ
+  document.getElementById('aqSubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('aqFormErr');
+    errEl.style.display = 'none';
+
+    const question  = document.getElementById('aqQuestion').value.trim();
+    const tone      = document.getElementById('aqTone').value;
+    const charLimit = parseInt(document.getElementById('aqCharLimit').value) || null;
+
+    if (!_aqAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('aqAppSearch').focus();
+      return;
+    }
+
+    const jd = _aqJobPosting;
+    if (!jd) {
+      errEl.textContent = 'No job description found for this application. Run the resume agent first to save one.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (!question) {
+      errEl.textContent = 'Enter the application question.';
+      errEl.style.display = 'block';
+      document.getElementById('aqQuestion').focus();
+      return;
+    }
+
+    // Derive company/role from the selected app
+    const selApp = _allApps.find(a => a.id === _aqAppId);
+    const company = selApp?.company || '';
+    const role    = selApp?.role_title || '';
+    _aqCompanyCtx = company;
+    _aqRoleCtx    = role;
+
+    document.getElementById('aqLog').textContent = '';
+    document.getElementById('aqErr').style.display = 'none';
+    hide('aqResultsCard');
+    hide('aqClarifyCard');
+    show('aqProgressCard');
+    setAQBadge('running');
+    const btn = document.getElementById('aqSubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Generating…';
+
+    let aq_id;
+    try {
+      const res = await apiFetch('/api/aq', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          question, job_posting: jd, company, role, tone,
+          char_limit: charLimit,
+          ...((_aqAppId) ? { app_id: _aqAppId } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const data = await res.json();
+      aq_id = data.aq_id;
+      _aqCurrentId = aq_id;
+      if (data.machine_id) document.cookie = `fly-force-instance-id=${data.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      document.getElementById('aqLog').textContent += '❌ Failed to start: ' + err.message + '\n';
+      setAQBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Generate Answer';
+      return;
+    }
+
+    const aqLog = document.getElementById('aqLog');
+    const es = new EventSource(`/api/aq/${aq_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        aqLog.textContent += msg.message + '\n';
+        aqLog.scrollTop = aqLog.scrollHeight;
+
+      } else if (msg.type === 'clarification') {
+        // Show clarification UI
+        showAQClarification(aq_id, msg.questions);
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setAQBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Generate Answer';
+        showAQResults(msg);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setAQBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Answer';
+        document.getElementById('aqErr').textContent = '❌ ' + msg.message;
+        document.getElementById('aqErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('aqBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setAQBadge('error');
+      aqLog.textContent += '\n⚠ Connection lost.';
+      btn.disabled = false;
+      btn.textContent = 'Generate Answer';
+    };
+  });
+
+  function showAQClarification(aq_id, questions) {
+    const container = document.getElementById('aqClarifyFields');
+    container.innerHTML = '';
+    questions.forEach((q, i) => {
+      const div = document.createElement('div');
+      div.className = 'field';
+      div.innerHTML = `<label>${esc(q)}</label><textarea rows="2" id="aqClarifyA${i}" placeholder="Your answer…"></textarea>`;
+      container.appendChild(div);
+    });
+    show('aqClarifyCard');
+
+    // Store questions for mapping answers back
+    document.getElementById('aqClarifySubmitBtn').onclick = async () => {
+      const answers = {};
+      questions.forEach((q, i) => {
+        const val = document.getElementById(`aqClarifyA${i}`).value.trim();
+        if (val) answers[q] = val;
+      });
+      if (Object.keys(answers).length === 0) return;
+
+      const cbtn = document.getElementById('aqClarifySubmitBtn');
+      cbtn.disabled  = true;
+      cbtn.innerHTML = '<span class="spin"></span> Submitting…';
+
+      try {
+        const res = await apiFetch(`/api/aq/${aq_id}/clarify`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ answers }),
+        });
+        if (!res.ok) throw new Error((await res.json()).detail ?? 'Failed');
+        hide('aqClarifyCard');
+      } catch (err) {
+        cbtn.disabled = false;
+        cbtn.textContent = 'Submit Answers';
+      }
+    };
+  }
+
+  function showAQResults(msg) {
+    show('aqResultsCard');
+    document.getElementById('aqResultsCard').classList.add('results-appear');
+    document.getElementById('aqResCompany').textContent = _aqCompanyCtx;
+    document.getElementById('aqResRole').textContent    = _aqRoleCtx;
+
+    const textarea = document.getElementById('aqAnswerText');
+    textarea.value = msg.answer;
+    textarea.addEventListener('input', updateAQCharCount);
+    updateAQCharCount();
+
+    // Follow-up chips
+    const fuContainer = document.getElementById('aqFollowUps');
+    fuContainer.innerHTML = '';
+    if (msg.follow_ups && msg.follow_ups.length) {
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:.85rem;color:var(--muted);margin-bottom:.5rem';
+      label.textContent = 'Suggestions for refinement:';
+      fuContainer.appendChild(label);
+      msg.follow_ups.forEach(fu => {
+        const chip = document.createElement('button');
+        chip.className = 'btn btn-ghost';
+        chip.style.cssText = 'font-size:.85rem;margin:.25rem .25rem 0 0;padding:.25rem .75rem';
+        chip.textContent = fu;
+        chip.addEventListener('click', () => {
+          const qEl = document.getElementById('aqQuestion');
+          qEl.value = qEl.value.trim() + '\n\nAdditional context: ' + fu;
+          hide('aqResultsCard');
+          document.getElementById('aqSubmitBtn').click();
+        });
+        fuContainer.appendChild(chip);
+      });
+    }
+  }
+
+  // Copy to clipboard
+  document.getElementById('aqCopyBtn').addEventListener('click', () => {
+    const text = document.getElementById('aqAnswerText').value;
+    navigator.clipboard.writeText(text).then(() => {
+      const msg = document.getElementById('aqCopiedMsg');
+      msg.style.display = 'inline';
+      setTimeout(() => { msg.style.display = 'none'; }, 2000);
+    });
+  });
+
+  // Ask Another
+  document.getElementById('aqNewBtn').addEventListener('click', () => {
+    document.getElementById('aqResultsCard').classList.remove('results-appear');
+    hide('aqResultsCard');
+    hide('aqClarifyCard');
+    hide('aqProgressCard');
+    document.getElementById('aqLog').textContent = '';
+    document.getElementById('aqQuestion').value = '';
+    document.getElementById('aqFollowUps').innerHTML = '';
   });
 
   // ── Interview Prep ────────────────────────────────────────────────

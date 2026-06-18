@@ -178,6 +178,34 @@ class InterviewPrepResult:
 
 
 @dataclass
+class AppQuestionConfig:
+    """Settings for answering a job application question."""
+    question:       str
+    job_posting:    str
+    company:        str
+    role:           str
+    tone:           str                    = "professional"
+    char_limit:     int | None             = None
+    clarifications: dict | None            = None
+    model:          str                    = DEFAULT_MODEL
+    progress:       Callable[[str], None]  = field(default=print)
+    profile_text:   str | None             = None
+    master_resume:  Path | None            = None
+    user_id:        str | None             = None
+    user_label:     str | None             = None
+
+
+@dataclass
+class AppQuestionResult:
+    """Result from answering an application question."""
+    answer:                  str
+    char_count:              int
+    follow_ups:              list[str]
+    needs_clarification:     bool       = False
+    clarification_questions: list[str]  = field(default_factory=list)
+
+
+@dataclass
 class OptimizeConfig:
     """Settings for optimizing an existing run's documents in place."""
     folder_id:             str                    # Drive run folder to optimize
@@ -2687,6 +2715,179 @@ Return ONLY a JSON object with exactly these keys:
 }
 
 No preamble, no markdown fences."""
+
+
+AQ_SYSTEM = """\
+You are a job application assistant. The candidate is applying for a role and needs
+to answer an application question. Write in first person as the candidate. Your job
+is to craft an authentic, specific answer grounded in the candidate's actual resume
+and profile — never invent experience or numbers.
+
+Tone rules:
+- First person, direct, no corporate filler
+- Never start with "I am excited to..." or "I am passionate about..."
+- No "leverage", "synergy", "results-driven", "passion for"
+- Specific > general. Quantified > vague. Honest > impressive-sounding.
+- Write like the candidate talks, not like a LinkedIn summary
+
+You will be given the candidate's resume, profile/voice guide, and the job description
+for context. Use them to tailor the answer to the specific role."""
+
+
+def generate_app_question_answer(config: AppQuestionConfig) -> AppQuestionResult:
+    """Generate an answer to a job application question.
+
+    Phase 1: Assess whether the question can be answered well with available context.
+              If not, return clarification questions.
+    Phase 2: Generate the answer (called again with clarifications if needed).
+    """
+    wfc = WorkflowConfig(
+        model=config.model,
+        progress=config.progress,
+        master_resume=config.master_resume,
+        profile_text=config.profile_text,
+        user_id=config.user_id,
+        user_label=config.user_label,
+    )
+
+    config.progress("\n\U0001f4dd Application Question Agent")
+    config.progress(f"   Company : {config.company}")
+    config.progress(f"   Role    : {config.role}")
+    config.progress(f"   Tone    : {config.tone}")
+    if config.char_limit:
+        config.progress(f"   Limit   : {config.char_limit} characters")
+
+    # Read inputs
+    config.progress("  Reading inputs…")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise WorkflowError("ANTHROPIC_API_KEY environment variable not set")
+    resume_text = extract_resume_text(wfc)
+    profile = wfc.profile_text if wfc.profile_text is not None else read_file(PROFILE_FILE)
+    config.progress(
+        f"  ✓ Inputs loaded "
+        f"({len(resume_text)} chars resume, {len(profile)} chars profile)"
+    )
+
+    tone_instructions = {
+        "professional": "Write in a polished, professional tone — confident but not stiff.",
+        "conversational": "Write in a warm, conversational tone — approachable and genuine.",
+        "technical": "Write in a precise, technical tone — emphasize depth and specifics.",
+        "concise": "Write as concisely as possible — every word must earn its place.",
+    }
+    tone_note = tone_instructions.get(config.tone, tone_instructions["professional"])
+
+    char_limit_note = ""
+    if config.char_limit:
+        char_limit_note = (
+            f"\n\nIMPORTANT: The answer MUST be {config.char_limit} characters or fewer "
+            f"(including spaces). Count carefully. This is a hard limit enforced by the "
+            f"application form."
+        )
+
+    clarification_context = ""
+    if config.clarifications:
+        clarification_context = "\n\nThe candidate provided these additional details:\n"
+        for q, a in config.clarifications.items():
+            clarification_context += f"- Q: {q}\n  A: {a}\n"
+
+    prompt = f"""Job Description:
+---
+{config.job_posting}
+---
+
+Candidate Resume:
+---
+{resume_text[:6000]}
+---
+
+Candidate Profile & Voice Guide:
+---
+{profile[:4000]}
+---
+
+Application Question:
+---
+{config.question}
+---
+{clarification_context}
+Tone: {tone_note}{char_limit_note}
+
+Instructions:
+1. First, assess whether you have enough context from the resume, profile, and job
+   description to write a strong, specific answer to this question. Consider:
+   - Does the question ask about a specific experience you can find in the resume?
+   - Is the question open-ended enough that you need to know which angle to take?
+   - Would knowing the candidate's preference help (e.g., which project to highlight)?
+
+2. If you do NOT have enough context, return:
+{{
+  "needs_clarification": true,
+  "clarification_questions": ["<question 1>", "<question 2>"],
+  "draft_answer": null,
+  "follow_ups": []
+}}
+   Keep clarification questions to 2-3 max. Be specific about what you need.
+
+3. If you DO have enough context (or clarifications were provided), write the answer and return:
+{{
+  "needs_clarification": false,
+  "clarification_questions": [],
+  "draft_answer": "<the complete answer>",
+  "follow_ups": ["<optional suggestion 1>", "<optional suggestion 2>"]
+}}
+   Follow-ups are optional refinement suggestions (e.g., "Want me to emphasize the
+   technical leadership angle more?" or "I could swap in your eHealth migration story instead").
+
+Return ONLY a JSON object. No preamble, no markdown fences."""
+
+    if config.clarifications:
+        config.progress("  Generating answer with your clarifications…")
+    else:
+        config.progress("  Analyzing question…")
+
+    raw = claude(AQ_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    data = _parse_claude_json(raw)
+
+    needs_clarification = data.get("needs_clarification", False)
+    answer = data.get("draft_answer") or ""
+    clarification_questions = data.get("clarification_questions", [])
+    follow_ups = data.get("follow_ups", [])
+
+    if needs_clarification and not config.clarifications:
+        config.progress("  ❓ Need more context — asking follow-up questions")
+        return AppQuestionResult(
+            answer="",
+            char_count=0,
+            follow_ups=[],
+            needs_clarification=True,
+            clarification_questions=clarification_questions,
+        )
+
+    # Enforce character limit with a trim pass if needed
+    if config.char_limit and len(answer) > config.char_limit:
+        config.progress(
+            f"  ✂ Answer is {len(answer)} chars, trimming to {config.char_limit}…"
+        )
+        trim_prompt = (
+            f"The following answer must be shortened to EXACTLY {config.char_limit} "
+            f"characters or fewer (currently {len(answer)} chars). Preserve the key "
+            f"points and tone. Return ONLY the shortened text, nothing else.\n\n{answer}"
+        )
+        answer = claude(
+            "You shorten text to fit character limits. Return only the shortened text.",
+            trim_prompt,
+            max_tokens=4096,
+            config=wfc,
+        ).strip()
+
+    char_count = len(answer)
+    config.progress(f"  ✓ Answer generated ({char_count} characters)")
+
+    return AppQuestionResult(
+        answer=answer,
+        char_count=char_count,
+        follow_ups=follow_ups,
+    )
 
 
 def _parse_claude_json(raw: str) -> dict:

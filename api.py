@@ -123,6 +123,8 @@ try:
         OUTPUT_DIR,
         PROFILE_FILE,
         ROUND_TYPES,
+        AppQuestionConfig,
+        AppQuestionResult,
         InterviewPrepConfig,
         InterviewPrepResult,
         OptimizeConfig,
@@ -130,6 +132,7 @@ try:
         WorkflowConfig,
         WorkflowError,
         WorkflowResult,
+        generate_app_question_answer,
         generate_interview_prep,
         optimize_run,
         claude,
@@ -1498,9 +1501,10 @@ def _invalidate_user_cache(user_id: str) -> None:
 # In-memory stores
 # ---------------------------------------------------------------------------
 
-_runs:          dict[str, dict[str, Any]] = {}
-_preps:         dict[str, dict[str, Any]] = {}
-_optimizations: dict[str, dict[str, Any]] = {}
+_runs:           dict[str, dict[str, Any]] = {}
+_preps:          dict[str, dict[str, Any]] = {}
+_optimizations:  dict[str, dict[str, Any]] = {}
+_app_questions:  dict[str, dict[str, Any]] = {}
 _MAX_ACTIVE_RUNS_PER_USER = 5  # cap in-flight + queued entries per user
 
 # Per-user locks so concurrent runs from different users don't block each other.
@@ -1582,7 +1586,7 @@ def _worker_thread(
 def _evict_stale() -> None:
     """Remove completed/errored runs and preps older than _RUN_TTL."""
     cutoff = time.time() - _RUN_TTL
-    for store in (_runs, _preps, _optimizations):
+    for store in (_runs, _preps, _optimizations, _app_questions):
         stale = [
             k for k, v in store.items()
             if v.get("status") in ("done", "error")
@@ -1647,6 +1651,21 @@ class PrepRequest(BaseModel):
     interviewer: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
+
+class AQRequest(BaseModel):
+    question: str
+    job_posting: str
+    company: str
+    role: str
+    tone: str = "professional"
+    char_limit: int | None = None
+    app_id: str | None = None
+    model: str | None = None
+
+
+class AQClarifyRequest(BaseModel):
+    answers: dict[str, str]
+
 
 _MAX_OPTIMIZE_INSTRUCTION_LEN = 4000
 
@@ -2588,6 +2607,190 @@ async def get_prep_file(prep_id: str, filename: str, request: Request):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+# ---------------------------------------------------------------------------
+# Application Questions endpoints
+# ---------------------------------------------------------------------------
+
+_AQ_VALID_TONES = {"professional", "conversational", "technical", "concise"}
+
+
+@app.post("/api/aq")
+async def create_aq(req: AQRequest, request: Request, response: Response):
+    user_data = _require_user(request)
+    if user_data.get("role") == "admin":
+        raise HTTPException(403, "Admin accounts cannot create AQ runs")
+    user_id = user_data["user_id"]
+
+    _evict_stale()
+
+    if req.tone not in _AQ_VALID_TONES:
+        raise HTTPException(400, f"tone must be one of: {', '.join(sorted(_AQ_VALID_TONES))}")
+
+    resume_bytes = storage.get_resume(user_id)
+    if not resume_bytes:
+        raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+
+    profile_text = storage.get_profile(user_id)
+    if not profile_text:
+        raise HTTPException(400, "No profile guide saved. Add one in your profile.")
+
+    active_count = sum(1 for a in _app_questions.values()
+                       if a.get("user_id") == user_id and a.get("status") not in ("done", "error"))
+    if active_count >= _MAX_ACTIVE_RUNS_PER_USER:
+        raise HTTPException(429, "Too many active AQ runs. Wait for an existing run to finish.")
+
+    aq_id = str(uuid.uuid4())
+    q: Queue[dict | None] = Queue()
+    clarify_event = threading.Event()
+    _app_questions[aq_id] = {
+        "queue": q, "status": "queued", "result": None, "error": None,
+        "user_id": user_id, "clarify_event": clarify_event, "clarify_answers": None,
+    }
+    user_audit.log(user_id, "aq_started", user_data["email"], _client_ip(request),
+                   aq_id=aq_id, company=req.company, role=req.role)
+
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
+
+    def _aq_worker():
+        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False, dir="/tmp")
+        tmp.write(resume_bytes)
+        tmp.close()
+        resume_path = Path(tmp.name)
+
+        try:
+            with _get_user_lock(user_id):
+                _app_questions[aq_id]["status"] = "running"
+
+                def progress(msg: str):
+                    q.put({"type": "progress", "message": msg})
+
+                try:
+                    # Phase 1: analyze and possibly ask for clarification
+                    config = AppQuestionConfig(
+                        question=req.question,
+                        job_posting=req.job_posting,
+                        company=req.company,
+                        role=req.role,
+                        tone=req.tone,
+                        char_limit=req.char_limit,
+                        model=req.model or _get_active_model(),
+                        progress=progress,
+                        master_resume=resume_path,
+                        profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
+                        user_id=user_id,
+                        user_label=user_data["email"],
+                    )
+                    result = generate_app_question_answer(config)
+
+                    if result.needs_clarification:
+                        q.put({
+                            "type": "clarification",
+                            "questions": result.clarification_questions,
+                        })
+                        progress("  ⏳ Waiting for your answers…")
+                        if not clarify_event.wait(timeout=300):
+                            raise WorkflowError("Clarification timed out — no response received within 5 minutes.")
+
+                        # Phase 2: re-run with clarification answers
+                        answers = _app_questions[aq_id].get("clarify_answers") or {}
+                        config.clarifications = answers
+                        progress("  Generating answer with your clarifications…")
+                        result = generate_app_question_answer(config)
+
+                    _app_questions[aq_id]["result"] = result
+                    _app_questions[aq_id]["status"] = "done"
+                    _app_questions[aq_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "aq_completed", user_data["email"],
+                                   aq_id=aq_id, company=req.company, role=req.role)
+                    q.put({
+                        "type": "done",
+                        "aq_id": aq_id,
+                        "answer": result.answer,
+                        "char_count": result.char_count,
+                        "follow_ups": result.follow_ups,
+                        "app_id": req.app_id,
+                    })
+                except WorkflowError as exc:
+                    _app_questions[aq_id]["status"] = "error"
+                    _app_questions[aq_id]["error"] = str(exc)
+                    _app_questions[aq_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "aq_failed", user_data["email"],
+                                   error=str(exc), aq_id=aq_id, company=req.company, role=req.role)
+                    q.put({"type": "error", "message": str(exc)})
+                except Exception as exc:
+                    msg = f"Unexpected error: {type(exc).__name__}: {exc}"
+                    logger.exception("Unexpected error in AQ %s", aq_id)
+                    _app_questions[aq_id]["status"] = "error"
+                    _app_questions[aq_id]["error"] = msg
+                    _app_questions[aq_id]["_finished_at"] = time.time()
+                    user_audit.log(user_id, "aq_failed", user_data["email"],
+                                   error=msg, aq_id=aq_id, company=req.company, role=req.role)
+                    q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
+                finally:
+                    q.put(None)
+        finally:
+            resume_path.unlink(missing_ok=True)
+
+    threading.Thread(target=_aq_worker, daemon=True).start()
+    return {"aq_id": aq_id, "machine_id": FLY_MACHINE_ID or None}
+
+
+@app.post("/api/aq/{aq_id}/clarify")
+async def clarify_aq(aq_id: str, req: AQClarifyRequest, request: Request):
+    user_data = _require_user(request)
+    entry = _app_questions.get(aq_id)
+    if not entry:
+        raise HTTPException(404, "AQ run not found")
+    if entry.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+    if entry.get("status") != "running":
+        raise HTTPException(400, "AQ run is not awaiting clarification")
+    entry["clarify_answers"] = req.answers
+    entry["clarify_event"].set()
+    return {"status": "ok"}
+
+
+@app.get("/api/aq/{aq_id}/stream")
+async def stream_aq(aq_id: str, request: Request):
+    user_data = _require_user(request)
+    if aq_id not in _app_questions:
+        raise HTTPException(404, "AQ run not found")
+    if _app_questions[aq_id].get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    q    = _app_questions[aq_id]["queue"]
+    loop = asyncio.get_running_loop()
+
+    async def generate():
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: q.get(timeout=30))
+            except Empty:
+                yield ": keepalive\n\n"
+                continue
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/aq/{aq_id}/status")
+async def aq_status(aq_id: str, request: Request):
+    user_data = _require_user(request)
+    entry = _app_questions.get(aq_id)
+    if not entry:
+        raise HTTPException(404, "AQ run not found")
+    if entry.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+    return {"aq_id": aq_id, "status": entry["status"], "error": entry.get("error")}
 
 
 # ---------------------------------------------------------------------------
