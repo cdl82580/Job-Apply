@@ -19,12 +19,6 @@
         "description": "Run a test suite: unit | api | slack | all | ui-anon | ui | ui-admin",
         "usage_hint": "[unit | api | slack | all | ui-anon | ui | ui-admin]",
         "should_escape": false
-      },
-      {
-        "command": "/test-status",
-        "description": "Check if a test run is currently in progress",
-        "usage_hint": "",
-        "should_escape": false
       }
     ]
   },
