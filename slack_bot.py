@@ -20,11 +20,11 @@ Environment variables (optional):
 
 Slash commands handled:
   /apply           — generate resume + cover letter for a job
+  /aq              — answer an application question using resume & JD
   /prep            — generate interview prep doc
   /optimize        — refine an existing run's documents from a prompt
   /rescore         — re-score resume/JD match for an application
   /runs            — list recent Drive run folders
-  /jobstatus       — check API health
 
   /cal-today       — show today's calendar events
   /cal-week        — show events in the next 7 days
@@ -42,7 +42,6 @@ Slash commands handled:
 
   /company         — search company info via Logo.dev
   /whoami          — show account details
-  /activity        — show 10 most recent audit events
 
   /profile-resume  — upload a new master resume (.docx via DM file upload)
   /profile-guide   — edit profile & voice guide (modal)
@@ -168,6 +167,40 @@ def _poll_prep(prep_id: str, timeout: int = 300) -> dict:
             return data
         time.sleep(5)
     return {"status": "timeout", "error": "Timed out waiting for prep to complete"}
+
+
+def _post_aq(question: str, job_posting: str, company: str, role: str,
+             tone: str = "professional", char_limit: int | None = None) -> dict:
+    payload: dict = {
+        "question": question,
+        "job_posting": job_posting,
+        "company": company,
+        "role": role,
+        "tone": tone,
+    }
+    if char_limit:
+        payload["char_limit"] = char_limit
+    r = _api("post", "/api/aq", json=payload)
+    r.raise_for_status()
+    return r.json()
+
+
+def _poll_aq(aq_id: str, timeout: int = 300) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = _api("get", f"/api/aq/{aq_id}/status")
+        r.raise_for_status()
+        data = r.json()
+        if data["status"] in ("done", "error"):
+            return data
+        time.sleep(5)
+    return {"status": "timeout", "error": "Timed out waiting for answer to complete"}
+
+
+def _submit_aq_clarifications(aq_id: str, answers: dict[str, str]) -> dict:
+    r = _api("post", f"/api/aq/{aq_id}/clarify", json={"answers": answers})
+    r.raise_for_status()
+    return r.json()
 
 
 # ---------------------------------------------------------------------------
@@ -1251,66 +1284,135 @@ def prep_view_submit(ack, body, client, view):
 
 
 # ---------------------------------------------------------------------------
-# /jobstatus — check API health
+# /aq — Application Questions
 # ---------------------------------------------------------------------------
 
-@app.command("/jobstatus")
-def jobstatus_command(ack, respond):
+@app.command("/aq")
+def aq_command(ack, body, client):
     ack()
-
-    def _icon(val: str) -> str:
-        if val in ("ok", "configured"):
-            return ":white_check_mark:"
-        if val == "not_configured":
-            return ":grey_question:"
-        if str(val).startswith("error"):
-            return ":x:"
-        return ":white_check_mark:"  # model name or machine ID — just show it
-
-    try:
-        t0 = time.time()
-        r  = requests.get(f"{API_BASE}/api/health", timeout=10)
-        latency_ms = int((time.time() - t0) * 1000)
-        r.raise_for_status()
-        d = r.json()
-    except Exception as exc:
-        respond(f":x: *Health check failed* — `{exc}`")
-        return
-
-    overall     = d.get("status", "?")
-    overall_icon = ":white_check_mark:" if overall == "ok" else ":warning:"
-
-    rows = [
-        ("Storage (Tigris)",   d.get("storage",   "?")),
-        ("Email (Resend)",     d.get("email",      "?")),
-        ("Google Drive",       d.get("gdrive",     "?")),
-        ("Anthropic API key",  d.get("anthropic",  "?")),
-        ("Active model",       d.get("model",      "?")),
-        ("Fly machine",        d.get("fly_machine","?")),
-        ("Fly app",            d.get("fly_app",    "?")),
-        ("API latency",        f"{latency_ms} ms"),
-    ]
-
-    lines = "\n".join(
-        f"{_icon(str(val))}  *{label}:*  `{val}`"
-        for label, val in rows
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "aq_submit",
+            "title": {"type": "plain_text", "text": "Application Question"},
+            "submit": {"type": "plain_text", "text": "Generate Answer"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "company",
+                    "label": {"type": "plain_text", "text": "Company name"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "role",
+                    "label": {"type": "plain_text", "text": "Role title"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "question",
+                    "label": {"type": "plain_text", "text": "Application question"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "multiline": True,
+                                "placeholder": {"type": "plain_text", "text": "Paste the question from the application form…"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "tone",
+                    "label": {"type": "plain_text", "text": "Tone"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "value",
+                        "initial_option": {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                            {"text": {"type": "plain_text", "text": "Conversational"}, "value": "conversational"},
+                            {"text": {"type": "plain_text", "text": "Technical"}, "value": "technical"},
+                            {"text": {"type": "plain_text", "text": "Concise"}, "value": "concise"},
+                        ],
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "char_limit",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Character limit (optional)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "e.g. 500"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "job_posting",
+                    "label": {"type": "plain_text", "text": "Job posting (paste full text)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "multiline": True,
+                                "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
+                },
+            ],
+        },
     )
 
-    blocks = [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": f"{'✅' if overall == 'ok' else '⚠️'}  Job Apply — Service Health"},
-        },
-        {
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": lines},
-        },
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"Overall status: *{overall}*  ·  <{API_BASE}|{API_BASE}>"}],
-        },
-    ]
-    respond(blocks=blocks, text=f"Service health: {overall}")
+
+@app.view("aq_submit")
+def aq_view_submit(ack, body, client, view):
+    ack()
+    vals        = view["state"]["values"]
+    company     = vals["company"]["value"]["value"].strip()
+    role        = vals["role"]["value"]["value"].strip()
+    question    = vals["question"]["value"]["value"].strip()
+    tone        = vals["tone"]["value"]["selected_option"]["value"]
+    char_raw    = (vals["char_limit"]["value"]["value"] or "").strip()
+    char_limit  = int(char_raw) if char_raw.isdigit() else None
+    job_posting = vals["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+
+    def _run():
+        client.chat_postMessage(
+            channel=channel,
+            text=f":pencil: Answering application question for *{role}* at *{company}*…",
+        )
+        try:
+            aq_data = _post_aq(question, job_posting, company, role, tone, char_limit)
+            aq_id   = aq_data["aq_id"]
+
+            # Poll — the agent may ask for clarification mid-run.
+            # In Slack we skip the interactive clarification flow and just let
+            # the agent answer with best-effort (clarification timeout → it
+            # generates anyway on second pass). For interactive clarification,
+            # use the web app.
+            status = _poll_aq(aq_id)
+        except Exception as exc:
+            client.chat_postMessage(channel=channel, text=f":x: Error: {exc}")
+            return
+
+        if status["status"] == "done":
+            # Fetch the answer from the SSE done event — it's stored in the
+            # status result on the server. We'll re-poll to get it.
+            # The answer text isn't in /status, so we direct users to the app.
+            client.chat_postMessage(
+                channel=channel,
+                text=(
+                    f":white_check_mark: *Application question answered* for *{role} @ {company}*\n"
+                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy your answer."
+                ),
+            )
+        elif status["status"] == "timeout":
+            client.chat_postMessage(
+                channel=channel,
+                text=f":warning: Answer is taking longer than expected. Check <{API_BASE}|the app> for status.",
+            )
+        else:
+            client.chat_postMessage(
+                channel=channel,
+                text=f":x: Failed: {status.get('error', 'Unknown error')}",
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -1371,40 +1473,6 @@ def runs_command(ack, respond):
     if len(runs) > 10:
         lines.append(f"_…and {len(runs) - 10} more — <{API_BASE}|open the app> to see all._")
     respond(header + "\n" + "\n".join(lines))
-
-
-# ---------------------------------------------------------------------------
-# /activity — recent personal audit events
-# ---------------------------------------------------------------------------
-
-@app.command("/activity")
-def activity_command(ack, respond):
-    ack()
-    try:
-        r = _api("get", "/api/audit/me")
-        r.raise_for_status()
-        events = r.json()[:10]
-    except Exception as exc:
-        respond(f":x: Could not load activity: {exc}")
-        return
-
-    if not events:
-        respond("No recent activity found.")
-        return
-
-    lines = []
-    for e in events:
-        action = e.get("action", "?")
-        ts     = (e.get("timestamp") or "")[:16].replace("T", " ")
-        det    = e.get("details") or {}
-        det_str = ""
-        if det:
-            first = next(((k, v) for k, v in det.items() if v), None)
-            if first:
-                det_str = f" · `{first[0]}`: {str(first[1])[:50]}"
-        lines.append(f"• `{action}` _{ts}_{det_str}")
-
-    respond(f":scroll: *Your Recent Activity*\n" + "\n".join(lines))
 
 
 # ---------------------------------------------------------------------------
@@ -2604,6 +2672,7 @@ def help_command(ack, respond):
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🤖  Agent Runs*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             "*/apply* — Generate resume, ATS resume & cover letter for a job\n"
+            "*/aq* — Answer an application question using your resume & JD\n"
             "*/prep* — Generate an interview prep document\n"
             "*/optimize* — Refine an existing run's documents from a prompt\n"
             "*/rescore* — Re-score resume/JD match for an application\n"
@@ -2639,8 +2708,7 @@ def help_command(ack, respond):
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🔍  Lookup & Info*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             "*/company `[name]`* — Search company info — logo, domain, description\n"
-            "*/whoami* — Show your account details and verification status\n"
-            "*/activity* — Show your 10 most recent audit events"
+            "*/whoami* — Show your account details and verification status"
         )}},
         {"type": "divider"},
 
@@ -2656,7 +2724,6 @@ def help_command(ack, respond):
         # System
         {"type": "section", "text": {"type": "mrkdwn", "text": "*🛠️  System*"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": (
-            "*/jobstatus* — Check API health and storage status\n"
             "*/help* — Show this command reference"
         )}},
         {"type": "divider"},
@@ -2785,9 +2852,9 @@ def handle_app_home_opened(client, event, logger):
                 "text": (
                     "*/track-update* — Update status\n"
                     "*/track-note* — Add a note\n"
+                    "*/aq* — Answer application questions\n"
                     "*/runs* — Recent Drive run folders\n"
                     "*/whoami* — Account details\n"
-                    "*/jobstatus* — API health\n"
                     "*/help* — Full command reference"
                 ),
             },
@@ -3064,24 +3131,6 @@ def run_tests_command(ack, body, respond, client):
                                     text=f":x: Could not update result message: {exc}")
 
     threading.Thread(target=_worker, daemon=True).start()
-
-
-@app.command("/test-status")
-def test_status_command(ack, body, respond):
-    ack()
-
-    caller_id = body.get("user_id", "")
-    if TEST_RUNNER_SLACK_USER_ID and caller_id != TEST_RUNNER_SLACK_USER_ID:
-        respond(":no_entry: You are not authorised to view test status.")
-        return
-
-    with _test_run_lock:
-        active = _active_test_run
-
-    if active:
-        respond(f":hourglass_flowing_sand: Test run in progress: *{active['suite']}*")
-    else:
-        respond(":white_check_mark: No test run currently active.")
 
 
 # ---------------------------------------------------------------------------
