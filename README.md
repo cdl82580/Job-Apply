@@ -14,6 +14,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **Tailored resume** — styled DOCX with brand colors, targeted bullets, competency grid
 - **ATS resume** — plain single-column DOCX, no tables or text boxes, parser-safe
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
+- **Application Questions** — answer freeform application questions (e.g. "Describe a time you led a cross-functional team") using tailored resume, JD, and profile context; tone selector (professional/conversational/technical/concise), optional character limit, two-phase clarification flow (agent can ask follow-ups before answering), editable answer with copy-to-clipboard and refinement chips
 - **Interview Prep** — compact reference card (0.4" margins, 2-column layout) with 10 sections: elevator pitch (60-second spoken script), interviewer intel, role fit map, gap bridges, dev framework, anchor stories, likely Q&A, questions to ask, differentiating edge, and closing line. Tailored to the interviewer, round type, and focus/slant. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
 - **GitHub portfolio** — FlowShift, task-api, and job-apply repos injected into every prep prompt as additional proof points
 - **JD persistence** — job description saved as `job_description.md` to Google Drive on every run; when a JD is pasted and the run completes the file is written to the output folder and a `job_description` run is linked to the application so it auto-loads on subsequent runs and prep
@@ -142,13 +143,19 @@ job-apply/
 
 1. Go to https://apply.cdlav.us/
 2. Register (email/password or Google) and upload `master.docx` + paste your `profile.md`
-3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; or use **Interview Prep** section for a prep doc
+3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; use **Application Questions** to draft answers to supplemental app questions; or use **Interview Prep** for a prep doc
 4. **Tracker tab** — track applications, add notes, link to agent runs
 5. **Calendar tab** — view and manage interview events and deadlines with Slack/email reminders
 6. **Knowledge Base** (`/kb.html`) — searchable help articles; admin-managed via the KB tab in the admin dashboard
 7. **API Reference** (`/api-docs.html`) — full endpoint browser rendered from the Postman collection, with a ⬇ download button for the collection JSON
 8. **Profile** — update display name, email, password, profile guide (Markdown editor), and resume
 9. Admins are redirected to `/admin.html` automatically
+
+### Application Questions
+- Select an existing tracker application — requires a saved `job_description.md` in the app's Drive folder
+- Paste the question from the application form, choose a tone, and optionally set a character limit
+- The agent may ask clarifying questions before generating (e.g., "Which project should I highlight?") — answer them and it refines
+- Output: editable answer with live character count, copy to clipboard, and follow-up refinement chips
 
 ### Interview Prep
 - Select an existing tracker application — requires a saved `job_description.md` in the app's Drive folder (run the resume agent first if it doesn't exist)
@@ -162,6 +169,7 @@ job-apply/
 | Category | Command | Description |
 |---|---|---|
 | 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter |
+| 🤖 Agent | `/aq` | Answer an application question using your resume & JD |
 | 🤖 Agent | `/prep` | Generate interview prep document |
 | 🤖 Agent | `/optimize` | Refine an existing run's documents from a prompt (picks most recent Drive folder) |
 | 🤖 Agent | `/rescore` | Re-score resume/JD match for an application |
@@ -180,11 +188,9 @@ job-apply/
 | 📋 Tracker | `/track-delete` | Delete an application (two-step confirm) |
 | 🔍 Lookup | `/company [name]` | Search company info via Logo.dev |
 | 🔍 Lookup | `/whoami` | Show your account details |
-| 🔍 Lookup | `/activity` | Show your 10 most recent audit events |
 | 👤 Profile | `/profile-resume` | Instructions for uploading a new master resume via DM |
 | 👤 Profile | `/profile-guide` | Edit your profile & voice guide (modal, pre-filled) |
 | 👤 Profile | `/notifications` | View and toggle email notification preferences |
-| 🛠️ System | `/jobstatus` | Check API health |
 | 🛠️ System | `/help` | Full command reference |
 
 The bot also publishes a dynamic **App Home tab** showing live pipeline stats, upcoming calendar events, and a quick command reference — opens when you click the app's Home tab in Slack.
@@ -268,7 +274,7 @@ The app runs as **two process groups** on Fly.io (defined in `fly.toml`), each s
 
 > **Important:** Keep `web` scaled to exactly 1 machine. Run and prep state is held
 > in-memory; multiple web machines will cause SSE streams to 404 on the wrong instance.
-> If you need to scale, replace the in-memory `_runs`/`_preps` dicts with a shared store (Redis, etc.).
+> If you need to scale, replace the in-memory `_runs`/`_preps`/`_app_questions` dicts with a shared store (Redis, etc.).
 
 Both process groups share the same Docker image and all Fly secrets.
 
@@ -366,6 +372,10 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/prep/{id}/stream` | cookie | SSE prep progress stream |
 | GET | `/api/prep/{id}/status` | cookie | Poll prep status |
 | GET | `/api/prep/{id}/files/{name}` | cookie | Download prep DOCX |
+| POST | `/api/aq` | cookie | Start application question run → returns `{aq_id, machine_id}`; agent may emit `clarification` SSE event |
+| POST | `/api/aq/{id}/clarify` | cookie | Submit clarification answers to unblock a paused AQ run |
+| GET | `/api/aq/{id}/stream` | cookie | SSE stream: `progress`, `clarification`, `done` (answer + char_count + follow_ups), `error` |
+| GET | `/api/aq/{id}/status` | cookie | Poll AQ status |
 | POST | `/api/optimize` | cookie | Optimize an existing run's resume/cover letter in place per a user instruction → returns `{optimize_id, machine_id}`; folder ownership verified via Tigris app records; rate-limited to one active optimize per user |
 | GET | `/api/optimize/{id}/stream` | cookie | SSE optimize progress stream (`done` event includes `change_summary` list + `replacements_warning`) |
 | GET | `/api/optimize/{id}/status` | cookie | Poll optimize status: `queued | running | done | error` |
