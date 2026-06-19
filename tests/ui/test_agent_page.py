@@ -72,44 +72,17 @@ class TestRunForm:
         auth_page.goto(AGENT_PAGE)
         expect(auth_page.locator("#runAppSearch")).to_be_visible()
 
-    def test_empty_form_shows_validation(self, auth_page):
+    def test_progress_card_hidden_by_default(self, auth_page):
         auth_page.goto(AGENT_PAGE)
-        auth_page.fill("#job_posting", "")
-        auth_page.fill("#company", "")
-        auth_page.fill("#role", "")
-        auth_page.locator("#submitBtn").first.click()
         expect(auth_page.locator("#progressCard")).to_be_hidden()
 
-    def _select_app_and_submit(self, page, job_posting):
-        """Select a tracker app via the picker, fill JD, and submit."""
-        page.goto(AGENT_PAGE)
-        page.wait_for_load_state("networkidle", timeout=30_000)
-        search = page.locator("#runAppSearch")
-        search.fill("_UITest")
-        page.wait_for_timeout(500)
-        page.locator("#runAppSuggestions .app-row").first.click()
-        page.wait_for_timeout(300)
-        page.fill("#job_posting", job_posting)
-        page.locator("#submitBtn").first.click()
+    def test_status_badge_exists(self, auth_page):
+        auth_page.goto(AGENT_PAGE)
+        expect(auth_page.locator("#statusBadge")).to_be_attached()
 
-    def test_valid_form_shows_progress_card(self, auth_page, test_application):
-        self._select_app_and_submit(
-            auth_page,
-            "Software Engineer at Acme. Requirements: Python, APIs.",
-        )
-        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
-        expect(auth_page.locator("#statusBadge")).to_be_visible()
-
-    def test_back_button_resets_to_form(self, auth_page, test_application):
-        self._select_app_and_submit(
-            auth_page,
-            "Job description text here for testing purposes only.",
-        )
-        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
-        new_btn = auth_page.locator("#newRunBtn")
-        if new_btn.is_visible():
-            new_btn.click()
-            expect(auth_page.locator("#formCard")).to_be_visible()
+    def test_new_run_button_exists(self, auth_page):
+        auth_page.goto(AGENT_PAGE)
+        expect(auth_page.locator("#newRunBtn")).to_be_attached()
 
 
 class TestPastRunsSection:

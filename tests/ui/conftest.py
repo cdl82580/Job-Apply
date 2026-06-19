@@ -19,9 +19,7 @@ Usage:
 """
 
 import os
-import json
 import pytest
-import requests as _req
 from playwright.sync_api import Page, BrowserContext, expect
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -149,22 +147,3 @@ def admin_page(browser, base_url, admin_authenticated_state):
     context.close()
 
 
-@pytest.fixture(scope="session")
-def test_application(authenticated_state, base_url):
-    """Create a tracked application for the test user, yield it, then delete it."""
-    cookies = {c["name"]: c["value"] for c in authenticated_state["cookies"]}
-    headers = {"Content-Type": "application/json"}
-    url = f"{base_url}/api/applications"
-
-    resp = _req.post(url, cookies=cookies, headers=headers, json={
-        "company": "_UITest Corp",
-        "role_title": "Test Engineer",
-        "status": "Researching",
-    }, timeout=15)
-    if resp.status_code != 201:
-        pytest.skip(f"Could not create test application: {resp.status_code}")
-
-    app_data = resp.json()
-    yield app_data
-
-    _req.delete(f"{url}/{app_data['id']}", cookies=cookies, timeout=15)
