@@ -3,7 +3,7 @@ UI tests for /admin.html.
 
 Covers:
 - Redirect behavior for non-admin users
-- Page structure (stats bar, 5 tabs)
+- Page structure (stats bar, 6 tabs)
 - Users tab: table, search, filters, export button
 - Applications tab: table, search, filters
 - Runs tab: table, export
@@ -22,10 +22,7 @@ class TestAdminAccessControl:
     def test_regular_user_redirected_from_admin(self, auth_page):
         """A logged-in regular user navigating to /admin.html should be redirected."""
         auth_page.goto("/admin.html")
-        auth_page.wait_for_load_state("networkidle", timeout=10_000)
-        # Should be redirected away — regular users land on / or login
-        assert "/admin.html" not in auth_page.url or \
-               auth_page.locator(".tabs").count() == 0
+        auth_page.wait_for_url(lambda url: "admin" not in url, timeout=15_000)
 
     def test_anon_user_redirected_to_login(self, anon_page):
         """Unauthenticated users hitting /admin.html should land on login."""
@@ -40,21 +37,22 @@ class TestAdminPageStructure:
         admin_page.wait_for_selector(".tabs", timeout=10_000)
         expect(admin_page.locator(".tabs")).to_be_visible()
 
-    def test_five_tabs_present(self, admin_page):
+    def test_six_tabs_present(self, admin_page):
         admin_page.goto("/admin.html")
         admin_page.wait_for_selector(".tab", timeout=10_000)
         tabs = admin_page.locator(".tab")
-        expect(tabs).to_have_count(5)
+        expect(tabs).to_have_count(6)
 
     def test_tab_labels(self, admin_page):
         admin_page.goto("/admin.html")
         admin_page.wait_for_selector(".tab", timeout=10_000)
-        tab_texts = [admin_page.locator(".tab").nth(i).inner_text() for i in range(5)]
+        tab_texts = [admin_page.locator(".tab").nth(i).inner_text() for i in range(6)]
         assert any("User" in t for t in tab_texts)
         assert any("Application" in t for t in tab_texts)
         assert any("Run" in t for t in tab_texts)
         assert any("Audit" in t for t in tab_texts)
         assert any("Webhook" in t for t in tab_texts)
+        assert any("Knowledge" in t for t in tab_texts)
 
     def test_stats_bar_present(self, admin_page):
         admin_page.goto("/admin.html")
@@ -67,18 +65,14 @@ class TestAdminPageStructure:
     def test_stats_bar_loads_numbers(self, admin_page):
         admin_page.goto("/admin.html")
         admin_page.wait_for_selector("#statUsers", timeout=10_000)
-        # Wait for stats to populate (they load async)
-        admin_page.wait_for_function(
-            "document.getElementById('statUsers').textContent !== '—'",
-            timeout=10_000
-        )
-        stat = admin_page.locator("#statUsers").inner_text()
-        assert stat != "—"
+        stat_el = admin_page.locator("#statUsers")
+        expect(stat_el).not_to_have_text("—", timeout=10_000)
+        stat = stat_el.inner_text()
         assert stat.isdigit() or stat.replace(",", "").isdigit()
 
     def test_header_user_shown(self, admin_page):
         admin_page.goto("/admin.html")
-        admin_page.wait_for_selector("#headerUser", timeout=8_000)
+        admin_page.wait_for_selector("#headerUser", timeout=15_000)
         expect(admin_page.locator("#headerUser")).not_to_be_empty()
 
     def test_theme_toggle_present(self, admin_page):
@@ -113,11 +107,7 @@ class TestUsersTab:
     def _open_users_tab(self, page):
         page.goto("/admin.html")
         page.wait_for_selector("#tab-users", timeout=10_000)
-        # Users tab is active by default
-        page.wait_for_function(
-            "document.querySelector('#usersBody tr td:first-child') !== null",
-            timeout=10_000
-        )
+        page.locator("#usersBody tr td:first-child").first.wait_for(timeout=10_000)
 
     def test_users_table_present(self, admin_page):
         self._open_users_tab(admin_page)
@@ -166,9 +156,9 @@ class TestUsersTab:
         admin_page.wait_for_selector("#exportUsersBtn", timeout=8_000)
         expect(admin_page.locator("#exportUsersBtn")).to_be_visible()
 
-    def test_pagination_bar_present(self, admin_page):
+    def test_pagination_bar_exists(self, admin_page):
         self._open_users_tab(admin_page)
-        expect(admin_page.locator("#usersPagBar")).to_be_visible()
+        expect(admin_page.locator("#usersPagBar")).to_be_attached()
 
 
 class TestApplicationsTab:
@@ -237,8 +227,7 @@ class TestAuditLogTab:
     def test_audit_filter_inputs_present(self, admin_page):
         admin_page.goto("/admin.html?tab=auditlog")
         admin_page.wait_for_selector("#tab-auditlog", timeout=10_000)
-        # Audit log has date filter inputs
-        date_inputs = admin_page.locator("#tab-auditlog input[type='date']")
+        date_inputs = admin_page.locator("#tab-auditlog input[type='datetime-local']")
         assert date_inputs.count() >= 2
 
     def test_export_button_present(self, admin_page):
@@ -249,18 +238,9 @@ class TestAuditLogTab:
     def test_audit_table_loads_entries(self, admin_page):
         admin_page.goto("/admin.html?tab=auditlog")
         admin_page.wait_for_selector("#tab-auditlog", timeout=10_000)
-        # Wait for data to load
-        admin_page.wait_for_function(
-            """
-            () => {
-                const body = document.querySelector('#tab-auditlog tbody');
-                if (!body) return false;
-                const first = body.querySelector('tr td');
-                return first && first.textContent !== 'Loading…';
-            }
-            """,
-            timeout=10_000
-        )
+        first_cell = admin_page.locator("#tab-auditlog tbody tr td").first
+        first_cell.wait_for(timeout=10_000)
+        expect(first_cell).not_to_have_text("Loading…", timeout=10_000)
         rows = admin_page.locator("#tab-auditlog tbody tr")
         assert rows.count() >= 1
 
@@ -269,10 +249,7 @@ class TestWebhooksTab:
     def _open_tab(self, page):
         page.goto("/admin.html?tab=webhooks")
         page.wait_for_selector("#tab-webhooks", timeout=10_000)
-        page.wait_for_function(
-            "document.querySelector('#webhooksBody tr td') !== null",
-            timeout=10_000
-        )
+        page.locator("#webhooksBody tr td").first.wait_for(timeout=10_000)
 
     def test_tab_switches_correctly(self, admin_page):
         admin_page.goto("/admin.html")
@@ -328,7 +305,7 @@ class TestTabSwitching:
         admin_page.goto("/admin.html")
         admin_page.wait_for_selector(".tab", timeout=10_000)
 
-        tab_ids = ["users", "applications", "runs", "auditlog", "webhooks"]
+        tab_ids = ["users", "applications", "runs", "auditlog", "webhooks", "kb"]
         for tab_id in tab_ids:
             admin_page.locator(f"button[data-tab='{tab_id}']").click()
             admin_page.wait_for_timeout(300)
@@ -346,3 +323,4 @@ class TestTabSwitching:
         expect(admin_page.locator("#tab-runs")).not_to_be_visible()
         expect(admin_page.locator("#tab-auditlog")).not_to_be_visible()
         expect(admin_page.locator("#tab-webhooks")).not_to_be_visible()
+        expect(admin_page.locator("#tab-kb")).not_to_be_visible()

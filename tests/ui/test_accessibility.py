@@ -37,22 +37,22 @@ class TestLoginAccessibility:
 
 class TestAgentPageAccessibility:
     def test_job_posting_field_has_label(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         label = auth_page.locator("label[for='job_posting']")
         expect(label).to_be_visible()
 
     def test_company_field_has_label(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         label = auth_page.locator("label[for='company']")
         expect(label).to_be_visible()
 
     def test_role_field_has_label(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         label = auth_page.locator("label[for='role']")
         expect(label).to_be_visible()
 
     def test_all_buttons_have_accessible_text(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         auth_page.wait_for_load_state("domcontentloaded")
         buttons = auth_page.locator("button:visible")
         for i in range(min(buttons.count(), 20)):
@@ -76,7 +76,7 @@ class TestDarkMode:
         assert before != after
 
     def test_dark_mode_persists_on_navigation(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         # Set dark mode
         auth_page.evaluate("""
             document.documentElement.setAttribute('data-theme','dark');

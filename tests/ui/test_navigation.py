@@ -5,7 +5,7 @@ from playwright.sync_api import expect
 
 
 PAGES = [
-    ("/",             "Job Apply Agents"),
+    ("/agents.html",   "Agents - Job Apply"),
     ("/tracking.html", None),
     ("/calendar.html", None),
     ("/profile.html",  None),
@@ -25,24 +25,24 @@ class TestNavigation:
     def test_agent_page_link_from_tracker(self, auth_page):
         auth_page.goto("/tracking.html")
         auth_page.wait_for_load_state("domcontentloaded")
-        auth_page.locator("a[href='/']").first.click()
-        auth_page.wait_for_url("/", timeout=8_000)
-        expect(auth_page).to_have_title("Job Apply Agents")
+        auth_page.locator("a[href='/agents.html']").first.click()
+        auth_page.wait_for_url("**/agents.html", timeout=8_000)
+        expect(auth_page).to_have_title("Agents - Job Apply")
 
     def test_tracker_link_from_agent_page(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         auth_page.wait_for_load_state("domcontentloaded")
         auth_page.locator("a[href='/tracking.html']").first.click()
         auth_page.wait_for_url("**/tracking.html", timeout=8_000)
 
     def test_profile_link_from_agent_page(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         auth_page.wait_for_load_state("domcontentloaded")
         auth_page.locator("a[href='/profile.html']").first.click()
         auth_page.wait_for_url("**/profile.html", timeout=8_000)
 
     def test_calendar_link_from_agent_page(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         auth_page.wait_for_load_state("domcontentloaded")
         auth_page.locator("a[href='/calendar.html']").first.click()
         auth_page.wait_for_url("**/calendar.html", timeout=8_000)
@@ -50,7 +50,7 @@ class TestNavigation:
 
 class TestLogout:
     def test_logout_from_agent_page(self, auth_page):
-        auth_page.goto("/")
+        auth_page.goto("/agents.html")
         auth_page.wait_for_selector("#logoutBtn", timeout=8_000)
         auth_page.click("#logoutBtn")
         auth_page.wait_for_url(lambda url: "login" in url, timeout=10_000)

@@ -42,7 +42,7 @@ class TestTrackerPageStructure:
 
     def test_nav_links_present(self, auth_page):
         auth_page.goto("/tracking.html")
-        expect(auth_page.locator("a[href='/']")).to_be_visible()
+        expect(auth_page.locator("a[href='/agents.html']")).to_be_visible()
         expect(auth_page.locator("a[href='/calendar.html']")).to_be_visible()
         expect(auth_page.locator("a[href='/profile.html']")).to_be_visible()
 

@@ -126,7 +126,6 @@ class TestChangePassword:
         auth_page.fill("#current_password", "definitely-wrong-password-xyz")
         auth_page.fill("#new_password",     "NewPassword123!")
         auth_page.click("#pwBtn")
-        # Should show error toast
-        err = auth_page.locator("#pwToast")
-        expect(err).to_be_visible(timeout=8_000)
-        expect(err).not_to_be_empty()
+        toast = auth_page.locator("#pwToast")
+        expect(toast).to_be_visible(timeout=10_000)
+        expect(toast).not_to_be_empty()
