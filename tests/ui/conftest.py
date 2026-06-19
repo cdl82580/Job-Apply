@@ -48,9 +48,7 @@ def browser_context_args(browser_context_args):
     }
 
 
-@pytest.fixture(autouse=True)
-def _set_default_timeouts(page):
-    """Give CI extra headroom when testing against a remote app."""
+def _apply_timeouts(page):
     page.set_default_navigation_timeout(60_000)
     page.set_default_timeout(15_000)
 
@@ -89,6 +87,7 @@ def auth_page(browser, base_url, authenticated_state):
         storage_state=authenticated_state,
     )
     page = context.new_page()
+    _apply_timeouts(page)
     yield page
     context.close()
 
@@ -98,6 +97,7 @@ def anon_page(browser, base_url):
     """A Page with no session (anonymous)."""
     context = browser.new_context(base_url=base_url, viewport={"width": 1280, "height": 900})
     page = context.new_page()
+    _apply_timeouts(page)
     yield page
     context.close()
 
@@ -142,5 +142,6 @@ def admin_page(browser, base_url, admin_authenticated_state):
         storage_state=admin_authenticated_state,
     )
     page = context.new_page()
+    _apply_timeouts(page)
     yield page
     context.close()
