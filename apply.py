@@ -1899,14 +1899,32 @@ Candidate Profile Guide:
 {profile_text}
 ---
 """
-    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=1024, config=config)
+    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=2048, config=config)
     raw = raw.strip()
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw.strip())
-    # Extract the JSON object even when Claude adds preamble/postamble text
-    start, end = raw.find("{"), raw.rfind("}")
-    if start != -1 and end != -1:
-        raw = raw[start:end + 1]
+    # Extract the outermost JSON object, handling braces inside string values
+    start = raw.find("{")
+    if start != -1:
+        depth, in_str, esc, end = 0, False, False, -1
+        for i in range(start, len(raw)):
+            c = raw[i]
+            if esc:
+                esc = False
+            elif c == '\\' and in_str:
+                esc = True
+            elif c == '"':
+                in_str = not in_str
+            elif not in_str:
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+        if end != -1:
+            raw = raw[start:end + 1]
     data = json.loads(raw)
 
     score = max(0, min(100, int(round(float(data["score"])))))
