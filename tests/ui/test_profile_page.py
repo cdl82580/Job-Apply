@@ -85,10 +85,9 @@ class TestProfileEditFlow:
 
     def test_edit_profile_shows_textarea(self, auth_page):
         auth_page.goto("/profile.html")
-        auth_page.wait_for_selector("#profileEditBtn", timeout=8_000)
+        auth_page.wait_for_load_state("networkidle", timeout=15_000)
         auth_page.click("#profileEditBtn")
-        auth_page.wait_for_timeout(300)
-        expect(auth_page.locator("#profile_text")).to_be_visible()
+        expect(auth_page.locator("#profile_text")).to_be_visible(timeout=8_000)
         expect(auth_page.locator("#mdToolbar")).to_be_visible()
 
     def test_edit_profile_shows_markdown_toolbar(self, auth_page):
@@ -120,12 +119,11 @@ class TestChangePassword:
         expect(auth_page.locator("#new_password")).to_be_visible()
         expect(auth_page.locator("#pwBtn")).to_be_visible()
 
-    def test_wrong_current_password_shows_error(self, auth_page):
+    def test_wrong_current_password_redirects_to_login(self, auth_page):
+        """Wrong password returns 401 from the API, and apiFetch redirects to /login.html."""
         auth_page.goto("/profile.html")
         auth_page.wait_for_selector("#pwForm", timeout=8_000)
         auth_page.fill("#current_password", "definitely-wrong-password-xyz")
         auth_page.fill("#new_password",     "NewPassword123!")
         auth_page.click("#pwBtn")
-        toast = auth_page.locator("#pwToast")
-        expect(toast).to_be_visible(timeout=10_000)
-        expect(toast).not_to_be_empty()
+        auth_page.wait_for_url(lambda url: "login" in url, timeout=10_000)

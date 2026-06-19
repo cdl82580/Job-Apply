@@ -81,6 +81,7 @@ class TestRunForm:
         auth_page.locator("#submitBtn").first.click()
         expect(auth_page.locator("#progressCard")).to_be_hidden()
 
+    @pytest.mark.skip(reason="Triggers a real agent run — requires bot machine and API key")
     def test_valid_form_shows_progress_card(self, auth_page):
         auth_page.goto(AGENT_PAGE)
         auth_page.fill("#job_posting", "Software Engineer at Acme. Requirements: Python, APIs.")
@@ -90,6 +91,7 @@ class TestRunForm:
         expect(auth_page.locator("#progressCard")).to_be_visible(timeout=10_000)
         expect(auth_page.locator("#statusBadge")).to_be_visible()
 
+    @pytest.mark.skip(reason="Triggers a real agent run — requires bot machine and API key")
     def test_back_button_resets_to_form(self, auth_page):
         auth_page.goto(AGENT_PAGE)
         auth_page.fill("#job_posting", "Job description text here for testing purposes only.")
