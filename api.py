@@ -1755,6 +1755,8 @@ async def register(
         raise HTTPException(400, "Resume file appears to be empty or invalid.")
     if len(resume_data) > 10 * 1024 * 1024:
         raise HTTPException(400, "Resume file must be under 10 MB.")
+    if not resume_data[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "File is not a valid .docx (must be a ZIP archive). If this is a .doc file, please convert it to .docx first.")
 
     user_id = str(uuid.uuid4())
     user = {
@@ -2051,6 +2053,8 @@ async def upload_resume(request: Request, resume: UploadFile = File(...)):
         raise HTTPException(400, "File appears empty or invalid.")
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(400, "Resume file must be under 10 MB.")
+    if not data[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "File is not a valid .docx (must be a ZIP archive). If this is a .doc file, please convert it to .docx first.")
     record = storage.get_user_by_id(user_data["user_id"])
     if record:
         record["resume_filename"] = resume.filename
@@ -2199,6 +2203,8 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     resume_bytes = storage.get_resume(user_id)
     if not resume_bytes:
         raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+    if not resume_bytes[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "Your uploaded resume appears to be corrupted. Please re-upload your .docx file in your profile.")
 
     profile_text = storage.get_profile(user_id)
     if not profile_text:
@@ -2473,6 +2479,8 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     resume_bytes = storage.get_resume(user_id)
     if not resume_bytes:
         raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+    if not resume_bytes[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "Your uploaded resume appears to be corrupted. Please re-upload your .docx file in your profile.")
 
     profile_text = storage.get_profile(user_id)
     if not profile_text:
@@ -2631,6 +2639,8 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
     resume_bytes = storage.get_resume(user_id)
     if not resume_bytes:
         raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+    if not resume_bytes[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "Your uploaded resume appears to be corrupted. Please re-upload your .docx file in your profile.")
 
     profile_text = storage.get_profile(user_id)
     if not profile_text:
