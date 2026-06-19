@@ -16,6 +16,24 @@ machine — SSE state is in-memory. See `README.md` for the full architecture an
 
 ---
 
+## Default Ship Flow ("ship it")
+
+When the user says **"ship it"**, or asks to commit, merge, push, or deploy — or
+when work is complete and passes checks — follow this sequence by default (unless
+told otherwise):
+
+1. **Update docs** — before committing, update any documentation affected by the
+   change: `README.md`, `JobApply.postman_collection.json`, and any Knowledge Base
+   articles under `kb/` (if they exist and are relevant to the change)
+2. **Commit** to `dev` with a descriptive message
+3. **Push** `dev` to origin
+4. **Merge** `dev` into `main` (fast-forward)
+5. **Push** `main` to origin
+6. **Deploy** via `fly deploy --app job-apply-corey`
+7. **Switch back** to `dev`
+
+---
+
 ## How to Run
 
 The user will either:
