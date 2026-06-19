@@ -1507,8 +1507,15 @@ def _gdrive_list_files(service, folder_id: str) -> list[dict]:
 
 def _gdrive_download_file(service, file_id: str) -> bytes:
     """Download a Drive file's content as bytes."""
-    content = service.files().get_media(fileId=file_id).execute()
-    return content if isinstance(content, bytes) else str(content).encode("utf-8")
+    import io
+    from googleapiclient.http import MediaIoBaseDownload
+    request = service.files().get_media(fileId=file_id)
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    return buf.getvalue()
 
 
 def _gdrive_upsert_file(
