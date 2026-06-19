@@ -21,7 +21,7 @@ class TestAdminAccessControl:
     def test_regular_user_redirected_from_admin(self, auth_page):
         """A logged-in regular user navigating to /admin.html should be redirected."""
         auth_page.goto("/admin.html")
-        auth_page.wait_for_url(lambda url: "admin" not in url, timeout=30_000)
+        auth_page.wait_for_url(lambda url: "admin" not in url, timeout=15_000)
 
     def test_anon_user_redirected_to_login(self, anon_page):
         """Unauthenticated users hitting /admin.html should land on login."""
@@ -62,16 +62,17 @@ class TestAdminPageStructure:
         expect(admin_page.locator("#statAdmins")).to_be_visible()
 
     def test_stats_bar_loads_numbers(self, admin_page):
+        """Stats populate progressively as tabs are visited. Admins stat loads with users tab."""
         admin_page.goto("/admin.html")
-        admin_page.wait_for_selector("#statUsers", timeout=15_000)
-        stat_el = admin_page.locator("#statUsers")
-        expect(stat_el).not_to_have_text("—", timeout=30_000)
+        admin_page.wait_for_selector("#statAdmins", timeout=15_000)
+        stat_el = admin_page.locator("#statAdmins")
+        expect(stat_el).not_to_have_text("—", timeout=15_000)
         stat = stat_el.inner_text()
         assert stat.isdigit() or stat.replace(",", "").isdigit()
 
     def test_header_user_shown(self, admin_page):
         admin_page.goto("/admin.html")
-        admin_page.wait_for_selector("#headerUser", timeout=30_000)
+        admin_page.wait_for_selector("#headerUser", timeout=15_000)
         expect(admin_page.locator("#headerUser")).not_to_be_empty()
 
     def test_theme_toggle_present(self, admin_page):
@@ -115,7 +116,7 @@ class TestUsersTab:
     def test_users_table_has_rows(self, admin_page):
         self._open_users_tab(admin_page)
         first_cell = admin_page.locator("#usersBody tr td").first
-        expect(first_cell).not_to_have_text("Loading…", timeout=30_000)
+        expect(first_cell).not_to_have_text("Loading…", timeout=15_000)
         assert admin_page.locator("#usersBody tr").count() >= 1
 
     def test_user_search_input_present(self, admin_page):

@@ -1253,7 +1253,8 @@ activateTab(_initialTab);
 if (_initialTab === 'webhooks' && !document.getElementById('webhooksBody').dataset.loaded) {
   document.getElementById('webhooksBody').dataset.loaded = '1';
   loadWebhooks();
-} else if (_initialTab === 'auditlog' && !_auditLoaded) {
+}
+if (_initialTab === 'auditlog' && !_auditLoaded) {
   _auditLoaded = true;
   initAuditFilters().then(() => loadAudit(1));
 }
@@ -1319,6 +1320,7 @@ let _usersSortCol = 'created_at';
 let _usersSortDir = 'asc';
 let _userDateKey = 'last_login';
 let _appDateKey  = 'last_updated';
+let _usersLoaded = false;
 let _appsLoaded  = false;
 let _runsLoaded  = false;
 
@@ -1390,15 +1392,20 @@ async function loadRuns() {
 }
 
 function updateStats() {
-  // Active users: have >0 applications OR appear in any run
-  const runUserIds = new Set(_allRuns.map(r => r.user_id).filter(Boolean));
-  const activeUsers = _users.filter(u => u.app_count > 0 || runUserIds.has(u.user_id)).length;
-
-  document.getElementById('statUsers').textContent  = activeUsers || '—';
-  document.getElementById('statApps').textContent   = _allApps.length || '—';
-  // Runs chip swapped to position 3 — count all Drive runs (complete + in-progress)
-  document.getElementById('statRuns').textContent   = _allRuns.length || '—';
-  document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
+  if (_usersLoaded && _runsLoaded) {
+    const runUserIds = new Set(_allRuns.map(r => r.user_id).filter(Boolean));
+    const activeUsers = _users.filter(u => u.app_count > 0 || runUserIds.has(u.user_id)).length;
+    document.getElementById('statUsers').textContent = activeUsers || '—';
+  }
+  if (_usersLoaded) {
+    document.getElementById('statAdmins').textContent = _users.filter(u => u.role === 'admin').length || '—';
+  }
+  if (_appsLoaded) {
+    document.getElementById('statApps').textContent = _allApps.length || '—';
+  }
+  if (_runsLoaded) {
+    document.getElementById('statRuns').textContent = _allRuns.length || '—';
+  }
 }
 
 // ── Shared pagination helpers ─────────────────────────────────────────
@@ -3555,7 +3562,10 @@ document.getElementById('appsHead').addEventListener('click', e => {
   _appsPage = 1; renderApps();
 });
 
-// ── Tab lazy loaders for applications and runs ────────────────────────
+// ── Tab lazy loaders — nothing loads until its tab is active ─────────
+document.querySelector('[data-tab="users"]').addEventListener('click', () => {
+  if (!_usersLoaded) { _usersLoaded = true; loadUsers(); }
+});
 document.querySelector('[data-tab="applications"]').addEventListener('click', () => {
   if (!_appsLoaded) { _appsLoaded = true; loadApps(); }
 });
@@ -3563,11 +3573,11 @@ document.querySelector('[data-tab="runs"]').addEventListener('click', () => {
   if (!_runsLoaded) { _runsLoaded = true; loadRuns(); }
 });
 
-// ── Init ─────────────────────────────────────────────────────────────
-loadUsers();
-if (_initialTab === 'applications') { _appsLoaded = true; loadApps(); }
-if (_initialTab === 'runs')         { _runsLoaded = true; loadRuns(); }
-if (_initialTab === 'kb') { _kbLoaded = true; loadKB(); }
+// ── Init — only load the active tab's data ───────────────────────────
+if (_initialTab === 'users')        { _usersLoaded = true; loadUsers(); }
+if (_initialTab === 'applications') { _appsLoaded  = true; loadApps(); }
+if (_initialTab === 'runs')         { _runsLoaded  = true; loadRuns(); }
+if (_initialTab === 'kb')           { _kbLoaded    = true; loadKB(); }
 
 window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 </script>
