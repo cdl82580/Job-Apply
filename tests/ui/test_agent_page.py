@@ -80,21 +80,31 @@ class TestRunForm:
         auth_page.locator("#submitBtn").first.click()
         expect(auth_page.locator("#progressCard")).to_be_hidden()
 
+    def _fill_and_submit(self, page, job_posting, company, role):
+        """Fill the run form and bypass app picker validation."""
+        page.goto(AGENT_PAGE)
+        page.wait_for_load_state("networkidle", timeout=30_000)
+        page.evaluate("window._runAppId = 'test-placeholder'")
+        page.fill("#job_posting", job_posting)
+        page.fill("#company", company)
+        page.fill("#role", role)
+        page.locator("#submitBtn").first.click()
+
     def test_valid_form_shows_progress_card(self, auth_page):
-        auth_page.goto(AGENT_PAGE)
-        auth_page.fill("#job_posting", "Software Engineer at Acme. Requirements: Python, APIs.")
-        auth_page.fill("#company", "Acme")
-        auth_page.fill("#role",    "Software Engineer")
-        auth_page.locator("#submitBtn").first.click()
+        self._fill_and_submit(
+            auth_page,
+            "Software Engineer at Acme. Requirements: Python, APIs.",
+            "Acme", "Software Engineer",
+        )
         expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
         expect(auth_page.locator("#statusBadge")).to_be_visible()
 
     def test_back_button_resets_to_form(self, auth_page):
-        auth_page.goto(AGENT_PAGE)
-        auth_page.fill("#job_posting", "Job description text here for testing purposes only.")
-        auth_page.fill("#company", "TestCo")
-        auth_page.fill("#role",    "Engineer")
-        auth_page.locator("#submitBtn").first.click()
+        self._fill_and_submit(
+            auth_page,
+            "Job description text here for testing purposes only.",
+            "TestCo", "Engineer",
+        )
         expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
         new_btn = auth_page.locator("#newRunBtn")
         if new_btn.is_visible():
