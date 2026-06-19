@@ -588,6 +588,68 @@ async def list_all_runs(request: Request):
                         "error":        details.get("error", ""),
                     }
 
+            elif action == "optimize_started":
+                opt_id = details.get("run_id", "") or f"opt_{event['id']}"
+                if opt_id in runs_by_key:
+                    continue
+                app_id   = details.get("app_id", "")
+                app_info = app_cache.get((uid, app_id), {})
+                runs_by_key[opt_id] = {
+                    "id":           opt_id,
+                    "type":         "optimize",
+                    "company":      app_info.get("company", details.get("company", "")),
+                    "role":         app_info.get("role", details.get("role", "")),
+                    "user_id":      uid,
+                    "user_email":   user_email,
+                    "created_at":   ts,
+                    "status":       "running",
+                    "web_view_link": "",
+                    "app_id":       app_id,
+                    "app_company":  app_info.get("company", ""),
+                    "app_role":     app_info.get("role", ""),
+                }
+
+            elif action in ("optimize_completed", "optimize_failed"):
+                opt_id = details.get("run_id", "")
+                if not opt_id:
+                    continue
+                status = "complete" if action == "optimize_completed" else "error"
+                if opt_id in runs_by_key:
+                    runs_by_key[opt_id]["status"] = status
+                    if details.get("folder_url"):
+                        runs_by_key[opt_id]["web_view_link"] = details["folder_url"]
+
+            elif action == "aq_started":
+                aq_id = details.get("aq_id", "") or f"aq_{event['id']}"
+                if aq_id in runs_by_key:
+                    continue
+                app_id   = details.get("app_id", "")
+                app_info = app_cache.get((uid, app_id), {})
+                runs_by_key[aq_id] = {
+                    "id":           aq_id,
+                    "type":         "aq",
+                    "company":      app_info.get("company", details.get("company", "")),
+                    "role":         app_info.get("role", details.get("role", "")),
+                    "user_id":      uid,
+                    "user_email":   user_email,
+                    "created_at":   ts,
+                    "status":       "running",
+                    "web_view_link": "",
+                    "app_id":       app_id,
+                    "app_company":  app_info.get("company", ""),
+                    "app_role":     app_info.get("role", ""),
+                }
+
+            elif action in ("aq_completed", "aq_failed"):
+                aq_id = details.get("aq_id", "")
+                if not aq_id:
+                    continue
+                status = "complete" if action == "aq_completed" else "error"
+                if aq_id in runs_by_key:
+                    runs_by_key[aq_id]["status"] = status
+                    if details.get("folder_url"):
+                        runs_by_key[aq_id]["web_view_link"] = details["folder_url"]
+
     # Override status for still-active in-memory runs; surface any not yet in audit
     from api import _runs, _preps  # noqa: PLC0415
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -555,7 +555,7 @@
   <div class="tab-pane" id="tab-applications">
     <div class="filter-row">
       <input type="text" id="appSearch" placeholder="Search company or role…">
-      <select id="appUserFilter"><option value="">All users</option></select>
+      <input type="text" id="appUserFilter" placeholder="Filter by user…" style="max-width:200px">
       <select id="appStatusFilter">
         <option value="">All statuses</option>
         <option>Interviewing</option><option>Phone Screen</option><option>Applied</option>
@@ -627,17 +627,20 @@
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
     <div class="filter-row" id="runsFilterRow">
-      <input type="text" id="runsSearch" placeholder="Search by company, role, or ID…" style="max-width:220px">
+      <input type="text" id="runsSearch" placeholder="Search by company, role, or ID…" style="flex:1;min-width:0">
+    </div>
+    <div class="filter-row" style="margin-top:-.5rem">
       <select id="runsTypeFilter">
         <option value="">All types</option>
         <option value="resume">Resume</option>
+        <option value="optimize">Optimized Resume</option>
+        <option value="aq">Application Questions</option>
         <option value="interview_prep">Interview Prep</option>
+        <option value="scoring">Match Scoring</option>
         <option value="job_description">Job Description</option>
-        <option value="scoring">Scoring</option>
       </select>
-      <select id="runsUserFilter"><option value="">All users</option></select>
-      <select id="runsStatusFilter">
-        <option value="">All statuses</option>
+      <input type="text" id="runsUserFilter" placeholder="Filter by user…" style="max-width:200px">
+      <select id="runsStatusFilter" multiple size="1" style="min-width:140px" title="Hold Ctrl/Cmd to multi-select">
         <option value="complete">Complete</option>
         <option value="running">Running</option>
         <option value="queued">Queued</option>
@@ -702,8 +705,8 @@
     <div class="filter-row">
       <input type="text" id="auditIdFilter"    placeholder="Filter by event ID…" style="max-width:200px">
       <input type="text" id="auditActorFilter" placeholder="Filter by actor…"    style="max-width:200px">
-      <select id="auditActionFilter"><option value="">All actions</option></select>
-      <select id="auditUserFilter"><option value="">All users</option></select>
+      <input type="text" id="auditActionFilter" placeholder="Filter actions…" style="max-width:220px" list="auditActionList">
+      <datalist id="auditActionList"></datalist>
       <select id="auditSourceFilter">
         <option value="">All sources</option>
         <option value="user">User events</option>
@@ -800,7 +803,7 @@
   <!-- ── Knowledge Base tab ─────────────────────────────────── -->
   <div class="tab-pane" id="tab-kb">
     <div class="filter-row">
-      <input type="text" id="kbSearch" placeholder="Search title or body…" style="max-width:260px">
+      <input type="text" id="kbSearch" placeholder="Search title or body…" style="flex:1;min-width:0">
       <select id="kbCatFilter"><option value="">All categories</option></select>
       <button class="btn btn-ghost" id="kbClearFilters" style="margin-left:auto">Clear filters</button>
       <button class="btn btn-sm" id="kbSeedBtn" title="Seed KB from the built-in frontend data">⟳ Seed from frontend</button>
@@ -1354,16 +1357,6 @@ async function loadUsers() {
     _users = await res.json();
     renderUsers();
     updateStats();
-
-    // Populate user filter on apps tab
-    const sel = document.getElementById('appUserFilter');
-    sel.innerHTML = '<option value="">All users</option>';
-    for (const u of _users) {
-      const opt = document.createElement('option');
-      opt.value = u.user_id;
-      opt.textContent = `${u.display_name || u.email} (${u.email})`;
-      sel.appendChild(opt);
-    }
   } catch (e) { if (e.message !== '401') console.error(e); }
 }
 
@@ -1381,11 +1374,6 @@ async function loadRuns() {
     const res = await apiFetch('/api/admin/runs');
     _allRuns = await res.json();
     renderUsers();  // refresh Runs count column now that _allRuns is populated
-    // Populate user filter
-    const sel = document.getElementById('runsUserFilter');
-    const emails = [...new Set(_allRuns.map(r => r.user_email).filter(Boolean))].sort();
-    sel.innerHTML = '<option value="">All users</option>';
-    emails.forEach(e => { const o = document.createElement('option'); o.value = o.textContent = e; sel.appendChild(o); });
     filterAndRenderRuns();
     updateStats();
   } catch (e) { if (e.message !== '401') console.error(e); }
@@ -1557,7 +1545,7 @@ function renderUsers() {
 // ── Render apps ──────────────────────────────────────────────────────
 function renderApps() {
   const q            = document.getElementById('appSearch').value.trim().toLowerCase();
-  const uid          = document.getElementById('appUserFilter').value;
+  const userQ        = document.getElementById('appUserFilter').value.trim().toLowerCase();
   const stat         = document.getElementById('appStatusFilter').value;
   const appliedFrom  = document.getElementById('appAppliedFrom').value;
   const appliedTo    = document.getElementById('appAppliedTo').value;
@@ -1566,7 +1554,7 @@ function renderApps() {
 
   let list = _allApps;
   if (q)           list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q) || (a.id||'').toLowerCase().includes(q));
-  if (uid)         list = list.filter(a => a._user_id === uid);
+  if (userQ)       list = list.filter(a => (a._user_email||'').toLowerCase().includes(userQ) || (a._user_name||'').toLowerCase().includes(userQ));
   if (stat)        list = list.filter(a => a.status === stat);
   if (appliedFrom) list = list.filter(a => (a.date_applied||'') >= appliedFrom);
   if (appliedTo)   list = list.filter(a => (a.date_applied||'') <= appliedTo + 'T23:59:59Z');
@@ -1643,12 +1631,13 @@ function renderApps() {
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
-const RUN_TYPE_CLASS = { resume: 's-applied', interview_prep: 's-researching', job_description: 's-onhold', scoring: 's-offer' };
+const RUN_TYPE_CLASS = { resume: 's-applied', optimize: 's-interviewing', aq: 's-phone-screen', interview_prep: 's-researching', scoring: 's-offer', job_description: 's-onhold' };
 
 function filterAndRenderRuns() {
   const type     = document.getElementById('runsTypeFilter').value;
-  const user     = document.getElementById('runsUserFilter').value;
-  const status   = document.getElementById('runsStatusFilter').value;
+  const userQ    = document.getElementById('runsUserFilter').value.trim().toLowerCase();
+  const statusSel = document.getElementById('runsStatusFilter');
+  const statuses = [...statusSel.selectedOptions].map(o => o.value);
   const dateFrom = document.getElementById('runsDateFrom').value;   // 'YYYY-MM-DD'
   const dateTo   = document.getElementById('runsDateTo').value;
 
@@ -1656,8 +1645,8 @@ function filterAndRenderRuns() {
   let list = _allRuns;
   if (q)      list = list.filter(r => (r.app_company||r.name||'').toLowerCase().includes(q) || (r.app_role||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
   if (type)   list = list.filter(r => r.type === type);
-  if (user)   list = list.filter(r => r.user_email === user);
-  if (status) list = list.filter(r => r.status === status);
+  if (userQ)    list = list.filter(r => (r.user_email||'').toLowerCase().includes(userQ));
+  if (statuses.length) list = list.filter(r => statuses.includes(r.status));
   if (dateFrom) list = list.filter(r => (r.created_at || '') >= dateFrom);
   if (dateTo)   list = list.filter(r => (r.created_at || '') <= dateTo + 'T23:59:59Z');
 
@@ -1683,10 +1672,9 @@ function renderRuns(runs) {
   tbody.innerHTML = '';
   for (const r of runs) {
     const tr        = document.createElement('tr');
-    const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
-                    : r.type === 'job_description' ? 'Job Description'
-                    : r.type === 'scoring'         ? 'Scoring'
-                    : 'Resume';
+    const typeLabel = { resume: 'Resume', optimize: 'Optimized', aq: 'App Questions',
+                        interview_prep: 'Interview Prep', scoring: 'Match Score',
+                        job_description: 'Job Description' }[r.type] || r.type;
     const typeClass = RUN_TYPE_CLASS[r.type] || '';
     const statusColor = (r.status === 'running' || r.status === 'queued')
       ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
@@ -2068,8 +2056,7 @@ async function loadAudit(page = 1) {
   _auditPage = page;
   const eventId  = document.getElementById('auditIdFilter').value.trim();
   const actor    = document.getElementById('auditActorFilter').value.trim();
-  const action   = document.getElementById('auditActionFilter').value;
-  const userId   = document.getElementById('auditUserFilter').value;
+  const action   = document.getElementById('auditActionFilter').value.trim();
   const source   = document.getElementById('auditSourceFilter').value;
   const fromVal  = document.getElementById('auditFrom').value;
   const toVal    = document.getElementById('auditTo').value;
@@ -2078,7 +2065,6 @@ async function loadAudit(page = 1) {
   if (eventId) params.set('event_id', eventId);
   if (actor)   params.set('actor',   actor);
   if (action)  params.set('action',  action);
-  if (userId)  params.set('user_id', userId);
   if (source)  params.set('source',  source);
   if (fromVal) params.set('from_ts', fromVal + ':00Z');
   if (toVal)   params.set('to_ts',   toVal   + ':59Z');
@@ -2134,22 +2120,15 @@ function renderAudit({ items, total, page, per_page, pages }) {
 async function initAuditFilters() {
   try {
     const types = await (await apiFetch('/api/admin/audit/action-types')).json();
-    const sel   = document.getElementById('auditActionFilter');
-    types.forEach(t => { const o = document.createElement('option'); o.value = o.textContent = t; sel.appendChild(o); });
+    const dl = document.getElementById('auditActionList');
+    types.forEach(t => { const o = document.createElement('option'); o.value = t; dl.appendChild(o); });
   } catch (_) {}
-  const usel = document.getElementById('auditUserFilter');
-  _users.forEach(u => {
-    const o = document.createElement('option');
-    o.value = u.user_id;
-    o.textContent = `${u.display_name || u.email} (${u.email})`;
-    usel.appendChild(o);
-  });
 }
 
-['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id =>
+['auditSourceFilter'].forEach(id =>
   document.getElementById(id).addEventListener('change', () => loadAudit(1))
 );
-['auditIdFilter','auditActorFilter'].forEach(id => {
+['auditIdFilter','auditActorFilter','auditActionFilter'].forEach(id => {
   document.getElementById(id).addEventListener('input', function() {
     clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
   });
@@ -2183,17 +2162,17 @@ document.getElementById('appClearFilters').addEventListener('click', () => {
 
 // Clear filters — Agent Runs
 document.getElementById('runsClearFilters').addEventListener('click', () => {
-  ['runsSearch','runsDateFrom','runsDateTo']
+  ['runsSearch','runsDateFrom','runsDateTo','runsUserFilter']
     .forEach(id => document.getElementById(id).value = '');
-  ['runsTypeFilter','runsUserFilter','runsStatusFilter']
-    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('runsTypeFilter').value = '';
+  [...document.getElementById('runsStatusFilter').options].forEach(o => o.selected = false);
   _runsPage = 1; filterAndRenderRuns();
 });
 
 // Clear filters — Audit Log
 document.getElementById('auditClearFilters').addEventListener('click', () => {
   ['auditIdFilter','auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
-  ['auditActionFilter','auditUserFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
+  ['auditActionFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
   loadAudit(1);
 });
 document.querySelector('[data-tab="auditlog"]').addEventListener('click', () => {
@@ -2357,15 +2336,13 @@ function _auditParams(allRecords = false) {
   if (!allRecords) {
     const eventId = document.getElementById('auditIdFilter').value.trim();
     const actor  = document.getElementById('auditActorFilter').value.trim();
-    const action = document.getElementById('auditActionFilter').value;
-    const userId = document.getElementById('auditUserFilter').value;
+    const action = document.getElementById('auditActionFilter').value.trim();
     const source = document.getElementById('auditSourceFilter').value;
     const from   = document.getElementById('auditFrom').value;
     const to     = document.getElementById('auditTo').value;
     if (eventId) params.set('event_id', eventId);
     if (actor)   params.set('actor',   actor);
     if (action) params.set('action',  action);
-    if (userId) params.set('user_id', userId);
     if (source) params.set('source',  source);
     if (from)   params.set('from_ts', from + ':00Z');
     if (to)     params.set('to_ts',   to   + ':59Z');
