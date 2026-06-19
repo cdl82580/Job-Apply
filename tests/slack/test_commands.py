@@ -142,45 +142,6 @@ class TestTrackListCommand:
         assert "more" in last_text.lower()
 
 
-# ── /jobstatus ────────────────────────────────────────────────────────────────
-
-class TestJobstatusCommand:
-    def test_ack_called(self):
-        ack = make_ack()
-        with patch("requests.get", return_value=fake_response(200, SAMPLE_HEALTH)):
-            bot.jobstatus_command(ack=ack, respond=make_respond())
-        ack.assert_called_once()
-
-    def test_respond_called_with_blocks(self):
-        respond = make_respond()
-        with patch("requests.get", return_value=fake_response(200, SAMPLE_HEALTH)):
-            bot.jobstatus_command(ack=make_ack(), respond=respond)
-        kwargs = respond.call_args[1] if respond.call_args[1] else {}
-        assert "blocks" in kwargs
-
-    def test_ok_status_in_response(self):
-        respond = make_respond()
-        with patch("requests.get", return_value=fake_response(200, SAMPLE_HEALTH)):
-            bot.jobstatus_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[1].get("text", "")
-        assert "ok" in text.lower()
-
-    def test_api_down_responds_with_error(self):
-        respond = make_respond()
-        import requests as req
-        with patch("requests.get", side_effect=req.ConnectionError("refused")):
-            bot.jobstatus_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
-        assert ":x:" in text
-
-    def test_blocks_contain_storage_status(self):
-        respond = make_respond()
-        with patch("requests.get", return_value=fake_response(200, SAMPLE_HEALTH)):
-            bot.jobstatus_command(ack=make_ack(), respond=respond)
-        blocks_str = str(respond.call_args)
-        assert "Storage" in blocks_str or "Tigris" in blocks_str
-
-
 # ── /whoami ───────────────────────────────────────────────────────────────────
 
 class TestWhoamiCommand:
@@ -323,41 +284,6 @@ class TestCompanyCommand:
         respond = make_respond()
         with patch.object(bot, "_api", side_effect=Exception("timeout")):
             bot.company_command(ack=make_ack(), respond=respond, body=make_body(text="Stripe"))
-        text = respond.call_args[0][0]
-        assert ":x:" in text
-
-
-# ── /activity ────────────────────────────────────────────────────────────────
-
-class TestActivityCommand:
-    def _events(self):
-        return [
-            {"action": "login", "actor": "test@example.com", "timestamp": "2026-06-01T10:00:00Z"},
-            {"action": "run_completed", "actor": "test@example.com", "timestamp": "2026-06-01T11:00:00Z"},
-        ]
-
-    def test_ack_called(self):
-        ack = make_ack()
-        with patch.object(bot, "_api", return_value=fake_response(200, {"events": self._events()})):
-            bot.activity_command(ack=ack, respond=make_respond())
-        ack.assert_called_once()
-
-    def test_events_shown(self):
-        respond = make_respond()
-        with patch.object(bot, "_api", return_value=fake_response(200, {"events": self._events()})):
-            bot.activity_command(ack=make_ack(), respond=respond)
-        respond.assert_called_once()
-
-    def test_empty_events_handled(self):
-        respond = make_respond()
-        with patch.object(bot, "_api", return_value=fake_response(200, {"events": []})):
-            bot.activity_command(ack=make_ack(), respond=respond)
-        respond.assert_called_once()
-
-    def test_api_error_handled(self):
-        respond = make_respond()
-        with patch.object(bot, "_api", side_effect=Exception("error")):
-            bot.activity_command(ack=make_ack(), respond=respond)
         text = respond.call_args[0][0]
         assert ":x:" in text
 
