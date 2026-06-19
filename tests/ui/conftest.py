@@ -48,6 +48,13 @@ def browser_context_args(browser_context_args):
     }
 
 
+@pytest.fixture(autouse=True)
+def _set_default_timeouts(page):
+    """Give CI extra headroom when testing against a remote app."""
+    page.set_default_navigation_timeout(60_000)
+    page.set_default_timeout(15_000)
+
+
 @pytest.fixture(scope="session")
 def authenticated_state(browser, base_url):
     """
