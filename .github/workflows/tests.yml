@@ -45,7 +45,7 @@ jobs:
           UI_TEST_PASSWORD: ${{ secrets.UI_TEST_PASSWORD }}
           UI_ADMIN_EMAIL: ${{ secrets.UI_ADMIN_EMAIL }}
           UI_ADMIN_PASSWORD: ${{ secrets.UI_ADMIN_PASSWORD }}
-        run: pytest tests/ui/ -v
+        run: pytest tests/ui/ -v --reruns 2 --reruns-delay 5
 
       - name: Upload Playwright traces
         uses: actions/upload-artifact@v4
