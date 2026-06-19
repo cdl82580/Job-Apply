@@ -10,7 +10,6 @@ Covers:
 - Header elements
 """
 
-import pytest
 from playwright.sync_api import expect
 
 AGENT_PAGE = "/agents.html"
@@ -81,24 +80,22 @@ class TestRunForm:
         auth_page.locator("#submitBtn").first.click()
         expect(auth_page.locator("#progressCard")).to_be_hidden()
 
-    @pytest.mark.skip(reason="Triggers a real agent run — requires bot machine and API key")
     def test_valid_form_shows_progress_card(self, auth_page):
         auth_page.goto(AGENT_PAGE)
         auth_page.fill("#job_posting", "Software Engineer at Acme. Requirements: Python, APIs.")
         auth_page.fill("#company", "Acme")
         auth_page.fill("#role",    "Software Engineer")
         auth_page.locator("#submitBtn").first.click()
-        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=10_000)
+        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
         expect(auth_page.locator("#statusBadge")).to_be_visible()
 
-    @pytest.mark.skip(reason="Triggers a real agent run — requires bot machine and API key")
     def test_back_button_resets_to_form(self, auth_page):
         auth_page.goto(AGENT_PAGE)
         auth_page.fill("#job_posting", "Job description text here for testing purposes only.")
         auth_page.fill("#company", "TestCo")
         auth_page.fill("#role",    "Engineer")
         auth_page.locator("#submitBtn").first.click()
-        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=10_000)
+        expect(auth_page.locator("#progressCard")).to_be_visible(timeout=15_000)
         new_btn = auth_page.locator("#newRunBtn")
         if new_btn.is_visible():
             new_btn.click()

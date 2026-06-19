@@ -14,7 +14,6 @@ Most tests use the admin_page fixture (requires UI_ADMIN_EMAIL + UI_ADMIN_PASSWO
 The redirect test uses auth_page (regular user).
 """
 
-import pytest
 from playwright.sync_api import expect
 
 
@@ -114,13 +113,9 @@ class TestUsersTab:
         expect(admin_page.locator("#usersBody")).to_be_visible()
 
     def test_users_table_has_rows(self, admin_page):
-        admin_page.goto("/admin.html")
-        admin_page.wait_for_selector("#tab-users", timeout=10_000)
+        self._open_users_tab(admin_page)
         first_cell = admin_page.locator("#usersBody tr td").first
-        first_cell.wait_for(timeout=15_000)
-        text = first_cell.inner_text()
-        if text == "Loading…":
-            pytest.skip("Admin users API did not respond — check admin account permissions")
+        expect(first_cell).not_to_have_text("Loading…", timeout=30_000)
         assert admin_page.locator("#usersBody tr").count() >= 1
 
     def test_user_search_input_present(self, admin_page):
