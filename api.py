@@ -338,6 +338,11 @@ def _trigger_match_scoring(
                 match_score["scored_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 match_score["scored_by"] = "system"
                 record = save_match_score(user_id, app_id, match_score)
+                if folder_id:
+                    folder_url = f"https://drive.google.com/drive/folders/{folder_id}"
+                    _link_run_to_app(user_id=user_id, app_id=app_id, run_type="scoring",
+                                     result_dir=resume_path.parent if hasattr(resume_path, 'parent') else Path("."),
+                                     folder_url=folder_url)
                 if record:
                     record.setdefault("audit_log", []).append({
                         "id":        str(uuid.uuid4()),
@@ -2740,6 +2745,10 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
                     _app_questions[aq_id]["result"] = result
                     _app_questions[aq_id]["status"] = "done"
                     _app_questions[aq_id]["_finished_at"] = time.time()
+                    if req.app_id:
+                        _link_run_to_app(user_id=user_id, app_id=req.app_id,
+                                         run_type="app_questions",
+                                         result_dir=Path("."), folder_url="")
                     user_audit.log(user_id, "aq_completed", user_data["email"],
                                    aq_id=aq_id, company=req.company, role=req.role)
                     q.put({
