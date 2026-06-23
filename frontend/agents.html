@@ -541,7 +541,7 @@
     .run-row-badge.type-interview_prep { background: #ede9fe; color: #5b21b6; }
     .run-row-badge.type-thank_you   { background: #d1fae5; color: #065f46; }
     .run-row-badge.type-scoring     { background: #fce7f3; color: #9d174d; }
-    .run-row-badge.type-app_questions { background: #fff7ed; color: #9a3412; }
+    .run-row-badge.type-aq          { background: #fff7ed; color: #9a3412; }
     .run-row-badges { display: flex; gap: .3rem; flex-shrink: 0; }
     .run-row-link {
       font-size: .8rem;
@@ -1800,7 +1800,7 @@
         const row = document.createElement('div');
         row.className = 'run-row';
         const typeBadges = (r.types || []).map(t => {
-          const labels = { resume: 'Resume', optimize: 'Optimize', interview_prep: 'Prep', thank_you: 'Thank You', job_description: 'JD', scoring: 'Scoring', app_questions: 'AQ' };
+          const labels = { resume: 'Resume', optimize: 'Optimize', interview_prep: 'Prep', thank_you: 'Thank You', job_description: 'JD', scoring: 'Scoring', aq: 'AQ' };
           return `<span class="run-row-badge type-${t}">${labels[t] || t}</span>`;
         }).join('');
         row.innerHTML = `

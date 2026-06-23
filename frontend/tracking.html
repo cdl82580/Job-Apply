@@ -668,14 +668,14 @@
     .run-type-thank_you       { background: #D1FAE5; color: #065F46; }
     .run-type-job_description { background: #F3F4F6; color: #374151; }
     .run-type-scoring         { background: #FCE7F3; color: #9D174D; }
-    .run-type-app_questions   { background: #FFF7ED; color: #9A3412; }
+    .run-type-aq   { background: #FFF7ED; color: #9A3412; }
     [data-theme="dark"] .run-type-resume          { background: #1E2D56; color: #93C5FD; }
     [data-theme="dark"] .run-type-interview_prep  { background: #2E1065; color: #C4B5FD; }
     [data-theme="dark"] .run-type-optimize        { background: #422006; color: #FCD34D; }
     [data-theme="dark"] .run-type-thank_you       { background: #064E3B; color: #6EE7B7; }
     [data-theme="dark"] .run-type-job_description { background: #1F2937; color: #D1D5DB; }
     [data-theme="dark"] .run-type-scoring         { background: #831843; color: #F9A8D4; }
-    [data-theme="dark"] .run-type-app_questions   { background: #431407; color: #FDBA74; }
+    [data-theme="dark"] .run-type-aq   { background: #431407; color: #FDBA74; }
     .run-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .825rem; color: var(--text); }
     .run-chip-date { font-size: .75rem; color: var(--muted); flex-shrink: 0; }
     .run-chip-link { color: var(--border); text-decoration: none; flex-shrink: 0; font-size: .75rem; font-weight: 600; }
@@ -2014,7 +2014,7 @@ function renderLinkedRuns(runs) {
   for (const r of runs) {
     const chip = document.createElement('div');
     chip.className = 'run-chip';
-    const typeLabel = { resume: 'Resume', optimize: 'Optimize', interview_prep: 'Prep', thank_you: 'Thank You', job_description: 'JD', scoring: 'Scoring', app_questions: 'AQ' }[r.type] || r.type || 'Resume';
+    const typeLabel = { resume: 'Resume', optimize: 'Optimize', interview_prep: 'Prep', thank_you: 'Thank You', job_description: 'JD', scoring: 'Scoring', aq: 'AQ' }[r.type] || r.type || 'Resume';
     const typeClass = `run-type-${r.type || 'resume'}`;
     const dateStr   = r.linked_at ? fmtDateFull(r.linked_at) : '';
     chip.innerHTML = `
