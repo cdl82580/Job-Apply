@@ -198,6 +198,8 @@ job-apply/
 
 The bot also publishes a dynamic **App Home tab** showing live pipeline stats, upcoming calendar events, and a quick command reference — opens when you click the app's Home tab in Slack.
 
+**Resume upload via DM:** Drop a `.docx` file into a DM with the bot to update your master resume. The bot validates the file is a valid ZIP archive and runs it through `pandoc` to verify it can extract usable text (≥200 characters) — the same path the agents use at runtime. If validation fails, you'll get a warning with instructions to re-export.
+
 ---
 
 ## CLI Usage

@@ -1118,6 +1118,12 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>Interview Prep</h2>
 <p>The prep workflow (<code>POST /api/prep</code>) generates a compact 2-page interview prep reference card. It follows the same SSE streaming pattern as the run workflow. Select an existing tracker application (which must have a saved <code>job_description.md</code> in its Drive folder), enter the interview round and an optional focus/slant, and hit <strong>Generate Prep</strong>. Company and role auto-fill from the selected application.</p>
 
+<h2>Application Questions</h2>
+<p>The <strong>Application Questions</strong> workflow (<code>POST /api/aq</code>) drafts answers to freeform application questions using your resume, JD, and profile. Select a tracker application (must have a saved <code>job_description.md</code>), paste the question, choose a tone (professional/conversational/technical/concise), and optionally set a character limit. The agent may ask clarifying questions before generating — answer them and it refines. Output includes an editable answer with live character count, copy-to-clipboard, and follow-up refinement chips.</p>
+
+<h2>Thank You Email</h2>
+<p>The <strong>Thank You Email</strong> workflow (<code>POST /api/thankyou</code>) generates a post-interview thank-you email. Select a tracker application or enter the company and role manually, choose the interview round type and tone, and optionally add interviewer names and key topics discussed. Output is an editable email with subject line, copy-to-clipboard, DOCX download, and Google Drive upload.</p>
+
 <h2>Optimize Run</h2>
 <p>After a resume or cover letter has been generated, the <strong>Optimize</strong> workflow (<code>POST /api/optimize</code>) revises the documents in place based on a freeform instruction — e.g. "strengthen the opening bullet to emphasize API delivery." It verifies folder ownership via your linked application records, then streams progress via SSE. The <code>done</code> event includes a <code>change_summary</code> list of edits made. Rate-limited to one active optimize per user.</p>
 
@@ -1424,7 +1430,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
   <li>Slash command payloads from Slack</li>
   <li>Interactive component submissions (modals, selects)</li>
   <li>App Home tab rendering</li>
-  <li>DM messages (for file uploads)</li>
+  <li>DM messages (for file uploads — validates ZIP archive header and runs <code>pandoc</code> to verify usable text extraction before saving)</li>
 </ul>
 
 <h2>Required Environment Variables</h2>
@@ -1453,15 +1459,21 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       id: 'slack-job-commands',
       category: 'slack',
       title: 'Job & Run Commands',
-      snippet: '/apply, /prep, /optimize, /rescore, /runs — running document generation and checking status from Slack.',
+      snippet: '/apply, /aq, /prep, /thankyou, /optimize, /rescore, /runs — running document generation and checking status from Slack.',
       readTime: '4 min',
       body: `
 <h2>/apply</h2>
 <p>Generates a tailored resume, ATS resume, and cover letter for a job posting.</p>
 <p>Invoking <code>/apply</code> opens a modal where you paste the job posting, company name, and role title. The bot submits the run to the API and polls for completion, posting results back to you in Slack including a link to the Google Drive output folder.</p>
 
+<h2>/aq</h2>
+<p>Answers a freeform application question (e.g. "Describe a time you led a cross-functional team") using your resume, JD, and profile. Opens a modal where you select a tracker application, paste the question, choose a tone, and optionally set a character limit. The agent may ask clarifying questions before generating — answer them in the follow-up modal and the final answer is posted back to you.</p>
+
 <h2>/prep</h2>
 <p>Generates interview prep materials for a role. Same modal pattern as <code>/apply</code> — paste the job posting, company, and role. The bot polls and posts the prep document link when complete.</p>
+
+<h2>/thankyou</h2>
+<p>Generates a post-interview thank-you email. Opens a modal where you enter the company, role, interview round type (Phone Screen, Hiring Manager, Peer, Technical, Executive, Panel), tone (Professional, Conversational, Concise), optional interviewer name(s), key topics discussed, and the job posting. The bot generates an editable email with subject line, saves it as a DOCX, and uploads to Google Drive.</p>
 
 <h2>/optimize</h2>
 <p>Refines the documents from an existing agent run based on a freeform instruction — e.g. "strengthen the eHealth bullets to emphasize platform scalability, tighten the cover letter opening."</p>
@@ -1473,9 +1485,6 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 
 <h2>/runs</h2>
 <p>Lists your 10 most recent Drive run folders — company, role, date, and a link to the folder. Quick way to find output files without opening the web app or Drive.</p>
-
-<h2>/jobstatus</h2>
-<p>Pings the API health endpoint and reports whether the app is up. Useful for confirming the bot can reach the API before kicking off a long run.</p>
 
 <h2>Polling Behavior</h2>
 <p>After submitting a run, prep, or optimize request, the bot polls the API every few seconds (up to a 5-minute timeout). If the run times out or fails, the bot posts the error details.</p>

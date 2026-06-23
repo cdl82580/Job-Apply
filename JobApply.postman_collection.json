@@ -915,6 +915,14 @@
           }
         },
         {
+          "name": "GET /api/thankyou/{ty_id}/files/{filename}",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/thankyou/{{ty_id}}/files/ThankYou_AcmeCorp_SolutionsEngineer.docx",
+            "description": "Download thank-you email DOCX. Returns 403 if run belongs to another user, 404 if run is not complete."
+          }
+        },
+        {
           "name": "Start Optimize Run",
           "request": {
             "method": "POST",
