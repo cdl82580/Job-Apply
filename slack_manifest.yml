@@ -29,6 +29,10 @@ features:
       description: Generate an interview prep reference card for an upcoming round
       usage_hint: (opens a form)
       should_escape: false
+    - command: /thankyou
+      description: Generate a post-interview thank-you email
+      usage_hint: (opens a form)
+      should_escape: false
     - command: /optimize
       description: Refine an existing run’s documents from a prompt
       usage_hint: (opens a form)
