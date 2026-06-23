@@ -1800,6 +1800,28 @@ def handle_message_with_file(body, client, logger):
         dl = requests.get(dl_url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
         dl.raise_for_status()
 
+        # Validate: pandoc can extract usable text (same path the agents use)
+        import subprocess, tempfile
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+            tmp.write(dl.content)
+            tmp.flush()
+            result = subprocess.run(
+                ["pandoc", tmp.name, "-t", "plain"],
+                capture_output=True, text=True, timeout=30,
+            )
+        extracted = result.stdout.strip()
+        if result.returncode != 0 or len(extracted) < 200:
+            client.chat_postMessage(
+                channel=user_id,
+                text=(
+                    f":warning: *{f['name']}* doesn't look usable — "
+                    "pandoc couldn't extract enough text from it. "
+                    "The agents won't be able to read this file.\n\n"
+                    "Try re-exporting as .docx from Word or Google Docs and uploading again."
+                ),
+            )
+            return
+
         # Upload to API
         r = _api("post", "/api/profile/resume",
                  files={"resume": (f["name"], dl.content,
