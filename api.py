@@ -2239,7 +2239,8 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     _runs[run_id] = {"queue": q, "status": "queued", "result": None, "error": None,
                      "user_id": user_id}
     user_audit.log(user_id, "run_started", user_data["email"], _client_ip(request),
-                   run_id=run_id, company=req.company, role=req.role)
+                   run_id=run_id, company=req.company, role=req.role,
+                   app_id=req.app_id or "")
 
     # Pin this browser session to the machine that owns this run's state
     if FLY_MACHINE_ID:
@@ -2529,7 +2530,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
                        "user_id": user_id}
     user_audit.log(user_id, "prep_started", user_data["email"], _client_ip(request),
                    prep_id=prep_id, company=req.company, role=req.role,
-                   round_type=req.round_type)
+                   round_type=req.round_type, app_id=req.app_id or "")
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)

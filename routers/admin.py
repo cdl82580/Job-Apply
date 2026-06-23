@@ -440,8 +440,11 @@ async def list_all_runs(request: Request):
     event corresponds to one actual run attempt (no Drive folder deduplication)."""
     _admin(request)
 
-    # Build (user_id, app_id) → {company, role} for enriching match_scored rows
+    # Build lookup maps for enriching runs with application info:
+    #   app_cache:       (user_id, app_id) → {company, role}
+    #   folder_app_map:  gdrive_folder_id  → {app_id, app_company, app_role}
     app_cache: dict[tuple[str, str], dict] = {}
+    folder_app_map: dict[str, dict] = {}
     try:
         for uid_rec in storage.list_all_users():
             uid = uid_rec.get("user_id", "")
@@ -449,10 +452,20 @@ async def list_all_runs(request: Request):
                 full = app_store.get_application(uid, app_sum["id"])
                 if not full:
                     continue
-                app_cache[(uid, full["id"])] = {
+                info = {
                     "company": full.get("company", ""),
                     "role":    full.get("role_title", ""),
                 }
+                app_cache[(uid, full["id"])] = info
+                for lrun in full.get("linked_runs", []):
+                    fid = lrun.get("gdrive_folder_id")
+                    if fid:
+                        folder_app_map[fid] = {
+                            "type":        lrun.get("type", ""),
+                            "app_id":      full["id"],
+                            "app_company": info["company"],
+                            "app_role":    info["role"],
+                        }
     except Exception:
         pass
 
@@ -475,6 +488,8 @@ async def list_all_runs(request: Request):
                 run_id = details.get("run_id", "")
                 if not run_id or run_id in runs_by_key:
                     continue
+                run_app_id = details.get("app_id", "")
+                run_app_info = app_cache.get((uid, run_app_id), {})
                 runs_by_key[run_id] = {
                     "id":           run_id,
                     "type":         "resume",
@@ -485,15 +500,17 @@ async def list_all_runs(request: Request):
                     "created_at":   ts,
                     "status":       "running",
                     "web_view_link": "",
-                    "app_id":       "",
-                    "app_company":  "",
-                    "app_role":     "",
+                    "app_id":       run_app_id,
+                    "app_company":  run_app_info.get("company", ""),
+                    "app_role":     run_app_info.get("role", ""),
                 }
 
             elif action == "prep_started":
                 prep_id = details.get("prep_id", "")
                 if not prep_id or prep_id in runs_by_key:
                     continue
+                prep_app_id = details.get("app_id", "")
+                prep_app_info = app_cache.get((uid, prep_app_id), {})
                 runs_by_key[prep_id] = {
                     "id":           prep_id,
                     "type":         "interview_prep",
@@ -505,9 +522,9 @@ async def list_all_runs(request: Request):
                     "created_at":   ts,
                     "status":       "running",
                     "web_view_link": "",
-                    "app_id":       "",
-                    "app_company":  "",
-                    "app_role":     "",
+                    "app_id":       prep_app_id,
+                    "app_company":  prep_app_info.get("company", ""),
+                    "app_role":     prep_app_info.get("role", ""),
                 }
 
             elif action == "match_scored":
@@ -728,27 +745,6 @@ async def list_all_runs(request: Request):
         if co or ro:
             covered.add((ue, _norm(f"{co}_{ro}")))
 
-    # Build folder_id → app info from linked_runs (for JD folder enrichment)
-    folder_meta_map: dict[str, dict] = {}
-    try:
-        for uid_rec in users:
-            uid = uid_rec.get("user_id", "")
-            for app_sum in app_store.list_applications(uid).get("items", []):
-                full = app_store.get_application(uid, app_sum["id"])
-                if not full:
-                    continue
-                for lrun in full.get("linked_runs", []):
-                    fid = lrun.get("gdrive_folder_id")
-                    if fid:
-                        folder_meta_map[fid] = {
-                            "type":        lrun.get("type", ""),
-                            "app_id":      full["id"],
-                            "app_company": full.get("company", ""),
-                            "app_role":    full.get("role_title", ""),
-                        }
-    except Exception:
-        pass
-
     PREP_KW = {"phonescreen", "hiringmanager", "technical", "executive", "panel", "peer"}
 
     def _infer_type(name: str) -> str:
@@ -782,7 +778,7 @@ async def list_all_runs(request: Request):
                 name = item["name"]
                 if "@" not in name:
                     # Legacy flat-root folder — user email unknown
-                    meta    = folder_meta_map.get(item["id"], {})
+                    meta    = folder_app_map.get(item["id"], {})
                     fn_norm = _norm(name)
                     if not any(fn == fn_norm for (_, fn) in covered):
                         runs_by_key[f"drive_{item['id']}"] = {
@@ -824,7 +820,7 @@ async def list_all_runs(request: Request):
                     fn_norm = _norm(child["name"])
                     if (ue_norm, fn_norm) in covered:
                         continue  # already represented by one or more audit events
-                    meta = folder_meta_map.get(child["id"], {})
+                    meta = folder_app_map.get(child["id"], {})
                     runs_by_key[f"drive_{child['id']}"] = {
                         "id":           child["id"],
                         "type":         meta.get("type") or _infer_type(child["name"]),
@@ -841,6 +837,16 @@ async def list_all_runs(request: Request):
                     }
     except Exception as exc:
         logger.warning("Admin runs Drive fallback failed: %s", exc)
+
+    # Backfill app info by matching Drive folder ID to linked_runs
+    for run in runs_by_key.values():
+        if not run.get("app_company"):
+            link = run.get("web_view_link", "")
+            if link:
+                fid = link.rstrip("/").split("/")[-1]
+                match = folder_app_map.get(fid)
+                if match:
+                    run.update(match)
 
     all_runs = list(runs_by_key.values())
     all_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
