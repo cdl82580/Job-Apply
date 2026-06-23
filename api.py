@@ -2747,7 +2747,7 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
                     _app_questions[aq_id]["_finished_at"] = time.time()
                     if req.app_id:
                         _link_run_to_app(user_id=user_id, app_id=req.app_id,
-                                         run_type="app_questions",
+                                         run_type="aq",
                                          result_dir=Path("."), folder_url="")
                     user_audit.log(user_id, "aq_completed", user_data["email"],
                                    aq_id=aq_id, company=req.company, role=req.role)
