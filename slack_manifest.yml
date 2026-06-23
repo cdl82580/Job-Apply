@@ -4,7 +4,7 @@ _metadata:
 
 display_information:
   name: Job Apply
-  description: AI-powered job application agent — resumes, cover letters, interview prep, thank-you emails, calendar, and application tracking, all from Slack.
+  description: AI job search agent — resumes, cover letters, interview prep, emails & tracking, all from Slack.
   background_color: "#1A3C5E"
 
 features:
