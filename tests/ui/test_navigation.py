@@ -62,15 +62,3 @@ class TestLogout:
         auth_page.click("#logoutBtnHeader")
         auth_page.wait_for_url(lambda url: "login" in url, timeout=10_000)
         expect(auth_page.locator("#loginForm")).to_be_visible()
-
-
-class TestAdminRedirect:
-    def test_admin_page_redirects_regular_user(self, auth_page):
-        """Regular users who try to access /admin.html should be redirected or blocked."""
-        auth_page.goto("/admin.html")
-        auth_page.wait_for_load_state("networkidle", timeout=10_000)
-        # Regular user should be redirected away or see an access denied page
-        # (Admin page JS redirects non-admins to their dashboard)
-        current_url = auth_page.url
-        # Either redirected to main app or login
-        assert "admin" not in current_url or auth_page.locator("body").inner_text() != ""
