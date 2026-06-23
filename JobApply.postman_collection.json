@@ -848,6 +848,73 @@
       "name": "Optimize Runs",
       "item": [
         {
+          "name": "Start Thank You Email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/thankyou",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "thankyou"
+              ]
+            },
+            "description": "Generate a post-interview thank-you email. Returns `{ty_id, machine_id}`. Output is an editable email body + subject line, saved as DOCX and uploaded to Drive.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_posting\": \"...\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"interviewer\": \"Sarah Chen\",\n  \"topics\": \"MCP integration roadmap, scaling connectors\",\n  \"tone\": \"professional\",\n  \"app_id\": \"{{app_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Stream Thank You Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/thankyou/{{ty_id}}/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "thankyou",
+                "{{ty_id}}",
+                "stream"
+              ]
+            },
+            "description": "SSE stream for a thank-you email run. Events: `progress`, `done` (includes email_text, subject, files, folder_url), `error`."
+          }
+        },
+        {
+          "name": "GET /api/thankyou/{ty_id}/status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/thankyou/{{ty_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "thankyou",
+                "{{ty_id}}",
+                "status"
+              ]
+            },
+            "description": "Poll thank-you email run status: `queued | running | done | error`."
+          }
+        },
+        {
           "name": "Start Optimize Run",
           "request": {
             "method": "POST",

@@ -650,6 +650,37 @@ async def list_all_runs(request: Request):
                     if details.get("folder_url"):
                         runs_by_key[aq_id]["web_view_link"] = details["folder_url"]
 
+            elif action == "thankyou_started":
+                ty_id = details.get("ty_id", "") or f"ty_{event['id']}"
+                if ty_id in runs_by_key:
+                    continue
+                app_id   = details.get("app_id", "")
+                app_info = app_cache.get((uid, app_id), {})
+                runs_by_key[ty_id] = {
+                    "id":           ty_id,
+                    "type":         "thank_you",
+                    "company":      app_info.get("company", details.get("company", "")),
+                    "role":         app_info.get("role", details.get("role", "")),
+                    "user_id":      uid,
+                    "user_email":   user_email,
+                    "created_at":   ts,
+                    "status":       "running",
+                    "web_view_link": details.get("folder_url", ""),
+                    "app_id":       app_id,
+                    "app_company":  app_info.get("company", ""),
+                    "app_role":     app_info.get("role", ""),
+                }
+
+            elif action in ("thankyou_completed", "thankyou_failed"):
+                ty_id = details.get("ty_id", "")
+                if not ty_id:
+                    continue
+                status = "complete" if action == "thankyou_completed" else "error"
+                if ty_id in runs_by_key:
+                    runs_by_key[ty_id]["status"] = status
+                    if details.get("folder_url"):
+                        runs_by_key[ty_id]["web_view_link"] = details["folder_url"]
+
     # Override status for still-active in-memory runs; surface any not yet in audit
     from api import _runs, _preps  # noqa: PLC0415
     now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

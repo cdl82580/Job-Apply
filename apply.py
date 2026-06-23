@@ -206,6 +206,34 @@ class AppQuestionResult:
 
 
 @dataclass
+class ThankYouConfig:
+    """Settings for generating an interview thank-you email."""
+    job_posting:    str
+    company:        str
+    role:           str
+    round_type:     str
+    interviewer:    str                    = ""
+    topics:         str                    = ""
+    tone:           str                    = "professional"
+    model:          str                    = DEFAULT_MODEL
+    progress:       Callable[[str], None]  = field(default=print)
+    profile_text:   str | None             = None
+    master_resume:  Path | None            = None
+    user_id:        str | None             = None
+    user_label:     str | None             = None
+
+
+@dataclass
+class ThankYouResult:
+    """Result from generating a thank-you email."""
+    email_text:   str
+    subject:      str
+    run_dir:      Path
+    docx_path:    Path
+    folder_url:   str | None = None
+
+
+@dataclass
 class OptimizeConfig:
     """Settings for optimizing an existing run's documents in place."""
     folder_id:             str                    # Drive run folder to optimize
@@ -431,6 +459,12 @@ Write each paragraph (P1-P5) to be 2-4 sentences maximum. Total word count
 across all five paragraphs must not exceed 300 words. Be concise and punchy -
 every sentence must earn its place. Cut anything that restates what the previous
 sentence already said.
+
+VOICE: Write with a stronger point of view. Let personality, opinions, and natural
+imperfections come through. Make it sound like one real person — not a generic writer,
+not a polished AI summary. Vary sentence length, let some sentences be blunt and short.
+If a phrase sounds like it could appear in any candidate's resume, rewrite it until it
+couldn't.
 """
 
 
@@ -2063,6 +2097,11 @@ All content must be in Corey's voice: direct, specific, first-person, no corpora
 Every prepared answer must be specific enough that it couldn't apply to any other candidate.
 Be ruthlessly specific — name tools, quote numbers, reference real projects.
 
+NATURAL FLOW: Make every answer flow like a real conversation. Vary sentence length —
+mix short punchy statements with longer explanations. Remove repetitive sentence patterns
+(don't start three answers the same way). If something reads like a script, rewrite it
+until it sounds like something Corey would actually say out loud in an interview.
+
 Return ONLY valid JSON. No preamble, no markdown fences.
 """
 
@@ -2710,6 +2749,10 @@ Rules:
   not present in the current resume.
 - Preserve the candidate's voice: direct, specific, first-person, no corporate
   filler. No "passion for", "leverage", "synergy", "results-driven".
+- AI PATTERN REMOVAL: Before returning, scan every edited field for phrases,
+  structures, and wording that sound AI-generated — overly balanced clauses,
+  "leveraged X to achieve Y" patterns, suspiciously parallel bullet structures,
+  or anything too polished. Rewrite those to feel spontaneous and authentic.
 
 Return ONLY a JSON object with exactly these keys:
 {
@@ -2732,6 +2775,10 @@ Rules:
   "synergy", "results-driven".
 - Never invent facts, numbers, or experience not present in the current letter
   or the job description.
+- HUMAN REWRITE: Remove anything that sounds overly polished, corporate, or
+  written to impress. Make every paragraph direct, natural, and conversational.
+  If a sentence sounds like it was written to check a box, rewrite it so it
+  sounds like something a real person would actually say.
 
 Return ONLY a JSON object with exactly these keys:
 {
@@ -2754,6 +2801,10 @@ Tone rules:
 - No "leverage", "synergy", "results-driven", "passion for"
 - Specific > general. Quantified > vague. Honest > impressive-sounding.
 - Write like the candidate talks, not like a LinkedIn summary
+- AUTHENTICITY CHECK: Go through every sentence before returning. Rewrite anything
+  that feels too perfect, too formal, or overly optimized. Make it sound like
+  something someone would actually say out loud — not something that was clearly
+  crafted by an AI to hit every keyword.
 
 You will be given the candidate's resume, profile/voice guide, and the job description
 for context. Use them to tailor the answer to the specific role."""
@@ -2913,6 +2964,206 @@ Return ONLY a JSON object. No preamble, no markdown fences."""
         char_count=char_count,
         follow_ups=follow_ups,
     )
+
+
+THANKYOU_SYSTEM = """\
+You are a job application assistant helping the candidate write a post-interview
+thank-you email. Write in first person as the candidate. The email should feel
+genuine and specific to the conversation that just happened — not a template.
+
+Tone rules:
+- First person, direct, no corporate filler
+- Never start with "I wanted to reach out to express my gratitude"
+- No "passion for", "leverage", "synergy", "results-driven"
+- Reference specific topics from the interview — the reader should be able to
+  tell this email was written after THIS conversation, not any conversation
+- Keep it short: 3-4 paragraphs max, under 200 words total
+- Close with something forward-looking but not pushy
+
+VOICE: Write with a stronger point of view. Let personality come through. Make it
+sound like one real person writing a quick, genuine note — not a carefully crafted
+follow-up optimized to hit every keyword. Vary sentence length. If a sentence
+sounds like it could appear in any candidate's thank-you email, rewrite it until
+it couldn't. Remove anything that sounds overly polished or written to impress."""
+
+
+def generate_thank_you_email(config: ThankYouConfig) -> ThankYouResult:
+    """Generate a post-interview thank-you email."""
+    wfc = WorkflowConfig(
+        model=config.model,
+        progress=config.progress,
+        master_resume=config.master_resume,
+        profile_text=config.profile_text,
+        user_id=config.user_id,
+        user_label=config.user_label,
+    )
+
+    config.progress("\n\U0001f4e7 Thank You Email Agent")
+    config.progress(f"   Company     : {config.company}")
+    config.progress(f"   Role        : {config.role}")
+    config.progress(f"   Round       : {config.round_type}")
+    if config.interviewer:
+        config.progress(f"   Interviewer : {config.interviewer}")
+
+    config.progress("  Reading inputs…")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise WorkflowError("ANTHROPIC_API_KEY environment variable not set")
+    resume_text = extract_resume_text(wfc)
+    profile = wfc.profile_text if wfc.profile_text is not None else read_file(PROFILE_FILE)
+    config.progress(
+        f"  ✓ Inputs loaded "
+        f"({len(resume_text)} chars resume, {len(profile)} chars profile)"
+    )
+
+    tone_instructions = {
+        "professional": "Write in a polished, professional tone — confident but not stiff.",
+        "conversational": "Write in a warm, conversational tone — approachable and genuine.",
+        "concise": "Write as concisely as possible — every word must earn its place.",
+    }
+    tone_note = tone_instructions.get(config.tone, tone_instructions["professional"])
+
+    interviewer_note = ""
+    if config.interviewer:
+        interviewer_note = f"\nInterviewer name(s): {config.interviewer}"
+
+    topics_note = ""
+    if config.topics:
+        topics_note = f"\n\nKey topics discussed in the interview:\n{config.topics}"
+
+    prompt = f"""Job Description:
+---
+{config.job_posting[:6000]}
+---
+
+Candidate Resume:
+---
+{resume_text[:6000]}
+---
+
+Candidate Profile & Voice Guide:
+---
+{profile[:4000]}
+---
+
+Interview Round: {config.round_type}{interviewer_note}{topics_note}
+
+Tone: {tone_note}
+
+Write a thank-you email for the interview. Return a JSON object:
+{{
+  "subject": "<email subject line>",
+  "email_body": "<the full email body including greeting and sign-off>"
+}}
+
+Return ONLY valid JSON. No preamble, no markdown fences."""
+
+    config.progress("  Generating thank-you email…")
+    raw = claude(THANKYOU_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    data = _parse_claude_json(raw)
+
+    subject = data.get("subject", f"Thank you — {config.role} interview")
+    email_body = data.get("email_body", "")
+    if not email_body:
+        raise WorkflowError("Claude returned an empty email body")
+
+    config.progress(f"  ✓ Email generated ({len(email_body)} chars)")
+
+    # Build output directory
+    company_safe = re.sub(r"[^A-Za-z0-9]+", "", config.company)
+    role_safe = re.sub(r"[^A-Za-z0-9]+", "", config.role)
+    base_dir = Path("output")
+    if config.user_id:
+        base_dir = base_dir / config.user_id
+    run_dir = base_dir / f"{company_safe}_{role_safe}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save as DOCX
+    config.progress("  Generating DOCX…")
+    docx_name = f"ThankYou_{APPLICANT_NAME}_{company_safe}_{role_safe}.docx"
+    docx_path = run_dir / docx_name
+
+    js_script = _build_thankyou_docx_js(
+        subject=subject,
+        email_body=email_body,
+        company=config.company,
+        role=config.role,
+        round_type=config.round_type,
+        interviewer=config.interviewer,
+        output_path=docx_path,
+    )
+    script_path = Path("thankyou_gen.js")
+    script_path.write_text(js_script, encoding="utf-8")
+    run(["node", str(script_path)], config=wfc)
+    script_path.unlink(missing_ok=True)
+    config.progress(f"  ✓ Saved {docx_path.name}")
+
+    # Upload to Drive
+    folder_url = None
+    try:
+        folder_url = step8_upload(run_dir, company_safe, role_safe, wfc)
+    except Exception as exc:
+        config.progress(f"  ⚠ Drive upload failed: {exc}")
+
+    return ThankYouResult(
+        email_text=email_body,
+        subject=subject,
+        run_dir=run_dir,
+        docx_path=docx_path,
+        folder_url=folder_url,
+    )
+
+
+def _build_thankyou_docx_js(
+    subject: str,
+    email_body: str,
+    company: str,
+    role: str,
+    round_type: str,
+    interviewer: str,
+    output_path: Path,
+) -> str:
+    """Return a Node.js script that produces the thank-you email DOCX."""
+    def esc(text: str) -> str:
+        return escape_js_string(" ".join(str(text).split()))
+
+    paragraphs_js = []
+    for para in email_body.split("\n\n"):
+        para = para.strip()
+        if not para:
+            continue
+        paragraphs_js.append(
+            f'    new Paragraph({{\n'
+            f'      spacing: {{ after: 160 }},\n'
+            f'      children: [new TextRun({{ text: "{esc(para)}", font: "Calibri", size: 22, color: "111827" }})]\n'
+            f'    }}),'
+        )
+
+    body_paragraphs = "\n".join(paragraphs_js)
+
+    return f"""const {{ Document, Packer, Paragraph, TextRun, HeadingLevel, BorderStyle }} = require("docx");
+const fs = require("fs");
+
+(async () => {{
+  const doc = new Document({{
+    sections: [{{
+      properties: {{ page: {{ margin: {{ top: 720, bottom: 720, left: 1080, right: 1080 }} }} }},
+      children: [
+    new Paragraph({{
+      spacing: {{ after: 40 }},
+      children: [new TextRun({{ text: "Subject: {esc(subject)}", font: "Calibri", size: 22, bold: true, color: "1A3C5E" }})]
+    }}),
+    new Paragraph({{
+      spacing: {{ after: 300 }},
+      border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 1, color: "D1D5DB" }} }},
+      children: [new TextRun({{ text: "{esc(company)} · {esc(role)} · {esc(round_type)}", font: "Calibri", size: 18, color: "6B7280" }})]
+    }}),
+{body_paragraphs}
+      ],
+    }}],
+  }});
+  const buf = await Packer.toBuffer(doc);
+  fs.writeFileSync("{str(output_path).replace(chr(92), '/')}", buf);
+}})();"""
 
 
 def _parse_claude_json(raw: str) -> dict:

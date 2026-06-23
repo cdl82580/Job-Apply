@@ -636,6 +636,7 @@
         <option value="optimize">Optimized Resume</option>
         <option value="aq">Application Questions</option>
         <option value="interview_prep">Interview Prep</option>
+        <option value="thank_you">Thank You Email</option>
         <option value="scoring">Match Scoring</option>
         <option value="job_description">Job Description</option>
       </select>
@@ -1631,7 +1632,7 @@ function renderApps() {
 }
 
 // ── Render runs ──────────────────────────────────────────────────────
-const RUN_TYPE_CLASS = { resume: 's-applied', optimize: 's-interviewing', aq: 's-phone-screen', interview_prep: 's-researching', scoring: 's-offer', job_description: 's-onhold' };
+const RUN_TYPE_CLASS = { resume: 's-applied', optimize: 's-interviewing', aq: 's-phone-screen', interview_prep: 's-researching', thank_you: 's-interviewing', scoring: 's-offer', job_description: 's-onhold' };
 
 function filterAndRenderRuns() {
   const type     = document.getElementById('runsTypeFilter').value;
@@ -1673,7 +1674,8 @@ function renderRuns(runs) {
   for (const r of runs) {
     const tr        = document.createElement('tr');
     const typeLabel = { resume: 'Resume', optimize: 'Optimized', aq: 'App Questions',
-                        interview_prep: 'Interview Prep', scoring: 'Match Score',
+                        interview_prep: 'Interview Prep', thank_you: 'Thank You',
+                        scoring: 'Match Score',
                         job_description: 'Job Description' }[r.type] || r.type;
     const typeClass = RUN_TYPE_CLASS[r.type] || '';
     const statusColor = (r.status === 'running' || r.status === 'queued')
@@ -2389,7 +2391,7 @@ const APP_HEADERS = ['Application ID','Company','Domain','Role Title','Status','
 function _runRows(list) {
   return list.map(r => [
     r.id||'',
-    r.type === 'interview_prep' ? 'Interview Prep' : r.type === 'job_description' ? 'Job Description' : 'Resume',
+    r.type === 'interview_prep' ? 'Interview Prep' : r.type === 'thank_you' ? 'Thank You' : r.type === 'job_description' ? 'Job Description' : 'Resume',
     r.app_company||'', r.app_role||'', r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
   ]);
 }
@@ -3475,6 +3477,7 @@ function renderRunCards(runs) {
   if (!runs.length) { el.innerHTML = '<p class="empty">No runs match.</p>'; return; }
   el.innerHTML = runs.map(r => {
     const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
+                    : r.type === 'thank_you' ? 'Thank You'
                     : r.type === 'job_description' ? 'Job Description'
                     : r.type === 'scoring' ? 'Scoring' : 'Resume';
     const typeClass = RUN_TYPE_CLASS[r.type] || '';

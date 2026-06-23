@@ -709,23 +709,6 @@
     <button class="btn btn-ghost" id="newRunBtn">&#x2190; New Application</button>
   </div>
 
-  <!-- ── Past Runs ────────────────────────────────────────────── -->
-  <div class="card" id="pastRunsCard">
-    <div class="card-head" id="pastRunsToggle">
-      <h2>Past Runs</h2>
-      <span class="chevron" id="pastRunsChevron">&#9660;</span>
-    </div>
-    <div class="card-body hidden" id="pastRunsBody">
-      <div class="past-runs-loading" id="pastRunsLoading">
-        <span class="spin-muted"></span> Loading from Google Drive…
-      </div>
-      <div id="pastRunsList"></div>
-      <div class="past-runs-empty hidden" id="pastRunsEmpty">
-        No past runs found in Google Drive.
-      </div>
-    </div>
-  </div>
-
   <!-- ── Optimize Run Form ────────────────────────────────────── -->
   <div class="card" id="optCard">
     <div class="card-head" id="optToggle">
@@ -977,6 +960,134 @@
       <span class="drive-btn-arrow">&#x2197;</span>
     </a>
     <button class="btn btn-ghost" id="newPrepBtn">&#x2190; New Prep</button>
+  </div>
+
+  <!-- ── Thank You Email Form ─────────────────────────────────── -->
+  <div class="card" id="tyCard">
+    <div class="card-head" id="tyToggle">
+      <h2>Thank You Email</h2>
+      <span class="chevron" id="tyChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="tyBody">
+      <div class="field">
+        <label>Application <span class="opt">(required — must have a saved job description)</span></label>
+        <div class="app-picker-wrap" id="tyAppPickerWrap" style="margin-bottom:.75rem">
+          <div class="app-picker-selected hidden" id="tyAppSelected">
+            <img class="sel-logo" id="tySelLogo" alt="">
+            <span class="sel-logo-ph hidden" id="tySelLogoPh"></span>
+            <span class="sel-name" id="tySelName"></span>
+            <button type="button" class="sel-clear" id="tySelClear" title="Clear">&#x2715;</button>
+          </div>
+          <div class="app-picker-input-row" id="tyAppInputRow">
+            <input type="text" id="tyAppSearch" autocomplete="off" placeholder="Search by company or role…">
+            <div class="app-suggestions hidden" id="tyAppSuggestions"></div>
+          </div>
+          <div class="jd-status hidden" id="tyJdStatus"></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="tyCompany">Company</label>
+          <input id="tyCompany" type="text" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="field">
+          <label for="tyRole">Role Title</label>
+          <input id="tyRole" type="text" placeholder="e.g. Solutions Engineer">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="tyRound">Interview Round</label>
+          <select id="tyRound">
+            <option>Phone Screen</option>
+            <option>Hiring Manager</option>
+            <option>Peer</option>
+            <option>Technical</option>
+            <option>Executive</option>
+            <option>Panel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="tyTone">Tone</label>
+          <select id="tyTone">
+            <option value="professional">Professional</option>
+            <option value="conversational">Conversational</option>
+            <option value="concise">Concise</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="tyInterviewer">Interviewer Name(s) <span class="opt">(optional)</span></label>
+        <input id="tyInterviewer" type="text" placeholder="e.g. Sarah Chen, VP Engineering">
+      </div>
+      <div class="field">
+        <label for="tyTopics">Key Topics Discussed <span class="opt">(optional — helps personalize)</span></label>
+        <textarea id="tyTopics" rows="3"
+          placeholder="e.g. talked about their MCP integration roadmap, my experience scaling Tray.ai connectors, team culture around shipping fast"></textarea>
+      </div>
+      <button class="btn" type="button" id="tySubmitBtn">Generate Thank You Email</button>
+      <div class="inline-err" id="tyFormErr" style="margin-top:.75rem"></div>
+    </div>
+  </div>
+
+  <!-- ── Thank You Progress ───────────────────────────────────── -->
+  <div class="card hidden" id="tyProgressCard">
+    <div class="progress-header">
+      <h2>Thank You Email</h2>
+      <span class="badge badge-running" id="tyBadge">Running</span>
+    </div>
+    <div class="log" id="tyLog"></div>
+    <div class="inline-err" id="tyErr"></div>
+  </div>
+
+  <!-- ── Thank You Results ────────────────────────────────────── -->
+  <div class="card hidden" id="tyResultsCard">
+    <div class="result-meta">
+      <div class="result-check">&#10003;</div>
+      <div class="result-job">
+        <strong id="tyResCompany"></strong>
+        <span class="result-sep">&middot;</span>
+        <span class="result-role" id="tyResRole"></span>
+        <span class="result-sep">&middot;</span>
+        <span style="color:var(--muted);font-size:.875rem" id="tyResRound"></span>
+      </div>
+    </div>
+    <div class="field" style="margin-top:.5rem;margin-bottom:.75rem">
+      <label>Subject</label>
+      <input type="text" id="tySubjectText" readonly style="font-weight:600;background:var(--fill)">
+    </div>
+    <div class="field">
+      <label>Email Body</label>
+      <textarea id="tyEmailText" rows="10" style="font-family:inherit;font-size:.925rem;line-height:1.5"></textarea>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+      <button class="btn" type="button" id="tyCopyBtn">&#x1f4cb; Copy to Clipboard</button>
+      <span id="tyCopiedMsg" style="color:var(--success);font-size:.85rem;display:none">Copied!</span>
+    </div>
+    <div class="file-grid" id="tyFileGrid"></div>
+    <a class="drive-btn hidden" id="tyDriveBtn" target="_blank" rel="noopener">
+      <span class="drive-btn-icon">&#x2601;</span>
+      <span class="drive-btn-text">Open Google Drive Folder</span>
+      <span class="drive-btn-arrow">&#x2197;</span>
+    </a>
+    <button class="btn btn-ghost" type="button" id="tyNewBtn">&#x2190; New Thank You</button>
+  </div>
+
+  <!-- ── Past Runs ────────────────────────────────────────────── -->
+  <div class="card" id="pastRunsCard">
+    <div class="card-head" id="pastRunsToggle">
+      <h2>Past Runs</h2>
+      <span class="chevron" id="pastRunsChevron">&#9660;</span>
+    </div>
+    <div class="card-body hidden" id="pastRunsBody">
+      <div class="past-runs-loading" id="pastRunsLoading">
+        <span class="spin-muted"></span> Loading from Google Drive…
+      </div>
+      <div id="pastRunsList"></div>
+      <div class="past-runs-empty hidden" id="pastRunsEmpty">
+        No past runs found in Google Drive.
+      </div>
+    </div>
   </div>
 
 </div><!-- /container -->
@@ -2332,6 +2443,225 @@
     document.getElementById('prepFileGrid').innerHTML = '';
     hide('prepProgressCard');
     document.getElementById('prepLog').textContent = '';
+  });
+
+  // ── Thank You Email ───────────────────────────────────────────────
+
+  let _tyAppId          = null;
+  let _tyJobPosting     = '';
+  let _tyCompanyCtx     = '';
+  let _tyRoleCtx        = '';
+  let _tyRoundCtx       = '';
+  let _tyLinkedFolderId = null;
+
+  function initTYPicker() {
+    initAppPicker({
+      searchEl:      document.getElementById('tyAppSearch'),
+      suggestionsEl: document.getElementById('tyAppSuggestions'),
+      selectedEl:    document.getElementById('tyAppSelected'),
+      selLogoEl:     document.getElementById('tySelLogo'),
+      selNameEl:     document.getElementById('tySelName'),
+      selClearEl:    document.getElementById('tySelClear'),
+      inputRowEl:    document.getElementById('tyAppInputRow'),
+      jdStatusEl:    document.getElementById('tyJdStatus'),
+      onSelect: (app, jd) => {
+        _tyAppId = app.id;
+        _tyLinkedFolderId = (app.linked_runs || [])[0]?.gdrive_folder_id || null;
+        document.getElementById('tyCompany').value = app.company;
+        document.getElementById('tyRole').value    = app.role_title;
+        if (jd) _tyJobPosting = jd;
+      },
+      onClear: () => {
+        _tyAppId = null;
+        _tyLinkedFolderId = null;
+        document.getElementById('tyCompany').value = '';
+        document.getElementById('tyRole').value    = '';
+        _tyJobPosting = '';
+      },
+    });
+  }
+
+  // Init picker on load — append to the existing startup IIFE chain
+  initTYPicker();
+
+  document.getElementById('tyToggle').addEventListener('click', () => {
+    const body    = document.getElementById('tyBody');
+    const chevron = document.getElementById('tyChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open'); }
+  });
+
+  function setTYBadge(status) {
+    const b = document.getElementById('tyBadge');
+    b.className   = `badge badge-${status}`;
+    b.textContent = { running: 'Running…', done: 'Done', error: 'Error' }[status] ?? status;
+  }
+
+  document.getElementById('tySubmitBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('tyFormErr');
+    errEl.style.display = 'none';
+
+    const company     = document.getElementById('tyCompany').value.trim();
+    const role        = document.getElementById('tyRole').value.trim();
+    const round       = document.getElementById('tyRound').value;
+    const tone        = document.getElementById('tyTone').value;
+    const interviewer = document.getElementById('tyInterviewer').value.trim();
+    const topics      = document.getElementById('tyTopics').value.trim();
+
+    if (!_tyAppId) {
+      errEl.textContent = 'Select an application from the tracker first.';
+      errEl.style.display = 'block';
+      document.getElementById('tyAppSearch').focus();
+      return;
+    }
+
+    const jd = _tyJobPosting;
+    if (!jd) {
+      errEl.textContent = 'No job description found for this application. Run the resume agent first to save one.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (!company || !role) {
+      errEl.textContent = 'Company and role are required.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    _tyCompanyCtx = company;
+    _tyRoleCtx    = role;
+    _tyRoundCtx   = round;
+
+    document.getElementById('tyLog').textContent = '';
+    document.getElementById('tyErr').style.display = 'none';
+    hide('tyResultsCard');
+    hide('tyDriveBtn');
+    show('tyProgressCard');
+    setTYBadge('running');
+    const btn = document.getElementById('tySubmitBtn');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spin"></span> Generating…';
+
+    let ty_id;
+    try {
+      const res = await apiFetch('/api/thankyou', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          job_posting: jd, company, role,
+          round_type:  round,
+          tone,
+          interviewer: interviewer || null,
+          topics:      topics || null,
+          ...(_tyAppId ? { app_id: _tyAppId } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail ?? `Server error ${res.status}`);
+      const data = await res.json();
+      ty_id = data.ty_id;
+      if (data.machine_id) document.cookie = `fly-force-instance-id=${data.machine_id}; path=/; samesite=lax`;
+    } catch (err) {
+      if (err.message === '401') return;
+      document.getElementById('tyLog').textContent += '❌ Failed to start: ' + err.message + '\n';
+      setTYBadge('error');
+      btn.disabled = false;
+      btn.textContent = 'Generate Thank You Email';
+      return;
+    }
+
+    const tyLog = document.getElementById('tyLog');
+    const es = new EventSource(`/api/thankyou/${ty_id}/stream`);
+
+    es.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+
+      if (msg.type === 'progress') {
+        tyLog.textContent += msg.message + '\n';
+        tyLog.scrollTop = tyLog.scrollHeight;
+
+      } else if (msg.type === 'done') {
+        es.close();
+        setTYBadge('done');
+        btn.disabled = false;
+        btn.textContent = 'Generate Thank You Email';
+        showTYResults(ty_id, msg);
+
+      } else if (msg.type === 'error') {
+        es.close();
+        setTYBadge('error');
+        btn.disabled = false;
+        btn.textContent = 'Generate Thank You Email';
+        document.getElementById('tyErr').textContent = '❌ ' + msg.message;
+        document.getElementById('tyErr').style.display = 'block';
+      }
+    };
+
+    es.onerror = () => {
+      const b = document.getElementById('tyBadge');
+      if (b.className.includes('done') || b.className.includes('error')) return;
+      es.close();
+      setTYBadge('error');
+      tyLog.textContent += '\n⚠ Connection lost.';
+      btn.disabled = false;
+      btn.textContent = 'Generate Thank You Email';
+    };
+  });
+
+  function showTYResults(ty_id, msg) {
+    show('tyResultsCard');
+    document.getElementById('tyResultsCard').classList.add('results-appear');
+
+    document.getElementById('tyResCompany').textContent = _tyCompanyCtx;
+    document.getElementById('tyResRole').textContent    = _tyRoleCtx;
+    document.getElementById('tyResRound').textContent   = _tyRoundCtx;
+
+    document.getElementById('tySubjectText').value = msg.subject || '';
+    document.getElementById('tyEmailText').value   = msg.email_text || '';
+
+    const grid = document.getElementById('tyFileGrid');
+    grid.innerHTML = '';
+    if (msg.files?.thankyou) {
+      const a     = document.createElement('a');
+      a.className = 'file-card';
+      a.href      = `/api/thankyou/${ty_id}/files/${encodeURIComponent(msg.files.thankyou)}`;
+      a.download  = msg.files.thankyou;
+      a.title     = msg.files.thankyou;
+      a.innerHTML = `
+        <div class="file-card-icon">📧</div>
+        <div class="file-card-label">Thank You Email</div>
+        <div class="file-card-desc">DOCX — ready to send</div>
+        <div class="file-card-dl">&#x2193;&nbsp;Download</div>`;
+      grid.appendChild(a);
+    }
+
+    if (msg.folder_url) {
+      const driveBtn = document.getElementById('tyDriveBtn');
+      driveBtn.href = msg.folder_url;
+      show('tyDriveBtn');
+    }
+  }
+
+  document.getElementById('tyCopyBtn').addEventListener('click', () => {
+    const subject = document.getElementById('tySubjectText').value;
+    const body    = document.getElementById('tyEmailText').value;
+    const text    = `Subject: ${subject}\n\n${body}`;
+    navigator.clipboard.writeText(text).then(() => {
+      const msg = document.getElementById('tyCopiedMsg');
+      msg.style.display = 'inline';
+      setTimeout(() => { msg.style.display = 'none'; }, 2000);
+    });
+  });
+
+  document.getElementById('tyNewBtn').addEventListener('click', () => {
+    document.getElementById('tyResultsCard').classList.remove('results-appear');
+    hide('tyResultsCard');
+    hide('tyDriveBtn');
+    document.getElementById('tyFileGrid').innerHTML = '';
+    hide('tyProgressCard');
+    document.getElementById('tyLog').textContent = '';
+    document.getElementById('tyInterviewer').value = '';
+    document.getElementById('tyTopics').value = '';
   });
 </script>
 </div><!-- /.container -->

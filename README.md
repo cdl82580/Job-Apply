@@ -15,7 +15,9 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **ATS resume** — plain single-column DOCX, no tables or text boxes, parser-safe
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
 - **Application Questions** — answer freeform application questions (e.g. "Describe a time you led a cross-functional team") using tailored resume, JD, and profile context; tone selector (professional/conversational/technical/concise), optional character limit, two-phase clarification flow (agent can ask follow-ups before answering), editable answer with copy-to-clipboard and refinement chips
+- **Thank You Email** — post-interview thank-you email generator with app picker, round/tone selectors, optional interviewer name and key topics discussed; outputs editable email with subject line, copy-to-clipboard, DOCX download, and Google Drive upload
 - **Interview Prep** — compact reference card (0.4" margins, 2-column layout) with 10 sections: elevator pitch (60-second spoken script), interviewer intel, role fit map, gap bridges, dev framework, anchor stories, likely Q&A, questions to ask, differentiating edge, and closing line. Tailored to the interviewer, round type, and focus/slant. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
+- **Humanizer prompts** — each text-producing agent has a tailored humanizer directive: Voice Builder (resume/cover letter), Natural Flow Editor (interview prep), AI Pattern Remover (optimize resume), Human Rewrite (optimize cover letter), Authenticity Check (application questions), Voice Builder (thank you email)
 - **GitHub portfolio** — FlowShift, task-api, and job-apply repos injected into every prep prompt as additional proof points
 - **JD persistence** — job description saved as `job_description.md` to Google Drive on every run; when a JD is pasted and the run completes the file is written to the output folder and a `job_description` run is linked to the application so it auto-loads on subsequent runs and prep
 - **Google Drive sync** — all output files uploaded automatically to your Drive folder; PDF version generated via Drive conversion
@@ -376,6 +378,10 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/aq/{id}/clarify` | cookie | Submit clarification answers to unblock a paused AQ run |
 | GET | `/api/aq/{id}/stream` | cookie | SSE stream: `progress`, `clarification`, `done` (answer + char_count + follow_ups), `error` |
 | GET | `/api/aq/{id}/status` | cookie | Poll AQ status |
+| POST | `/api/thankyou` | cookie | Start thank-you email run → returns `{ty_id, machine_id}` |
+| GET | `/api/thankyou/{id}/stream` | cookie | SSE stream: `progress`, `done` (email_text + subject + files), `error` |
+| GET | `/api/thankyou/{id}/status` | cookie | Poll thank-you status |
+| GET | `/api/thankyou/{id}/files/{name}` | cookie | Download thank-you DOCX |
 | POST | `/api/optimize` | cookie | Optimize an existing run's resume/cover letter in place per a user instruction → returns `{optimize_id, machine_id}`; folder ownership verified via Tigris app records; rate-limited to one active optimize per user |
 | GET | `/api/optimize/{id}/stream` | cookie | SSE optimize progress stream (`done` event includes `change_summary` list + `replacements_warning`) |
 | GET | `/api/optimize/{id}/status` | cookie | Poll optimize status: `queued | running | done | error` |

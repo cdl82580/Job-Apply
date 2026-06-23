@@ -1505,6 +1505,7 @@ _runs:           dict[str, dict[str, Any]] = {}
 _preps:          dict[str, dict[str, Any]] = {}
 _optimizations:  dict[str, dict[str, Any]] = {}
 _app_questions:  dict[str, dict[str, Any]] = {}
+_thank_yous:     dict[str, dict[str, Any]] = {}
 _MAX_ACTIVE_RUNS_PER_USER = 5  # cap in-flight + queued entries per user
 
 # Per-user locks so concurrent runs from different users don't block each other.
@@ -1586,7 +1587,7 @@ def _worker_thread(
 def _evict_stale() -> None:
     """Remove completed/errored runs and preps older than _RUN_TTL."""
     cutoff = time.time() - _RUN_TTL
-    for store in (_runs, _preps, _optimizations, _app_questions):
+    for store in (_runs, _preps, _optimizations, _app_questions, _thank_yous):
         stale = [
             k for k, v in store.items()
             if v.get("status") in ("done", "error")
@@ -1668,6 +1669,17 @@ class AQClarifyRequest(BaseModel):
 
 
 _MAX_OPTIMIZE_INSTRUCTION_LEN = 4000
+
+class ThankYouRequest(BaseModel):
+    job_posting: str
+    company: str
+    role: str
+    round_type: str
+    interviewer: str | None = None
+    topics: str | None = None
+    tone: str = "professional"
+    app_id: str | None = None
+    model: str | None = None
 
 class OptimizeRequest(BaseModel):
     app_id: str                 # application tracker record owning the run
@@ -2801,6 +2813,165 @@ async def aq_status(aq_id: str, request: Request):
     if entry.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
         raise HTTPException(403, "Access denied")
     return {"aq_id": aq_id, "status": entry["status"], "error": entry.get("error")}
+
+
+# ---------------------------------------------------------------------------
+# Thank You Email endpoints
+# ---------------------------------------------------------------------------
+
+_THANKYOU_VALID_TONES = {"professional", "conversational", "concise"}
+
+@app.post("/api/thankyou")
+async def create_thankyou(req: ThankYouRequest, request: Request, response: Response):
+    user_data = _require_user(request)
+    if user_data.get("role") == "admin":
+        raise HTTPException(403, "Admin accounts cannot create thank-you runs")
+    user_id = user_data["user_id"]
+
+    _evict_stale()
+
+    if req.tone not in _THANKYOU_VALID_TONES:
+        raise HTTPException(400, f"tone must be one of: {', '.join(sorted(_THANKYOU_VALID_TONES))}")
+
+    resume_bytes = storage.get_resume(user_id)
+    if not resume_bytes:
+        raise HTTPException(400, "No master resume uploaded. Add one in your profile.")
+    if not resume_bytes[:4] == b"PK\x03\x04":
+        raise HTTPException(400, "Your uploaded resume appears to be corrupted. Please re-upload your .docx file in your profile.")
+
+    profile_text = storage.get_profile(user_id)
+    if not profile_text:
+        raise HTTPException(400, "No profile guide saved. Add one in your profile.")
+
+    active_count = sum(1 for t in _thank_yous.values()
+                       if t.get("user_id") == user_id and t.get("status") not in ("done", "error"))
+    if active_count >= _MAX_ACTIVE_RUNS_PER_USER:
+        raise HTTPException(429, "Too many active thank-you runs. Wait for an existing run to finish.")
+
+    ty_id = str(uuid.uuid4())
+    q: Queue[dict | None] = Queue()
+    _thank_yous[ty_id] = {"queue": q, "status": "queued", "result": None, "error": None, "user_id": user_id}
+    user_audit.log(user_id, "thankyou_started", user_data["email"], _client_ip(request),
+                   ty_id=ty_id, company=req.company, role=req.role)
+
+    if FLY_MACHINE_ID:
+        response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
+
+    def _ty_fn(resume_path: Path, progress) -> "ThankYouResult":
+        from apply import ThankYouConfig, generate_thank_you_email
+        config = ThankYouConfig(
+            job_posting=req.job_posting,
+            company=req.company,
+            role=req.role,
+            round_type=req.round_type,
+            interviewer=req.interviewer or "",
+            topics=req.topics or "",
+            tone=req.tone,
+            model=req.model or _get_active_model(),
+            progress=progress,
+            master_resume=resume_path,
+            profile_text=profile_text[:_MAX_PROFILE_TEXT_LEN],
+            user_id=user_id,
+            user_label=user_data["email"],
+        )
+        result = generate_thank_you_email(config)
+        if req.app_id:
+            _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="thank_you",
+                             result_dir=result.run_dir, folder_url=result.folder_url or "")
+        return result
+
+    def _ty_done_payload(result) -> dict:
+        return {
+            "ty_id":      ty_id,
+            "email_text": result.email_text,
+            "subject":    result.subject,
+            "folder_url": result.folder_url,
+            "app_id":     req.app_id,
+            "files":      {"thankyou": result.docx_path.name},
+        }
+
+    threading.Thread(
+        target=_worker_thread,
+        args=(_thank_yous, ty_id, user_id, user_data["email"], resume_bytes,
+              _ty_fn, _ty_done_payload,
+              "thankyou_completed", "thankyou_failed",
+              lambda result, _tid=ty_id, _co=req.company, _ro=req.role: {
+                  "ty_id": _tid, "company": _co, "role": _ro,
+                  "folder_url": (result.folder_url if result else "") or "",
+              }),
+        daemon=True,
+    ).start()
+    return {"ty_id": ty_id, "machine_id": FLY_MACHINE_ID or None}
+
+
+@app.get("/api/thankyou/{ty_id}/stream")
+async def stream_thankyou(ty_id: str, request: Request):
+    user_data = _require_user(request)
+    if ty_id not in _thank_yous:
+        raise HTTPException(404, "Thank-you run not found")
+    if _thank_yous[ty_id].get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    q    = _thank_yous[ty_id]["queue"]
+    loop = asyncio.get_running_loop()
+
+    async def generate():
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: q.get(timeout=30))
+            except Empty:
+                yield ": keepalive\n\n"
+                continue
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/thankyou/{ty_id}/status")
+async def thankyou_status(ty_id: str, request: Request):
+    user_data = _require_user(request)
+    entry = _thank_yous.get(ty_id)
+    if not entry:
+        raise HTTPException(404, "Thank-you run not found")
+    if entry.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+    return {"ty_id": ty_id, "status": entry["status"], "error": entry.get("error")}
+
+
+@app.get("/api/thankyou/{ty_id}/files/{filename}")
+async def get_thankyou_file(ty_id: str, filename: str, request: Request):
+    user_data = _require_user(request)
+    entry = _thank_yous.get(ty_id)
+    if not entry or entry["status"] != "done" or not entry.get("result"):
+        raise HTTPException(404, "Thank-you run not complete")
+    if entry.get("user_id") != user_data["user_id"] and user_data.get("role") != "admin":
+        raise HTTPException(403, "Access denied")
+
+    result = entry["result"]
+    file_path = (result.run_dir / filename).resolve()
+    try:
+        file_path.relative_to(result.run_dir.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename")
+
+    if not file_path.exists():
+        raise HTTPException(404, "File not found")
+
+    user_audit.log(user_data["user_id"], "file_downloaded", user_data["email"],
+                   _client_ip(request), ty_id=ty_id, filename=filename,
+                   run_type="thank_you")
+
+    return FileResponse(
+        file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 # ---------------------------------------------------------------------------
