@@ -2384,6 +2384,21 @@ async def gdrive_list_runs(request: Request):
     config = WorkflowConfig(progress=lambda _: None, user_label=user_label)
     try:
         folders = list_gdrive_run_folders(user_label, config)
+
+        # Enrich each folder with run type(s) from the application tracker
+        from scripts import applications as app_store
+        user_id = user_data["user_id"]
+        apps_result = app_store.list_applications(user_id)
+        folder_types: dict[str, list[str]] = {}
+        for app_rec in (apps_result.get("items") or []):
+            for run in (app_rec.get("linked_runs") or []):
+                fid = run.get("gdrive_folder_id")
+                rtype = run.get("type")
+                if fid and rtype:
+                    folder_types.setdefault(fid, []).append(rtype)
+        for f in folders:
+            f["types"] = sorted(set(folder_types.get(f["id"], [])))
+
         return {"runs": folders, "drive_configured": len(folders) >= 0}
     except Exception as exc:
         return {"runs": [], "drive_configured": False, "error": str(exc)}
