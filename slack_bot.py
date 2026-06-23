@@ -2964,7 +2964,7 @@ def handle_app_home_opened(client, event, logger):
                 "type": "mrkdwn",
                 "text": (
                     "AI-powered job application agent — tailored resumes, "
-                    "cover letters, interview prep, and application tracking.\n"
+                    "cover letters, interview prep, thank-you emails, and application tracking.\n"
                     f"<{API_BASE}|Open web app>  ·  <{API_BASE}/tracking.html|Tracker>  ·  <{API_BASE}/calendar.html|Calendar>"
                 ),
             },
