@@ -173,6 +173,7 @@ job-apply/
 | 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter |
 | 🤖 Agent | `/aq` | Answer an application question using your resume & JD |
 | 🤖 Agent | `/prep` | Generate interview prep document |
+| 🤖 Agent | `/thankyou` | Generate a post-interview thank-you email |
 | 🤖 Agent | `/optimize` | Refine an existing run's documents from a prompt (picks most recent Drive folder) |
 | 🤖 Agent | `/rescore` | Re-score resume/JD match for an application |
 | 🤖 Agent | `/runs` | List recent Drive run folders |

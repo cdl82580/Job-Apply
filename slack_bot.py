@@ -22,6 +22,7 @@ Slash commands handled:
   /apply           — generate resume + cover letter for a job
   /aq              — answer an application question using resume & JD
   /prep            — generate interview prep doc
+  /thankyou        — generate a post-interview thank-you email
   /optimize        — refine an existing run's documents from a prompt
   /rescore         — re-score resume/JD match for an application
   /runs            — list recent Drive run folders
@@ -201,6 +202,34 @@ def _submit_aq_clarifications(aq_id: str, answers: dict[str, str]) -> dict:
     r = _api("post", f"/api/aq/{aq_id}/clarify", json={"answers": answers})
     r.raise_for_status()
     return r.json()
+
+
+def _post_thankyou(job_posting: str, company: str, role: str, round_type: str,
+                   interviewer: str = "", topics: str = "",
+                   tone: str = "professional") -> dict:
+    r = _api("post", "/api/thankyou", json={
+        "job_posting": job_posting,
+        "company": company,
+        "role": role,
+        "round_type": round_type,
+        "interviewer": interviewer or None,
+        "topics": topics or None,
+        "tone": tone,
+    })
+    r.raise_for_status()
+    return r.json()
+
+
+def _poll_thankyou(ty_id: str, timeout: int = 300) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = _api("get", f"/api/thankyou/{ty_id}/status")
+        r.raise_for_status()
+        data = r.json()
+        if data["status"] in ("done", "error"):
+            return data
+        time.sleep(5)
+    return {"status": "timeout", "error": "Timed out waiting for thank-you email to complete"}
 
 
 # ---------------------------------------------------------------------------
@@ -1405,6 +1434,147 @@ def aq_view_submit(ack, body, client, view):
             client.chat_postMessage(
                 channel=channel,
                 text=f":warning: Answer is taking longer than expected. Check <{API_BASE}|the app> for status.",
+            )
+        else:
+            client.chat_postMessage(
+                channel=channel,
+                text=f":x: Failed: {status.get('error', 'Unknown error')}",
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# /thankyou — generate a post-interview thank-you email
+# ---------------------------------------------------------------------------
+
+THANKYOU_ROUND_TYPES = ["Phone Screen", "Hiring Manager", "Peer", "Technical", "Executive", "Panel"]
+
+@app.command("/thankyou")
+def thankyou_command(ack, body, client):
+    ack()
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "thankyou_submit",
+            "title": {"type": "plain_text", "text": "Thank You Email"},
+            "submit": {"type": "plain_text", "text": "Generate"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "company",
+                    "label": {"type": "plain_text", "text": "Company name"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "role",
+                    "label": {"type": "plain_text", "text": "Role title"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "round_type",
+                    "label": {"type": "plain_text", "text": "Interview round"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "value",
+                        "initial_option": {"text": {"type": "plain_text", "text": "Hiring Manager"}, "value": "Hiring Manager"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": rt}, "value": rt}
+                            for rt in THANKYOU_ROUND_TYPES
+                        ],
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "tone",
+                    "label": {"type": "plain_text", "text": "Tone"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "value",
+                        "initial_option": {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                            {"text": {"type": "plain_text", "text": "Conversational"}, "value": "conversational"},
+                            {"text": {"type": "plain_text", "text": "Concise"}, "value": "concise"},
+                        ],
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "interviewer",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Interviewer name(s) (optional)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Sarah Chen, VP Engineering"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "topics",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Key topics discussed (optional)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "multiline": True,
+                                "placeholder": {"type": "plain_text", "text": "e.g. MCP integration roadmap, scaling connectors, team culture"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "job_posting",
+                    "label": {"type": "plain_text", "text": "Job posting (paste full text)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "multiline": True,
+                                "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
+                },
+            ],
+        },
+    )
+
+
+@app.view("thankyou_submit")
+def thankyou_view_submit(ack, body, client, view):
+    ack()
+    vals        = view["state"]["values"]
+    company     = vals["company"]["value"]["value"].strip()
+    role        = vals["role"]["value"]["value"].strip()
+    round_type  = vals["round_type"]["value"]["selected_option"]["value"]
+    tone        = vals["tone"]["value"]["selected_option"]["value"]
+    interviewer = (vals["interviewer"]["value"]["value"] or "").strip()
+    topics      = (vals["topics"]["value"]["value"] or "").strip()
+    job_posting = vals["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+
+    def _run():
+        client.chat_postMessage(
+            channel=channel,
+            text=f":hourglass_flowing_sand: Generating thank-you email for *{role}* at *{company}* ({round_type})…",
+        )
+        try:
+            ty_data = _post_thankyou(job_posting, company, role, round_type,
+                                     interviewer, topics, tone)
+            ty_id   = ty_data["ty_id"]
+            status  = _poll_thankyou(ty_id)
+        except Exception as exc:
+            client.chat_postMessage(channel=channel, text=f":x: Error: {exc}")
+            return
+
+        if status["status"] == "done":
+            client.chat_postMessage(
+                channel=channel,
+                text=(
+                    f":white_check_mark: *Thank-you email ready* for *{role} @ {company}* ({round_type})\n"
+                    f"Your email and DOCX are in Google Drive.\n"
+                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy."
+                ),
+            )
+        elif status["status"] == "timeout":
+            client.chat_postMessage(
+                channel=channel,
+                text=f":warning: Taking longer than expected. Check <{API_BASE}|the app> for status.",
             )
         else:
             client.chat_postMessage(
@@ -2674,6 +2844,7 @@ def help_command(ack, respond):
             "*/apply* — Generate resume, ATS resume & cover letter for a job\n"
             "*/aq* — Answer an application question using your resume & JD\n"
             "*/prep* — Generate an interview prep document\n"
+            "*/thankyou* — Generate a post-interview thank-you email\n"
             "*/optimize* — Refine an existing run's documents from a prompt\n"
             "*/rescore* — Re-score resume/JD match for an application\n"
             "*/runs* — List your recent agent run folders from Drive"
@@ -2838,10 +3009,10 @@ def handle_app_home_opened(client, event, logger):
                 "text": (
                     "*/apply* — Generate resume + cover letter\n"
                     "*/prep* — Generate interview prep doc\n"
+                    "*/thankyou* — Thank-you email\n"
                     "*/cal-today* — Today's events\n"
                     "*/cal-add* — Add calendar event\n"
-                    "*/tracker* — Pipeline summary\n"
-                    "*/track-add* — Add application"
+                    "*/tracker* — Pipeline summary"
                 ),
             },
         },
