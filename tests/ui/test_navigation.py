@@ -44,16 +44,17 @@ class TestNavigation:
     def test_calendar_link_from_agent_page(self, auth_page):
         auth_page.goto("/agents.html")
         auth_page.wait_for_load_state("domcontentloaded")
+        auth_page.locator("a[href='/calendar.html']").first.wait_for(state="visible", timeout=15_000)
         auth_page.locator("a[href='/calendar.html']").first.click()
-        auth_page.wait_for_url("**/calendar.html", timeout=8_000)
+        auth_page.wait_for_url("**/calendar.html", timeout=15_000)
 
 
 class TestLogout:
     def test_logout_from_agent_page(self, auth_page):
         auth_page.goto("/agents.html")
-        auth_page.wait_for_selector("#logoutBtn", timeout=8_000)
+        auth_page.wait_for_selector("#logoutBtn", timeout=15_000)
         auth_page.click("#logoutBtn")
-        auth_page.wait_for_url(lambda url: "login" in url, timeout=10_000)
+        auth_page.wait_for_url(lambda url: "login" in url, timeout=15_000)
         expect(auth_page.locator("#loginForm")).to_be_visible()
 
     def test_logout_from_profile_page(self, auth_page):

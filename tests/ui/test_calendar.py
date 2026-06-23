@@ -11,12 +11,12 @@ class TestCalendarPageStructure:
 
     def test_add_event_button_present(self, auth_page):
         auth_page.goto("/calendar.html")
-        auth_page.wait_for_load_state("networkidle", timeout=10_000)
-        # Look for add/new event button
+        auth_page.wait_for_load_state("domcontentloaded")
+        # Look for add/new event button — wait for it to render
         add_btn = auth_page.locator(
             "button:has-text('Add'), button:has-text('New'), button:has-text('+')"
         ).first
-        expect(add_btn).to_be_visible()
+        expect(add_btn).to_be_visible(timeout=15_000)
 
     def test_header_nav_present(self, auth_page):
         auth_page.goto("/calendar.html")

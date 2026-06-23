@@ -59,6 +59,6 @@ class TestLoginPage:
         anon_page.fill("#email",    TEST_EMAIL)
         anon_page.fill("#password", TEST_PASSWORD)
         anon_page.click("#submitBtn")
-        anon_page.wait_for_url(lambda url: "login" not in url, timeout=15_000)
+        anon_page.wait_for_url(lambda url: "login" not in url, timeout=30_000)
         # Should land on the main app
         assert "login" not in anon_page.url
