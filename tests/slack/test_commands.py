@@ -451,3 +451,33 @@ class TestPrepCommand:
         bot.prep_command(ack=make_ack(), body=make_body(), client=client)
         view_arg = client.views_open.call_args[1].get("view", {})
         assert view_arg.get("callback_id") == "prep_submit"
+
+
+# ── /thankyou (modal open) ───────────────────────────────────────────────────
+
+class TestThankYouCommand:
+    def test_ack_called(self):
+        ack = make_ack()
+        bot.thankyou_command(ack=ack, body=make_body(), client=make_client())
+        ack.assert_called_once()
+
+    def test_opens_modal(self):
+        client = make_client()
+        bot.thankyou_command(ack=make_ack(), body=make_body(), client=client)
+        client.views_open.assert_called_once()
+
+    def test_modal_callback_id(self):
+        client = make_client()
+        bot.thankyou_command(ack=make_ack(), body=make_body(), client=client)
+        view_arg = client.views_open.call_args[1].get("view", {})
+        assert view_arg.get("callback_id") == "thankyou_submit"
+
+
+# ── /help includes /thankyou ─────────────────────────────────────────────────
+
+class TestHelpIncludesThankYou:
+    def test_help_mentions_thankyou(self):
+        respond = make_respond()
+        bot.help_command(ack=make_ack(), respond=respond)
+        text = str(respond.call_args)
+        assert "/thankyou" in text

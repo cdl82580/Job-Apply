@@ -84,6 +84,24 @@ class TestResumeUpload:
         )
         assert r.status_code == 400
 
+    def test_rejects_non_zip_docx(self, authed_client):
+        """A .docx that isn't actually a ZIP archive should be rejected."""
+        not_a_zip = b"NOT_A_ZIP" + b"\x00" * 2000
+        r = authed_client.post(
+            "/api/profile/resume",
+            files={"resume": ("resume.docx", io.BytesIO(not_a_zip), "application/octet-stream")},
+        )
+        assert r.status_code == 400
+        assert "zip" in r.json()["detail"].lower() or "valid" in r.json()["detail"].lower()
+
+    def test_rejects_too_small_file(self, authed_client):
+        small = b"PK\x03\x04" + b"\x00" * 10
+        r = authed_client.post(
+            "/api/profile/resume",
+            files={"resume": ("resume.docx", io.BytesIO(small), "application/octet-stream")},
+        )
+        assert r.status_code == 400
+
     def test_unauthenticated(self, client):
         r = client.post(
             "/api/profile/resume",
