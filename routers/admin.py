@@ -856,11 +856,18 @@ AUDIT_ACTION_TYPES = sorted([
     "user_registered", "user_registered_google", "google_account_linked",
     "login_success", "login_google", "login_failed", "logout",
     "email_verified", "verification_email_resent",
+    "password_reset_requested", "password_reset_completed",
+    "email_changed",
     "profile_updated", "resume_uploaded", "password_changed",
     # Agent runs
     "run_started", "run_completed", "run_failed",
     "prep_started", "prep_completed", "prep_failed",
+    "aq_started", "aq_completed", "aq_failed",
+    "optimize_started", "optimize_completed", "optimize_failed",
+    "thankyou_started", "thankyou_completed", "thankyou_failed",
     "file_downloaded",
+    # Notifications
+    "notification_sent",
     # Admin exports
     "admin_csv_export",
     # Webhooks
