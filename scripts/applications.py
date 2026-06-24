@@ -103,6 +103,11 @@ def list_applications(
     page: int = 1,
     per_page: int = 0,   # 0 = all (no pagination)
 ) -> dict[str, Any]:
+    from . import cache
+    cache_key = f"app_index:{user_id}"
+    cached = cache.get(cache_key) if not status and not priority and page == 1 and per_page == 0 else None
+    if cached is not None:
+        return cached
     entries = _read_index(user_id)
     if status:
         entries = [e for e in entries if e.get("status") == status]
@@ -122,21 +127,29 @@ def list_applications(
         page  = 1
         items = entries
 
-    return {
+    result = {
         "items":    items,
         "total":    total,
         "page":     page,
         "per_page": per_page,
         "pages":    pages,
     }
+    if not status and not priority and page == 1 and per_page == 0:
+        cache.put(cache_key, result)
+    return result
 
 
 def get_application(user_id: str, app_id: str) -> dict[str, Any] | None:
+    from . import cache
+    ck = f"app:{user_id}:{app_id}"
+    cached = cache.get(ck)
+    if cached is not None:
+        return cached
     raw = storage.get_text(_app_key(user_id, app_id))
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        return cache.put(ck, json.loads(raw))
     except Exception:
         return None
 
@@ -148,6 +161,9 @@ def save_application(user_id: str, record: dict[str, Any]) -> dict[str, Any]:
     with _user_lock(user_id):
         storage.put_text(_app_key(user_id, saved["id"]), json.dumps(saved))
         _upsert_index(user_id, saved)
+    from . import cache
+    cache.invalidate(f"app:{user_id}:{saved['id']}")
+    cache.invalidate(f"app_index:{user_id}")
     return saved
 
 
@@ -209,4 +225,7 @@ def delete_application(user_id: str, app_id: str) -> bool:
         except Exception:
             return False
         _remove_from_index(user_id, app_id)
+    from . import cache
+    cache.invalidate(f"app:{user_id}:{app_id}")
+    cache.invalidate(f"app_index:{user_id}")
     return True

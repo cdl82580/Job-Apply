@@ -179,6 +179,8 @@ def log(user_id: str, action: str, actor: str, ip: str | None = None, **details:
         _write_event(key, event)
     except Exception:
         pass  # never let audit failure break the request
+    from . import cache  # noqa: PLC0415
+    cache.invalidate(f"audit_events:{user_id}")
     # Dispatch to webhooks asynchronously (best-effort, never raises)
     try:
         from . import webhooks  # noqa: PLC0415 — lazy to avoid circular import
@@ -205,7 +207,13 @@ def log_login_failure(email: str, ip: str | None = None) -> None:
 
 def get_events(user_id: str) -> list[dict[str, Any]]:
     """Return audit events for a user, newest first (capped at _MAX_EVENTS)."""
-    return _read_all_events(_events_prefix(user_id), _legacy_events_key(user_id))
+    from . import cache
+    key = f"audit_events:{user_id}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    result = _read_all_events(_events_prefix(user_id), _legacy_events_key(user_id))
+    return cache.put(key, result)
 
 
 def get_last_login(user_id: str) -> str | None:
