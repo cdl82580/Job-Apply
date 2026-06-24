@@ -365,6 +365,41 @@
                 font-family: inherit; transition: all .15s; }
     .chip-btn:hover { border-color: var(--border); color: var(--text); }
     .chip-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* Filter toggle */
+    .filter-toggle { display: flex; align-items: center; gap: .375rem; margin-bottom: .5rem; }
+    .filter-toggle-btn { background: none; border: 1px solid var(--card-border); border-radius: 6px;
+                         padding: .3rem .7rem; font-size: .8rem; cursor: pointer; color: var(--muted);
+                         font-family: inherit; transition: all .15s; display: flex; align-items: center; gap: .35rem; }
+    .filter-toggle-btn:hover { border-color: var(--border); color: var(--text); }
+    .filter-toggle-btn .arrow { transition: transform .2s; font-size: .65rem; }
+    .filter-toggle-btn.open .arrow { transform: rotate(180deg); }
+    .filter-toggle-count { font-size: .7rem; background: var(--primary); color: #fff; border-radius: 999px;
+                           padding: .1rem .45rem; min-width: 1.1rem; text-align: center; display: none; }
+    .filter-section { overflow: hidden; transition: max-height .25s ease, opacity .2s ease; max-height: 600px; opacity: 1; }
+    .filter-section.collapsed { max-height: 0; opacity: 0; pointer-events: none; margin: 0; }
+
+    /* Multi-select search box (action filter) */
+    .ms-search-wrap { position: relative; flex: 1; min-width: 0; }
+    .ms-search-box { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center;
+                     border: 1px solid var(--card-border); border-radius: 6px; padding: .3rem .5rem;
+                     background: var(--bg-page); cursor: text; min-height: 34px; }
+    .ms-search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+    .ms-search-box input { border: none; outline: none; background: transparent; font-size: .85rem;
+                           font-family: inherit; color: var(--text); flex: 1; min-width: 80px; padding: .1rem 0; }
+    .ms-tag { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .5rem;
+              background: var(--primary); color: #fff; border-radius: 999px; font-size: .7rem;
+              white-space: nowrap; }
+    .ms-tag-x { cursor: pointer; font-size: .85rem; line-height: 1; opacity: .8; }
+    .ms-tag-x:hover { opacity: 1; }
+    .ms-dropdown { display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+                   background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 6px;
+                   box-shadow: 0 4px 12px rgba(0,0,0,.15); max-height: 220px; overflow-y: auto; margin-top: 2px; }
+    .ms-dropdown-item { padding: .4rem .75rem; cursor: pointer; font-size: .8rem;
+                        border-bottom: 1px solid var(--card-border); }
+    .ms-dropdown-item:last-child { border-bottom: none; }
+    .ms-dropdown-item:hover, .ms-dropdown-item.highlighted { background: var(--fill); }
+    .ms-dropdown-item.selected { color: var(--primary); font-weight: 600; }
     .runs-search-item { padding: .45rem .75rem; cursor: pointer; font-size: .85rem;
                         border-bottom: 1px solid var(--card-border); }
     .runs-search-item:last-child { border-bottom: none; }
@@ -505,6 +540,11 @@
 
   <!-- ── Users tab ──────────────────────────────────────────────── -->
   <div class="tab-pane active" id="tab-users">
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="usersFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="usersFilterCount"></span>
+    </div>
+    <div class="filter-section" id="usersFilters">
     <div class="filter-row">
       <input type="text" id="userSearch" placeholder="Search by name or email…">
       <select id="userRoleFilter">
@@ -540,6 +580,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /usersFilters -->
     <div id="usersAlert"></div>
     <div class="table-wrap admin-table-section">
     <table>
@@ -582,6 +623,11 @@
 
   <!-- ── Applications tab ──────────────────────────────────────── -->
   <div class="tab-pane" id="tab-applications">
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="appsFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="appsFilterCount"></span>
+    </div>
+    <div class="filter-section" id="appsFilters">
     <!-- Row 1: search -->
     <div class="filter-row">
       <input type="text" id="appSearch" placeholder="Search company or role…">
@@ -629,6 +675,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /appsFilters -->
     <div id="appsAlert"></div>
     <div class="table-wrap admin-table-section">
     <table>
@@ -670,6 +717,11 @@
 
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="runsFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="runsFilterCount"></span>
+    </div>
+    <div class="filter-section" id="runsFilters">
     <!-- Row 1: search with autocomplete -->
     <div class="filter-row" id="runsFilterRow" style="position:relative">
       <input type="text" id="runsSearch" autocomplete="off" placeholder="Search by company, role, or ID…" style="flex:1;min-width:0">
@@ -721,6 +773,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /runsFilters -->
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="runsCount"></div>
     <div class="table-wrap admin-table-section">
     <table>
@@ -759,6 +812,11 @@
 
   <!-- ── Event Logs tab ─────────────────────────────────────────── -->
   <div class="tab-pane" id="tab-auditlog">
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="auditFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="auditFilterCount"></span>
+    </div>
+    <div class="filter-section" id="auditFilters">
     <!-- Row 1: event ID -->
     <div class="filter-row">
       <input type="text" id="auditIdFilter" placeholder="Filter by event ID…" style="flex:1;min-width:0">
@@ -770,11 +828,14 @@
            background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
            box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
     </div>
-    <!-- Row 3: action chips -->
+    <!-- Row 3: action multi-select search -->
     <div class="filter-row" style="margin-top:-.5rem">
-      <div class="chip-filter" id="auditActionChips">
-        <span class="chip-label">Action:</span>
-        <!-- populated dynamically from /api/admin/audit/action-types -->
+      <span class="chip-label" style="align-self:center">Action:</span>
+      <div class="ms-search-wrap" id="auditActionWrap">
+        <div class="ms-search-box" id="auditActionBox">
+          <input type="text" id="auditActionInput" autocomplete="off" placeholder="Search actions…">
+        </div>
+        <div class="ms-dropdown" id="auditActionDropdown"></div>
       </div>
     </div>
     <!-- Row 4: source, dates, clear, export -->
@@ -803,6 +864,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /auditFilters -->
 
     <table>
       <thead><tr>
@@ -845,6 +907,11 @@
       <div style="font-size:.8rem;color:var(--muted)" id="webhookCount"></div>
       <button class="btn btn-sm" id="createWebhookBtn">+ New Webhook</button>
     </div>
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="whFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="whFilterCount"></span>
+    </div>
+    <div class="filter-section" id="whFilters">
     <!-- Filter row: name autocomplete -->
     <div class="filter-row" style="position:relative">
       <input type="text" id="whNameFilter" autocomplete="off" placeholder="Filter by name…" style="flex:1;min-width:0">
@@ -853,6 +920,7 @@
            box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
       <button class="btn btn-ghost" id="whClearFilters">Clear filters</button>
     </div>
+    </div><!-- /whFilters -->
     <div id="webhooksAlert"></div>
     <table id="webhooksTable">
       <thead><tr>
@@ -879,6 +947,11 @@
 
   <!-- ── Knowledge Base tab ─────────────────────────────────── -->
   <div class="tab-pane" id="tab-kb">
+    <div class="filter-toggle">
+      <button class="filter-toggle-btn open" data-filters="kbFilters">Filters <span class="arrow">▾</span></button>
+      <span class="filter-toggle-count" id="kbFilterCount"></span>
+    </div>
+    <div class="filter-section" id="kbFilters">
     <div class="filter-row">
       <input type="text" id="kbSearch" placeholder="Search title or body…" style="flex:1;min-width:0">
     </div>
@@ -891,6 +964,7 @@
       <button class="btn btn-sm" id="kbSeedBtn" title="Seed KB from the built-in frontend data">⟳ Seed from frontend</button>
       <button class="btn btn-sm" id="kbNewBtn">+ New Article</button>
     </div>
+    </div><!-- /kbFilters -->
     <div id="kbAlert"></div>
     <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem" id="kbCount"></div>
     <table id="kbTable">
@@ -1346,6 +1420,161 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => activateTab(tab.dataset.tab));
 });
 
+// ── Filter toggle (collapse / expand) ──────────────────────────────
+document.querySelectorAll('.filter-toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const section = document.getElementById(btn.dataset.filters);
+    if (!section) return;
+    const open = !section.classList.contains('collapsed');
+    section.classList.toggle('collapsed', open);
+    btn.classList.toggle('open', !open);
+  });
+});
+
+// ── Multi-select search box (audit actions) ────────────────────────
+let _auditActionTypes = [];
+let _auditActionHighlight = -1;
+
+function _renderActionTags() {
+  const box = document.getElementById('auditActionBox');
+  box.querySelectorAll('.ms-tag').forEach(t => t.remove());
+  const input = document.getElementById('auditActionInput');
+  [..._auditActionSelection].forEach(val => {
+    const tag = document.createElement('span');
+    tag.className = 'ms-tag';
+    tag.innerHTML = `${val.replace(/_/g, ' ')}<span class="ms-tag-x" data-val="${val}">&times;</span>`;
+    box.insertBefore(tag, input);
+  });
+  _updateFilterCount('auditFilterCount', _countAuditFilters());
+}
+
+function _renderActionDropdown(filter = '') {
+  const dd = document.getElementById('auditActionDropdown');
+  dd.innerHTML = '';
+  const lc = filter.toLowerCase();
+  const matches = _auditActionTypes.filter(t =>
+    t.toLowerCase().includes(lc)
+  );
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.style.display = 'block';
+  _auditActionHighlight = -1;
+  matches.forEach((t, i) => {
+    const item = document.createElement('div');
+    item.className = 'ms-dropdown-item' + (_auditActionSelection.has(t) ? ' selected' : '');
+    item.textContent = t.replace(/_/g, ' ');
+    item.dataset.val = t;
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (_auditActionSelection.has(t)) _auditActionSelection.delete(t);
+      else _auditActionSelection.add(t);
+      _renderActionTags();
+      _renderActionDropdown(document.getElementById('auditActionInput').value.trim());
+      loadAudit(1);
+    });
+    dd.appendChild(item);
+  });
+}
+
+document.getElementById('auditActionBox').addEventListener('click', () => {
+  document.getElementById('auditActionInput').focus();
+});
+
+document.getElementById('auditActionInput').addEventListener('focus', () => {
+  _renderActionDropdown(document.getElementById('auditActionInput').value.trim());
+});
+
+document.getElementById('auditActionInput').addEventListener('input', function() {
+  _renderActionDropdown(this.value.trim());
+});
+
+document.getElementById('auditActionInput').addEventListener('keydown', function(e) {
+  const dd = document.getElementById('auditActionDropdown');
+  const items = dd.querySelectorAll('.ms-dropdown-item');
+  if (e.key === 'ArrowDown') { e.preventDefault(); _auditActionHighlight = Math.min(_auditActionHighlight + 1, items.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _auditActionHighlight = Math.max(_auditActionHighlight - 1, 0); }
+  else if (e.key === 'Enter' && _auditActionHighlight >= 0 && items[_auditActionHighlight]) {
+    e.preventDefault();
+    items[_auditActionHighlight].dispatchEvent(new MouseEvent('mousedown'));
+    this.value = '';
+    _renderActionDropdown('');
+    return;
+  } else if (e.key === 'Backspace' && !this.value && _auditActionSelection.size) {
+    const last = [..._auditActionSelection].pop();
+    _auditActionSelection.delete(last);
+    _renderActionTags();
+    loadAudit(1);
+    return;
+  } else return;
+  items.forEach((it, i) => it.classList.toggle('highlighted', i === _auditActionHighlight));
+  if (items[_auditActionHighlight]) items[_auditActionHighlight].scrollIntoView({ block: 'nearest' });
+});
+
+document.getElementById('auditActionBox').addEventListener('click', e => {
+  const x = e.target.closest('.ms-tag-x');
+  if (!x) return;
+  _auditActionSelection.delete(x.dataset.val);
+  _renderActionTags();
+  loadAudit(1);
+});
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('auditActionWrap');
+  if (!wrap.contains(e.target)) document.getElementById('auditActionDropdown').style.display = 'none';
+});
+
+// ── Filter count badges ────────────────────────────────────────────
+function _updateFilterCount(badgeId, count) {
+  const badge = document.getElementById(badgeId);
+  if (!badge) return;
+  badge.style.display = count > 0 ? 'inline-block' : 'none';
+  badge.textContent = count;
+}
+
+function _countUserFilters() {
+  let n = 0;
+  if (document.getElementById('userSearch').value.trim()) n++;
+  if (document.getElementById('userRoleFilter').value) n++;
+  if (document.getElementById('userVerifiedFilter').value) n++;
+  ['userLoginFrom','userLoginTo','userJoinedFrom','userJoinedTo'].forEach(id => { if (document.getElementById(id).value) n++; });
+  return n;
+}
+function _countAppFilters() {
+  let n = 0;
+  if (document.getElementById('appSearch').value.trim()) n++;
+  if (document.getElementById('appUserFilter').value.trim()) n++;
+  n += document.querySelectorAll('#appStatusChips .chip-btn.active').length;
+  ['appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo'].forEach(id => { if (document.getElementById(id).value) n++; });
+  return n;
+}
+function _countRunsFilters() {
+  let n = 0;
+  if (document.getElementById('runsSearch').value.trim()) n++;
+  if (document.getElementById('runsUserFilter').value.trim()) n++;
+  n += document.querySelectorAll('#runsTypeChips .chip-btn.active').length;
+  n += document.querySelectorAll('#runsStatusChips .chip-btn.active').length;
+  ['runsDateFrom','runsDateTo'].forEach(id => { if (document.getElementById(id).value) n++; });
+  return n;
+}
+function _countAuditFilters() {
+  let n = 0;
+  if (document.getElementById('auditIdFilter').value.trim()) n++;
+  if (document.getElementById('auditActorFilter').value.trim()) n++;
+  n += _auditActionSelection.size;
+  if (document.getElementById('auditSourceFilter').value) n++;
+  if (document.getElementById('auditFrom').value) n++;
+  if (document.getElementById('auditTo').value) n++;
+  return n;
+}
+function _countWhFilters() {
+  return document.getElementById('whNameFilter').value.trim() ? 1 : 0;
+}
+function _countKbFilters() {
+  let n = 0;
+  if (document.getElementById('kbSearch').value.trim()) n++;
+  n += document.querySelectorAll('#kbCatChips .chip-btn.active').length;
+  return n;
+}
+
 // Activate tab from ?tab= query param on load (default: users)
 // Also trigger lazy-loads for tabs that don't auto-load on init
 const _initialParams = new URLSearchParams(location.search);
@@ -1538,6 +1767,7 @@ function renderPagBar(prefix, page, pages, total, perPage) {
 
 // ── Render users ─────────────────────────────────────────────────────
 function renderUsers() {
+  _updateFilterCount('usersFilterCount', _countUserFilters());
   const q            = document.getElementById('userSearch').value.trim().toLowerCase();
   const roleFilter   = document.getElementById('userRoleFilter').value;
   const verFilter    = document.getElementById('userVerifiedFilter').value;
@@ -1644,6 +1874,7 @@ function renderUsers() {
 let _appStatusSelection = new Set();
 
 function renderApps() {
+  _updateFilterCount('appsFilterCount', _countAppFilters());
   const q            = document.getElementById('appSearch').value.trim().toLowerCase();
   const userQ        = document.getElementById('appUserFilter').value.trim().toLowerCase();
   const statuses     = _appStatusSelection;
@@ -1744,6 +1975,7 @@ function _getActiveChips(containerId) {
 }
 
 function filterAndRenderRuns() {
+  _updateFilterCount('runsFilterCount', _countRunsFilters());
   const types    = _runsTypeSelection;
   const statuses = _runsStatusSelection;
   const userQ    = document.getElementById('runsUserFilter').value.trim().toLowerCase();
@@ -2418,6 +2650,7 @@ let _auditLoaded    = false;
 let _auditActionSelection = new Set();
 
 async function loadAudit(page = 1) {
+  _updateFilterCount('auditFilterCount', _countAuditFilters());
   _auditPage = page;
   const eventId  = document.getElementById('auditIdFilter').value.trim();
   const actor    = document.getElementById('auditActorFilter').value.trim();
@@ -2484,29 +2717,12 @@ function renderAudit({ items, total, page, per_page, pages }) {
 
 async function initAuditFilters() {
   try {
-    const types = await (await apiFetch('/api/admin/audit/action-types')).json();
-    const container = document.getElementById('auditActionChips');
-    types.forEach(t => {
-      const btn = document.createElement('button');
-      btn.className = 'chip-btn';
-      btn.dataset.val = t;
-      btn.textContent = t.replace(/_/g, ' ');
-      container.appendChild(btn);
-    });
+    _auditActionTypes = await (await apiFetch('/api/admin/audit/action-types')).json();
   } catch (_) {}
 
   // Load user list for actor autocomplete
   await _loadAllUsers();
 }
-
-// Audit action chip toggle
-document.getElementById('auditActionChips').addEventListener('click', e => {
-  const btn = e.target.closest('.chip-btn');
-  if (!btn) return;
-  btn.classList.toggle('active');
-  _auditActionSelection = _getActiveChips('auditActionChips');
-  loadAudit(1);
-});
 
 // Audit actor autocomplete
 (function _initAuditActorFilter() {
@@ -2571,6 +2787,7 @@ document.getElementById('userClearFilters').addEventListener('click', () => {
     .forEach(id => document.getElementById(id).value = '');
   ['userRoleFilter','userVerifiedFilter']
     .forEach(id => document.getElementById(id).value = '');
+  _updateFilterCount('usersFilterCount', 0);
   _usersPage = 1; renderUsers();
 });
 
@@ -2581,6 +2798,7 @@ document.getElementById('appClearFilters').addEventListener('click', () => {
   document.querySelectorAll('#appStatusChips .chip-btn').forEach(b => b.classList.remove('active'));
   _appStatusSelection = new Set();
   document.getElementById('appUserDropdown').style.display = 'none';
+  _updateFilterCount('appsFilterCount', 0);
   _appsPage = 1; renderApps();
 });
 
@@ -2594,6 +2812,7 @@ document.getElementById('runsClearFilters').addEventListener('click', () => {
   _runsStatusSelection = new Set();
   document.getElementById('runsSearchDropdown').style.display = 'none';
   document.getElementById('runsUserDropdown').style.display = 'none';
+  _updateFilterCount('runsFilterCount', 0);
   _runsPage = 1; filterAndRenderRuns();
 });
 
@@ -2601,9 +2820,12 @@ document.getElementById('runsClearFilters').addEventListener('click', () => {
 document.getElementById('auditClearFilters').addEventListener('click', () => {
   ['auditIdFilter','auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('auditSourceFilter').value = '';
-  document.querySelectorAll('#auditActionChips .chip-btn').forEach(b => b.classList.remove('active'));
   _auditActionSelection = new Set();
+  _renderActionTags();
+  document.getElementById('auditActionInput').value = '';
+  document.getElementById('auditActionDropdown').style.display = 'none';
   document.getElementById('auditActorDropdown').style.display = 'none';
+  _updateFilterCount('auditFilterCount', 0);
   loadAudit(1);
 });
 document.querySelector('[data-tab="auditlog"]').addEventListener('click', () => {
@@ -3019,6 +3241,7 @@ async function loadWebhooks() {
 }
 
 function renderWebhooks() {
+  _updateFilterCount('whFilterCount', _countWhFilters());
   const nameQ = (document.getElementById('whNameFilter')?.value || '').trim().toLowerCase();
   const filtered = nameQ
     ? _webhooks.filter(w => (w.name || '').toLowerCase().includes(nameQ))
@@ -3537,6 +3760,7 @@ async function loadKB() {
 let _kbCatSelection = new Set();
 
 function renderKB() {
+  _updateFilterCount('kbFilterCount', _countKbFilters());
   const q    = document.getElementById('kbSearch').value.trim().toLowerCase();
   const cats = _kbCatSelection;
 
