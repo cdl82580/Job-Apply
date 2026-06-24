@@ -356,6 +356,20 @@
       pointer-events: none; background: var(--bg-page) !important;
       border-color: var(--card-border) !important; box-shadow: none !important; }
 
+    /* Run detail drawer */
+    .run-detail-row { display: flex; justify-content: space-between; align-items: baseline;
+                      padding: .5rem 0; border-bottom: 1px solid var(--card-border); }
+    .run-detail-row:last-child { border-bottom: none; }
+    .run-detail-label { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;
+                        letter-spacing: .04em; min-width: 120px; flex-shrink: 0; }
+    .run-detail-value { font-size: .85rem; color: var(--text); text-align: right; word-break: break-all;
+                        max-width: 300px; }
+    .run-detail-value.mono { font-family: 'SF Mono','Fira Code',monospace; font-size: .75rem; user-select: all; }
+    .run-detail-value a { color: var(--primary); text-decoration: none; }
+    .run-detail-value a:hover { text-decoration: underline; }
+    .run-detail-section { margin-top: 1.25rem; }
+    .run-detail-section:first-child { margin-top: 0; }
+
     /* Comments */
     .comment { background: var(--bg-page); border: 1px solid var(--card-border);
                border-radius: 6px; padding: .75rem; margin-bottom: .5rem; }
@@ -930,6 +944,22 @@
   <div class="drawer-footer hidden" id="footerEdit">
     <button class="btn" id="drawerSaveBtn">Save</button>
     <button class="btn btn-ghost" id="drawerDiscardBtn">Discard Changes</button>
+  </div>
+</div>
+
+<!-- ── Run detail drawer ─────────────────────────────────────── -->
+<div class="overlay" id="runDrawerOverlay"></div>
+<div class="drawer" id="runDrawer">
+  <div class="drawer-header">
+    <div class="drawer-title-row">
+      <div class="drawer-title">Agent Run</div>
+      <span class="drawer-mode-badge" id="runDrawerTypeBadge"></span>
+    </div>
+    <button class="drawer-close" id="runDrawerClose">&#x2715;</button>
+  </div>
+  <div class="drawer-body" id="runDrawerBody"></div>
+  <div class="drawer-footer">
+    <button class="btn btn-ghost" id="runDrawerCloseBtn">Close</button>
   </div>
 </div>
 
@@ -1684,6 +1714,8 @@ function renderRuns(runs) {
       ? `${r.app_company} · ${r.app_role || ''}`.replace(/ · $/, '')
       : (() => { const p = (r.name||'').split('_'); return p.length > 1 ? `${p[0]} · ${p.slice(1).join(' ')}` : (r.name||'—'); })();
     const appTitle = r.app_company ? `${r.app_company} — ${r.app_role}` : (r.name||'');
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', e => { if (!e.target.closest('a')) openRunDrawer(r); });
     tr.innerHTML = `
       <td><span class="badge ${typeClass}" style="font-size:.7rem">${esc(typeLabel)}</span></td>
       <td style="font-size:.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(appTitle)}">${esc(appLabel)}</td>
@@ -1694,6 +1726,97 @@ function renderRuns(runs) {
     tbody.appendChild(tr);
   }
 }
+
+// ── Run detail drawer ────────────────────────────────────────────────
+function openRunDrawer(r) {
+  const TYPE_LABELS = { resume: 'Resume', optimize: 'Optimize', aq: 'App Questions',
+    interview_prep: 'Interview Prep', thank_you: 'Thank You', scoring: 'Match Score',
+    job_description: 'Job Description' };
+  const typeLabel = TYPE_LABELS[r.type] || r.type;
+  const typeClass = RUN_TYPE_CLASS[r.type] || '';
+  document.getElementById('runDrawerTypeBadge').textContent = typeLabel;
+  document.getElementById('runDrawerTypeBadge').className = 'drawer-mode-badge badge ' + typeClass;
+
+  const statusColor = (r.status === 'running' || r.status === 'queued')
+    ? 'var(--primary)' : (r.status === 'error' || r.status === 'failed') ? 'var(--error)' : 'var(--success, #22c55e)';
+
+  function row(label, value, opts = {}) {
+    if (!value && value !== 0) return '';
+    const cls = opts.mono ? ' mono' : '';
+    const val = opts.link
+      ? `<a href="${esc(value)}" target="_blank" rel="noopener">${esc(opts.linkLabel || value)}</a>`
+      : esc(String(value));
+    return `<div class="run-detail-row">
+      <span class="run-detail-label">${esc(label)}</span>
+      <span class="run-detail-value${cls}">${val}</span>
+    </div>`;
+  }
+  function section(title) {
+    return `<div class="section-label run-detail-section">${esc(title)}</div>`;
+  }
+
+  let html = section('Identification');
+  html += row('Run ID', r.id, { mono: true });
+  html += row('Type', typeLabel);
+  html += row('Status', r.status);
+  if (r.error) html += row('Error', r.error);
+
+  html += section('Application');
+  html += row('Company', r.company || r.app_company);
+  html += row('Role', r.role || r.app_role);
+  html += row('App ID', r.app_id, { mono: true });
+
+  html += section('User');
+  html += row('User Email', r.user_email);
+  html += row('User ID', r.user_id, { mono: true });
+  html += row('Initiated By', r.initiated_by);
+
+  html += section('Timing');
+  html += row('Started', r.started_at ? fmtDateTime(r.started_at) : (r.created_at ? fmtDateTime(r.created_at) : null));
+  html += row('Finished', r.finished_at ? fmtDateTime(r.finished_at) : null);
+  if (r.started_at && r.finished_at) {
+    const ms = new Date(r.finished_at) - new Date(r.started_at);
+    if (ms > 0) {
+      const secs = Math.round(ms / 1000);
+      const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${secs%60}s` : `${secs}s`;
+      html += row('Duration', dur);
+    }
+  }
+
+  html += section('Output');
+  const folderUrl = r.gdrive_folder_url || r.web_view_link;
+  if (folderUrl) html += row('Drive Folder', folderUrl, { link: true, linkLabel: 'Open in Drive ↗' });
+  html += row('Drive Folder ID', r.gdrive_folder_id, { mono: true });
+  if (r.output_files && r.output_files.length) html += row('Files', r.output_files.join(', '));
+
+  // Type-specific fields
+  if (r.type === 'scoring') {
+    html += section('Match Score');
+    html += row('Score', r.score != null ? r.score : null);
+    html += row('Category', r.score_category);
+    if (r.score_reasoning) html += row('Reasoning', r.score_reasoning);
+  }
+  if (r.type === 'interview_prep' && r.round_type) {
+    html += section('Prep Details');
+    html += row('Round Type', r.round_type);
+  }
+  if (r.type === 'optimize' && r.optimize_instruction) {
+    html += section('Optimize Details');
+    html += row('Instruction', r.optimize_instruction);
+  }
+
+  document.getElementById('runDrawerBody').innerHTML = html;
+  document.getElementById('runDrawer').classList.add('open');
+  document.getElementById('runDrawerOverlay').classList.add('open');
+}
+
+function closeRunDrawer() {
+  document.getElementById('runDrawer').classList.remove('open');
+  document.getElementById('runDrawerOverlay').classList.remove('open');
+}
+document.getElementById('runDrawerClose').addEventListener('click', closeRunDrawer);
+document.getElementById('runDrawerCloseBtn').addEventListener('click', closeRunDrawer);
+document.getElementById('runDrawerOverlay').addEventListener('click', closeRunDrawer);
 
 // Runs filters — reset to page 1
 ['runsSearch','runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
@@ -3477,10 +3600,12 @@ function renderAppCards(list) {
   }).join('');
 }
 
+let _renderedRunCards = [];
 function renderRunCards(runs) {
+  _renderedRunCards = runs;
   const el = document.getElementById('runsCards');
   if (!runs.length) { el.innerHTML = '<p class="empty">No runs match.</p>'; return; }
-  el.innerHTML = runs.map(r => {
+  el.innerHTML = runs.map((r, i) => {
     const typeLabel = r.type === 'interview_prep' ? 'Interview Prep'
                     : r.type === 'thank_you' ? 'Thank You'
                     : r.type === 'job_description' ? 'Job Description'
@@ -3491,7 +3616,7 @@ function renderRunCards(runs) {
       : (r.name || '—');
     const statusColor = (r.status === 'running' || r.status === 'queued')
       ? 'var(--primary)' : r.status === 'error' ? 'var(--error)' : 'var(--muted)';
-    return `<div class="admin-card">
+    return `<div class="admin-card" style="cursor:pointer" data-run-idx="${i}">
       <div class="admin-card-header">
         <div>
           <div class="admin-card-name">${esc(appLabel)}</div>
@@ -3511,6 +3636,11 @@ function renderRunCards(runs) {
     </div>`;
   }).join('');
 }
+document.getElementById('runsCards').addEventListener('click', e => {
+  if (e.target.closest('a')) return;
+  const card = e.target.closest('[data-run-idx]');
+  if (card) openRunDrawer(_renderedRunCards[parseInt(card.dataset.runIdx)]);
+});
 
 // ── Admin date column selects ─────────────────────────────────────────
 document.getElementById('userDateSel').addEventListener('click', e => e.stopPropagation());
