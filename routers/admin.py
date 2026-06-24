@@ -588,7 +588,8 @@ async def get_unified_audit_log(
 
     # ── 3. Filter ───────────────────────────────────────────────────
     if action:
-        all_events = [e for e in all_events if e.get("action") == action]
+        action_set = set(a.strip() for a in action.split(",") if a.strip())
+        all_events = [e for e in all_events if e.get("action") in action_set]
     if actor:
         lc = actor.lower()
         all_events = [e for e in all_events if lc in (e.get("actor") or "").lower()]
