@@ -356,6 +356,21 @@
       pointer-events: none; background: var(--bg-page) !important;
       border-color: var(--card-border) !important; box-shadow: none !important; }
 
+    /* Chip filter (multi-select toggle buttons) */
+    .chip-filter { display: flex; align-items: center; gap: .375rem; flex-wrap: wrap; }
+    .chip-label { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase;
+                  letter-spacing: .04em; margin-right: .125rem; }
+    .chip-btn { padding: .25rem .625rem; font-size: .75rem; border-radius: 999px; cursor: pointer;
+                border: 1px solid var(--card-border); background: var(--bg-page); color: var(--muted);
+                font-family: inherit; transition: all .15s; }
+    .chip-btn:hover { border-color: var(--border); color: var(--text); }
+    .chip-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .runs-search-item { padding: .45rem .75rem; cursor: pointer; font-size: .85rem;
+                        border-bottom: 1px solid var(--card-border); }
+    .runs-search-item:last-child { border-bottom: none; }
+    .runs-search-item:hover { background: var(--fill); }
+    .runs-search-item .match-label { color: var(--muted); font-size: .75rem; margin-left: .35rem; }
+
     /* Run detail drawer */
     .run-detail-row { display: flex; justify-content: space-between; align-items: baseline;
                       padding: .5rem 0; border-bottom: 1px solid var(--card-border); }
@@ -640,27 +655,40 @@
 
   <!-- ── All Agent Runs tab ───────────────────────────────────── -->
   <div class="tab-pane" id="tab-runs">
-    <div class="filter-row" id="runsFilterRow">
-      <input type="text" id="runsSearch" placeholder="Search by company, role, or ID…" style="flex:1;min-width:0">
+    <!-- Row 1: search with autocomplete -->
+    <div class="filter-row" id="runsFilterRow" style="position:relative">
+      <input type="text" id="runsSearch" autocomplete="off" placeholder="Search by company, role, or ID…" style="flex:1;min-width:0">
+      <div id="runsSearchDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+           background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+           box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;margin-top:2px"></div>
+    </div>
+    <!-- Row 2: user filter (full width with autocomplete) -->
+    <div class="filter-row" style="margin-top:-.5rem;position:relative">
+      <input type="text" id="runsUserFilter" autocomplete="off" placeholder="Filter by user…" style="flex:1;min-width:0">
+      <div id="runsUserDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+           background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+           box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
+    </div>
+    <!-- Row 3: type chips, status chips, dates, clear, export -->
+    <div class="filter-row" style="margin-top:-.5rem">
+      <div class="chip-filter" id="runsTypeChips">
+        <span class="chip-label">Type:</span>
+        <button class="chip-btn" data-val="resume">Resume</button>
+        <button class="chip-btn" data-val="optimize">Optimize</button>
+        <button class="chip-btn" data-val="aq">App Questions</button>
+        <button class="chip-btn" data-val="interview_prep">Interview Prep</button>
+        <button class="chip-btn" data-val="thank_you">Thank You</button>
+        <button class="chip-btn" data-val="scoring">Match Score</button>
+      </div>
     </div>
     <div class="filter-row" style="margin-top:-.5rem">
-      <select id="runsTypeFilter">
-        <option value="">All types</option>
-        <option value="resume">Resume</option>
-        <option value="optimize">Optimized Resume</option>
-        <option value="aq">Application Questions</option>
-        <option value="interview_prep">Interview Prep</option>
-        <option value="thank_you">Thank You Email</option>
-        <option value="scoring">Match Scoring</option>
-        <option value="job_description">Job Description</option>
-      </select>
-      <input type="text" id="runsUserFilter" placeholder="Filter by user…" style="max-width:200px">
-      <select id="runsStatusFilter" multiple size="1" style="min-width:140px" title="Hold Ctrl/Cmd to multi-select">
-        <option value="complete">Complete</option>
-        <option value="running">Running</option>
-        <option value="queued">Queued</option>
-        <option value="error">Error</option>
-      </select>
+      <div class="chip-filter" id="runsStatusChips">
+        <span class="chip-label">Status:</span>
+        <button class="chip-btn" data-val="completed">Completed</button>
+        <button class="chip-btn" data-val="failed">Failed</button>
+        <button class="chip-btn" data-val="running">Running</button>
+        <button class="chip-btn" data-val="queued">Queued</button>
+      </div>
       <input type="date" id="runsDateFrom" title="Created from" style="max-width:150px">
       <input type="date" id="runsDateTo"   title="Created to"   style="max-width:150px">
       <button class="btn btn-ghost" id="runsClearFilters" style="margin-left:auto">Clear filters</button>
@@ -1664,30 +1692,38 @@ function renderApps() {
 // ── Render runs ──────────────────────────────────────────────────────
 const RUN_TYPE_CLASS = { resume: 's-applied', optimize: 's-interviewing', aq: 's-phone-screen', interview_prep: 's-researching', thank_you: 's-interviewing', scoring: 's-offer', job_description: 's-onhold' };
 
+// Chip-based filter state
+let _runsTypeSelection = new Set();
+let _runsStatusSelection = new Set();
+
+function _getActiveChips(containerId) {
+  const set = new Set();
+  document.querySelectorAll(`#${containerId} .chip-btn.active`).forEach(b => set.add(b.dataset.val));
+  return set;
+}
+
 function filterAndRenderRuns() {
-  const type     = document.getElementById('runsTypeFilter').value;
+  const types    = _runsTypeSelection;
+  const statuses = _runsStatusSelection;
   const userQ    = document.getElementById('runsUserFilter').value.trim().toLowerCase();
-  const statusSel = document.getElementById('runsStatusFilter');
-  const statuses = [...statusSel.selectedOptions].map(o => o.value);
-  const dateFrom = document.getElementById('runsDateFrom').value;   // 'YYYY-MM-DD'
+  const dateFrom = document.getElementById('runsDateFrom').value;
   const dateTo   = document.getElementById('runsDateTo').value;
+  const q        = document.getElementById('runsSearch').value.trim().toLowerCase();
 
-  const q = document.getElementById('runsSearch').value.trim().toLowerCase();
   let list = _allRuns;
-  if (q)      list = list.filter(r => (r.app_company||r.name||'').toLowerCase().includes(q) || (r.app_role||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
-  if (type)   list = list.filter(r => r.type === type);
-  if (userQ)    list = list.filter(r => (r.user_email||'').toLowerCase().includes(userQ));
-  if (statuses.length) list = list.filter(r => statuses.includes(r.status));
-  if (dateFrom) list = list.filter(r => (r.created_at || '') >= dateFrom);
-  if (dateTo)   list = list.filter(r => (r.created_at || '') <= dateTo + 'T23:59:59Z');
+  if (q)               list = list.filter(r => (r.company||r.app_company||r.name||'').toLowerCase().includes(q) || (r.role||r.app_role||'').toLowerCase().includes(q) || (r.id||'').toLowerCase().includes(q));
+  if (types.size)      list = list.filter(r => types.has(r.type));
+  if (userQ)           list = list.filter(r => (r.user_email||'').toLowerCase().includes(userQ));
+  if (statuses.size)   list = list.filter(r => statuses.has(r.status));
+  if (dateFrom)        list = list.filter(r => (r.created_at || '') >= dateFrom);
+  if (dateTo)          list = list.filter(r => (r.created_at || '') <= dateTo + 'T23:59:59Z');
 
-  // Sort by created_at
   list = [...list].sort((a, b) => {
     const av = a.created_at || '', bv = b.created_at || '';
     return _runsSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
-  _lastFilteredRuns = list;  // cache for CSV export
+  _lastFilteredRuns = list;
   const total = list.length;
   const pages = Math.max(1, Math.ceil(total / _runsPerPage));
   _runsPage   = Math.min(_runsPage, pages);
@@ -1695,6 +1731,114 @@ function filterAndRenderRuns() {
   renderPagBar('runs', _runsPage, pages, total, _runsPerPage);
   renderRuns(list.slice((_runsPage - 1) * _runsPerPage, _runsPage * _runsPerPage));
 }
+
+// Wire chip toggle clicks
+document.getElementById('runsTypeChips').addEventListener('click', e => {
+  const btn = e.target.closest('.chip-btn');
+  if (!btn) return;
+  btn.classList.toggle('active');
+  _runsTypeSelection = _getActiveChips('runsTypeChips');
+  _runsPage = 1; filterAndRenderRuns();
+});
+document.getElementById('runsStatusChips').addEventListener('click', e => {
+  const btn = e.target.closest('.chip-btn');
+  if (!btn) return;
+  btn.classList.toggle('active');
+  _runsStatusSelection = _getActiveChips('runsStatusChips');
+  _runsPage = 1; filterAndRenderRuns();
+});
+
+// Search autocomplete dropdown
+(function _initRunsSearch() {
+  const input    = document.getElementById('runsSearch');
+  const dropdown = document.getElementById('runsSearchDropdown');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q || q.length < 2) { dropdown.style.display = 'none'; filterAndRenderRuns(); return; }
+
+    // Collect unique company/role combos that match
+    const seen = new Set();
+    const matches = [];
+    for (const r of _allRuns) {
+      const co = r.company || r.app_company || '';
+      const ro = r.role || r.app_role || '';
+      const label = co && ro ? `${co} — ${ro}` : co || ro;
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key) || !key.includes(q)) continue;
+      seen.add(key);
+      matches.push({ label, co, ro });
+      if (matches.length >= 8) break;
+    }
+
+    if (!matches.length) { dropdown.style.display = 'none'; filterAndRenderRuns(); return; }
+    dropdown.style.display = 'block';
+    matches.forEach(m => {
+      const item = document.createElement('div');
+      item.className = 'runs-search-item';
+      item.innerHTML = `<strong>${esc(m.co)}</strong>${m.ro ? `<span class="match-label">${esc(m.ro)}</span>` : ''}`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = m.co || m.ro;
+        dropdown.style.display = 'none';
+        _runsPage = 1; filterAndRenderRuns();
+      });
+      dropdown.appendChild(item);
+    });
+    filterAndRenderRuns();
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+})();
+
+// User filter autocomplete dropdown
+(function _initRunsUserFilter() {
+  const input    = document.getElementById('runsUserFilter');
+  const dropdown = document.getElementById('runsUserDropdown');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; filterAndRenderRuns(); return; }
+
+    // Extract unique users from loaded runs data
+    const seen = new Set();
+    const matches = [];
+    for (const r of _allRuns) {
+      const email = (r.user_email || '').toLowerCase();
+      if (!email || seen.has(email) || !email.includes(q)) continue;
+      seen.add(email);
+      matches.push({ email: r.user_email });
+      if (matches.length >= 8) break;
+    }
+
+    if (!matches.length) { dropdown.style.display = 'none'; filterAndRenderRuns(); return; }
+    dropdown.style.display = 'block';
+    matches.forEach(u => {
+      const item = document.createElement('div');
+      item.className = 'runs-search-item';
+      item.innerHTML = `<strong>${esc(u.email)}</strong>`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = u.email;
+        dropdown.style.display = 'none';
+        _runsPage = 1; filterAndRenderRuns();
+      });
+      dropdown.appendChild(item);
+    });
+    filterAndRenderRuns();
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+})();
 
 function renderRuns(runs) {
   renderRunCards(runs);
@@ -1818,8 +1962,8 @@ document.getElementById('runDrawerClose').addEventListener('click', closeRunDraw
 document.getElementById('runDrawerCloseBtn').addEventListener('click', closeRunDrawer);
 document.getElementById('runDrawerOverlay').addEventListener('click', closeRunDrawer);
 
-// Runs filters — reset to page 1
-['runsSearch','runsTypeFilter','runsUserFilter','runsStatusFilter','runsDateFrom','runsDateTo'].forEach(id => {
+// Runs date filters — reset to page 1 (search + user wired in their own init blocks above)
+['runsDateFrom','runsDateTo'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => { _runsPage = 1; filterAndRenderRuns(); });
   document.getElementById(id).addEventListener('input',  () => { _runsPage = 1; filterAndRenderRuns(); });
 });
@@ -2289,8 +2433,12 @@ document.getElementById('appClearFilters').addEventListener('click', () => {
 document.getElementById('runsClearFilters').addEventListener('click', () => {
   ['runsSearch','runsDateFrom','runsDateTo','runsUserFilter']
     .forEach(id => document.getElementById(id).value = '');
-  document.getElementById('runsTypeFilter').value = '';
-  [...document.getElementById('runsStatusFilter').options].forEach(o => o.selected = false);
+  document.querySelectorAll('#runsTypeChips .chip-btn, #runsStatusChips .chip-btn')
+    .forEach(b => b.classList.remove('active'));
+  _runsTypeSelection = new Set();
+  _runsStatusSelection = new Set();
+  document.getElementById('runsSearchDropdown').style.display = 'none';
+  document.getElementById('runsUserDropdown').style.display = 'none';
   _runsPage = 1; filterAndRenderRuns();
 });
 
