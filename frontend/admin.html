@@ -582,15 +582,30 @@
 
   <!-- ── Applications tab ──────────────────────────────────────── -->
   <div class="tab-pane" id="tab-applications">
+    <!-- Row 1: search -->
     <div class="filter-row">
       <input type="text" id="appSearch" placeholder="Search company or role…">
-      <input type="text" id="appUserFilter" placeholder="Filter by user…" style="max-width:200px">
-      <select id="appStatusFilter">
-        <option value="">All statuses</option>
-        <option>Interviewing</option><option>Phone Screen</option><option>Applied</option>
-        <option>On Hold</option><option>Researching</option><option>Offer</option>
-        <option>Rejected</option><option>Not Applying</option>
-      </select>
+    </div>
+    <!-- Row 2: user filter (full width with autocomplete) -->
+    <div class="filter-row" style="margin-top:-.5rem;position:relative">
+      <input type="text" id="appUserFilter" autocomplete="off" placeholder="Filter by user…" style="flex:1;min-width:0">
+      <div id="appUserDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+           background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+           box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
+    </div>
+    <!-- Row 3: status chips + dates + clear + export -->
+    <div class="filter-row" style="margin-top:-.5rem">
+      <div class="chip-filter" id="appStatusChips">
+        <span class="chip-label">Status:</span>
+        <button class="chip-btn" data-val="Interviewing">Interviewing</button>
+        <button class="chip-btn" data-val="Phone Screen">Phone Screen</button>
+        <button class="chip-btn" data-val="Applied">Applied</button>
+        <button class="chip-btn" data-val="On Hold">On Hold</button>
+        <button class="chip-btn" data-val="Researching">Researching</button>
+        <button class="chip-btn" data-val="Offer">Offer</button>
+        <button class="chip-btn" data-val="Rejected">Rejected</button>
+        <button class="chip-btn" data-val="Not Applying">Not Applying</button>
+      </div>
     </div>
     <div class="filter-row" style="margin-top:-.5rem">
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0">Applied:</label>
@@ -742,22 +757,33 @@
     </div>
   </div>
 
-  <!-- ── Audit Log tab ────────────────────────────────────────── -->
+  <!-- ── Event Logs tab ─────────────────────────────────────────── -->
   <div class="tab-pane" id="tab-auditlog">
-    <!-- Filter row 1 -->
+    <!-- Row 1: event ID -->
     <div class="filter-row">
-      <input type="text" id="auditIdFilter"    placeholder="Filter by event ID…" style="max-width:200px">
-      <input type="text" id="auditActorFilter" placeholder="Filter by actor…"    style="max-width:200px">
-      <input type="text" id="auditActionFilter" placeholder="Filter actions…" style="max-width:220px" list="auditActionList">
-      <datalist id="auditActionList"></datalist>
+      <input type="text" id="auditIdFilter" placeholder="Filter by event ID…" style="flex:1;min-width:0">
+    </div>
+    <!-- Row 2: actor (full width with autocomplete) -->
+    <div class="filter-row" style="margin-top:-.5rem;position:relative">
+      <input type="text" id="auditActorFilter" autocomplete="off" placeholder="Filter by actor…" style="flex:1;min-width:0">
+      <div id="auditActorDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+           background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+           box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
+    </div>
+    <!-- Row 3: action chips -->
+    <div class="filter-row" style="margin-top:-.5rem">
+      <div class="chip-filter" id="auditActionChips">
+        <span class="chip-label">Action:</span>
+        <!-- populated dynamically from /api/admin/audit/action-types -->
+      </div>
+    </div>
+    <!-- Row 4: source, dates, clear, export -->
+    <div class="filter-row" style="margin-top:-.5rem">
       <select id="auditSourceFilter">
         <option value="">All sources</option>
         <option value="user">User events</option>
         <option value="application">Application events</option>
       </select>
-    </div>
-    <!-- Filter row 2 -->
-    <div class="filter-row" style="margin-top:-.5rem">
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0">From:</label>
       <input type="datetime-local" id="auditFrom" style="max-width:190px">
       <label style="font-size:.75rem;color:var(--muted);white-space:nowrap;margin:0 0 0 .5rem">To:</label>
@@ -819,6 +845,14 @@
       <div style="font-size:.8rem;color:var(--muted)" id="webhookCount"></div>
       <button class="btn btn-sm" id="createWebhookBtn">+ New Webhook</button>
     </div>
+    <!-- Filter row: name autocomplete -->
+    <div class="filter-row" style="position:relative">
+      <input type="text" id="whNameFilter" autocomplete="off" placeholder="Filter by name…" style="flex:1;min-width:0">
+      <div id="whNameDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;
+           background:var(--bg-card);border:1px solid var(--card-border);border-radius:6px;
+           box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:180px;overflow-y:auto;margin-top:2px"></div>
+      <button class="btn btn-ghost" id="whClearFilters">Clear filters</button>
+    </div>
     <div id="webhooksAlert"></div>
     <table id="webhooksTable">
       <thead><tr>
@@ -847,7 +881,12 @@
   <div class="tab-pane" id="tab-kb">
     <div class="filter-row">
       <input type="text" id="kbSearch" placeholder="Search title or body…" style="flex:1;min-width:0">
-      <select id="kbCatFilter"><option value="">All categories</option></select>
+    </div>
+    <div class="filter-row" style="margin-top:-.5rem">
+      <div class="chip-filter" id="kbCatChips">
+        <span class="chip-label">Category:</span>
+        <!-- populated dynamically -->
+      </div>
       <button class="btn btn-ghost" id="kbClearFilters" style="margin-left:auto">Clear filters</button>
       <button class="btn btn-sm" id="kbSeedBtn" title="Seed KB from the built-in frontend data">⟳ Seed from frontend</button>
       <button class="btn btn-sm" id="kbNewBtn">+ New Article</button>
@@ -1602,10 +1641,12 @@ function renderUsers() {
 }
 
 // ── Render apps ──────────────────────────────────────────────────────
+let _appStatusSelection = new Set();
+
 function renderApps() {
   const q            = document.getElementById('appSearch').value.trim().toLowerCase();
   const userQ        = document.getElementById('appUserFilter').value.trim().toLowerCase();
-  const stat         = document.getElementById('appStatusFilter').value;
+  const statuses     = _appStatusSelection;
   const appliedFrom  = document.getElementById('appAppliedFrom').value;
   const appliedTo    = document.getElementById('appAppliedTo').value;
   const updatedFrom  = document.getElementById('appUpdatedFrom').value;
@@ -1614,7 +1655,7 @@ function renderApps() {
   let list = _allApps;
   if (q)           list = list.filter(a => (a.company||'').toLowerCase().includes(q) || (a.role_title||'').toLowerCase().includes(q) || (a.id||'').toLowerCase().includes(q));
   if (userQ)       list = list.filter(a => (a._user_email||'').toLowerCase().includes(userQ) || (a._user_name||'').toLowerCase().includes(userQ));
-  if (stat)        list = list.filter(a => a.status === stat);
+  if (statuses.size) list = list.filter(a => statuses.has(a.status));
   if (appliedFrom) list = list.filter(a => (a.date_applied||'') >= appliedFrom);
   if (appliedTo)   list = list.filter(a => (a.date_applied||'') <= appliedTo + 'T23:59:59Z');
   if (updatedFrom) list = list.filter(a => (a.last_updated||'') >= updatedFrom);
@@ -2010,11 +2051,64 @@ document.getElementById('appsPrev').addEventListener('click', () => { _appsPage-
 document.getElementById('appsNext').addEventListener('click', () => { _appsPage++; renderApps(); });
 
 // Apps filters — reset to page 1
-['appSearch','appUserFilter','appStatusFilter',
+['appSearch','appUserFilter',
  'appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo'].forEach(id => {
   document.getElementById(id).addEventListener('input',  () => { _appsPage = 1; renderApps(); });
   document.getElementById(id).addEventListener('change', () => { _appsPage = 1; renderApps(); });
 });
+
+// App status chip toggle
+document.getElementById('appStatusChips').addEventListener('click', e => {
+  const btn = e.target.closest('.chip-btn');
+  if (!btn) return;
+  btn.classList.toggle('active');
+  _appStatusSelection = _getActiveChips('appStatusChips');
+  _appsPage = 1; renderApps();
+});
+
+// App user filter autocomplete
+(function _initAppUserFilter() {
+  const input    = document.getElementById('appUserFilter');
+  const dropdown = document.getElementById('appUserDropdown');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; return; }
+
+    const seen = new Set();
+    const matches = [];
+    for (const a of _allApps) {
+      const email = (a._user_email || '').toLowerCase();
+      const name  = (a._user_name  || '').toLowerCase();
+      if (!email || seen.has(email)) continue;
+      if (!email.includes(q) && !name.includes(q)) continue;
+      seen.add(email);
+      matches.push({ email: a._user_email, name: a._user_name });
+      if (matches.length >= 8) break;
+    }
+
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+    dropdown.style.display = 'block';
+    matches.forEach(u => {
+      const item = document.createElement('div');
+      item.className = 'runs-search-item';
+      item.innerHTML = `<strong>${esc(u.email)}</strong>${u.name ? `<span class="match-label">${esc(u.name)}</span>` : ''}`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = u.email;
+        dropdown.style.display = 'none';
+        _appsPage = 1; renderApps();
+      });
+      dropdown.appendChild(item);
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+})();
 
 // Column header sort
 document.getElementById('appsHead').addEventListener('click', e => {
@@ -2321,19 +2415,21 @@ let _auditSortCol   = 'timestamp';
 let _auditSortOrder = 'desc';
 let _auditLoaded    = false;
 
+let _auditActionSelection = new Set();
+
 async function loadAudit(page = 1) {
   _auditPage = page;
   const eventId  = document.getElementById('auditIdFilter').value.trim();
   const actor    = document.getElementById('auditActorFilter').value.trim();
-  const action   = document.getElementById('auditActionFilter').value.trim();
+  const actions  = _auditActionSelection;
   const source   = document.getElementById('auditSourceFilter').value;
   const fromVal  = document.getElementById('auditFrom').value;
   const toVal    = document.getElementById('auditTo').value;
 
   const params = new URLSearchParams({ page: _auditPage, per_page: _auditPerPage, sort_order: _auditSortOrder });
   if (eventId) params.set('event_id', eventId);
-  if (actor)   params.set('actor',   actor);
-  if (action)  params.set('action',  action);
+  if (actor)        params.set('actor',   actor);
+  if (actions.size) params.set('action',  [...actions].join(','));
   if (source)  params.set('source',  source);
   if (fromVal) params.set('from_ts', fromVal + ':00Z');
   if (toVal)   params.set('to_ts',   toVal   + ':59Z');
@@ -2389,15 +2485,73 @@ function renderAudit({ items, total, page, per_page, pages }) {
 async function initAuditFilters() {
   try {
     const types = await (await apiFetch('/api/admin/audit/action-types')).json();
-    const dl = document.getElementById('auditActionList');
-    types.forEach(t => { const o = document.createElement('option'); o.value = t; dl.appendChild(o); });
+    const container = document.getElementById('auditActionChips');
+    types.forEach(t => {
+      const btn = document.createElement('button');
+      btn.className = 'chip-btn';
+      btn.dataset.val = t;
+      btn.textContent = t.replace(/_/g, ' ');
+      container.appendChild(btn);
+    });
   } catch (_) {}
+
+  // Load user list for actor autocomplete
+  await _loadAllUsers();
 }
+
+// Audit action chip toggle
+document.getElementById('auditActionChips').addEventListener('click', e => {
+  const btn = e.target.closest('.chip-btn');
+  if (!btn) return;
+  btn.classList.toggle('active');
+  _auditActionSelection = _getActiveChips('auditActionChips');
+  loadAudit(1);
+});
+
+// Audit actor autocomplete
+(function _initAuditActorFilter() {
+  const input    = document.getElementById('auditActorFilter');
+  const dropdown = document.getElementById('auditActorDropdown');
+
+  input.addEventListener('input', function() {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400); return; }
+
+    const matches = _allUsers.filter(u =>
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.display_name || '').toLowerCase().includes(q)
+    ).slice(0, 8);
+
+    if (!matches.length) { dropdown.style.display = 'none'; }
+    else {
+      dropdown.style.display = 'block';
+      matches.forEach(u => {
+        const item = document.createElement('div');
+        item.className = 'runs-search-item';
+        item.innerHTML = `<strong>${esc(u.email)}</strong>${u.display_name ? `<span class="match-label">${esc(u.display_name)}</span>` : ''}`;
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          input.value = u.email;
+          dropdown.style.display = 'none';
+          loadAudit(1);
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+})();
 
 ['auditSourceFilter'].forEach(id =>
   document.getElementById(id).addEventListener('change', () => loadAudit(1))
 );
-['auditIdFilter','auditActorFilter','auditActionFilter'].forEach(id => {
+['auditIdFilter'].forEach(id => {
   document.getElementById(id).addEventListener('input', function() {
     clearTimeout(this._t); this._t = setTimeout(() => loadAudit(1), 400);
   });
@@ -2422,10 +2576,11 @@ document.getElementById('userClearFilters').addEventListener('click', () => {
 
 // Clear filters — Applications
 document.getElementById('appClearFilters').addEventListener('click', () => {
-  ['appSearch','appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo']
+  ['appSearch','appAppliedFrom','appAppliedTo','appUpdatedFrom','appUpdatedTo','appUserFilter']
     .forEach(id => document.getElementById(id).value = '');
-  ['appUserFilter','appStatusFilter']
-    .forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('#appStatusChips .chip-btn').forEach(b => b.classList.remove('active'));
+  _appStatusSelection = new Set();
+  document.getElementById('appUserDropdown').style.display = 'none';
   _appsPage = 1; renderApps();
 });
 
@@ -2445,7 +2600,10 @@ document.getElementById('runsClearFilters').addEventListener('click', () => {
 // Clear filters — Audit Log
 document.getElementById('auditClearFilters').addEventListener('click', () => {
   ['auditIdFilter','auditActorFilter','auditFrom','auditTo'].forEach(id => document.getElementById(id).value = '');
-  ['auditActionFilter','auditSourceFilter'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('auditSourceFilter').value = '';
+  document.querySelectorAll('#auditActionChips .chip-btn').forEach(b => b.classList.remove('active'));
+  _auditActionSelection = new Set();
+  document.getElementById('auditActorDropdown').style.display = 'none';
   loadAudit(1);
 });
 document.querySelector('[data-tab="auditlog"]').addEventListener('click', () => {
@@ -2608,14 +2766,14 @@ function _auditParams(allRecords = false) {
   const params = new URLSearchParams({ sort_order: _auditSortOrder });
   if (!allRecords) {
     const eventId = document.getElementById('auditIdFilter').value.trim();
-    const actor  = document.getElementById('auditActorFilter').value.trim();
-    const action = document.getElementById('auditActionFilter').value.trim();
-    const source = document.getElementById('auditSourceFilter').value;
-    const from   = document.getElementById('auditFrom').value;
-    const to     = document.getElementById('auditTo').value;
-    if (eventId) params.set('event_id', eventId);
-    if (actor)   params.set('actor',   actor);
-    if (action) params.set('action',  action);
+    const actor   = document.getElementById('auditActorFilter').value.trim();
+    const actions = _auditActionSelection;
+    const source  = document.getElementById('auditSourceFilter').value;
+    const from    = document.getElementById('auditFrom').value;
+    const to      = document.getElementById('auditTo').value;
+    if (eventId)      params.set('event_id', eventId);
+    if (actor)        params.set('actor',   actor);
+    if (actions.size) params.set('action',  [...actions].join(','));
     if (source) params.set('source',  source);
     if (from)   params.set('from_ts', from + ':00Z');
     if (to)     params.set('to_ts',   to   + ':59Z');
@@ -2861,15 +3019,20 @@ async function loadWebhooks() {
 }
 
 function renderWebhooks() {
+  const nameQ = (document.getElementById('whNameFilter')?.value || '').trim().toLowerCase();
+  const filtered = nameQ
+    ? _webhooks.filter(w => (w.name || '').toLowerCase().includes(nameQ))
+    : _webhooks;
+
   const tbody = document.getElementById('webhooksBody');
   document.getElementById('webhookCount').textContent =
-    `${_webhooks.length} webhook${_webhooks.length !== 1 ? 's' : ''}`;
-  if (!_webhooks.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty">No webhooks yet. Create one to start streaming events.</td></tr>';
+    `${filtered.length} webhook${filtered.length !== 1 ? 's' : ''}${_webhooks.length !== filtered.length ? ` (of ${_webhooks.length})` : ''}`;
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">${_webhooks.length ? 'No webhooks match.' : 'No webhooks yet. Create one to start streaming events.'}</td></tr>`;
     return;
   }
   tbody.innerHTML = '';
-  for (const w of _webhooks) {
+  for (const w of filtered) {
     const stats   = w.delivery_stats || {};
     const active  = w.active !== false;
     const evLabel = (w.events||[]).includes('*') ? 'All events'
@@ -2911,6 +3074,46 @@ function renderWebhooks() {
     tbody.appendChild(tr);
   }
 }
+
+// Webhook name filter autocomplete
+(function _initWhNameFilter() {
+  const input    = document.getElementById('whNameFilter');
+  const dropdown = document.getElementById('whNameDropdown');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    dropdown.innerHTML = '';
+    if (!q) { dropdown.style.display = 'none'; renderWebhooks(); return; }
+
+    const matches = _webhooks.filter(w => (w.name || '').toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { dropdown.style.display = 'none'; renderWebhooks(); return; }
+    dropdown.style.display = 'block';
+    matches.forEach(w => {
+      const item = document.createElement('div');
+      item.className = 'runs-search-item';
+      item.innerHTML = `<strong>${esc(w.name)}</strong>`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = w.name;
+        dropdown.style.display = 'none';
+        renderWebhooks();
+      });
+      dropdown.appendChild(item);
+    });
+    renderWebhooks();
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.style.display = 'none';
+  });
+})();
+
+document.getElementById('whClearFilters').addEventListener('click', () => {
+  document.getElementById('whNameFilter').value = '';
+  document.getElementById('whNameDropdown').style.display = 'none';
+  renderWebhooks();
+});
 
 // Delegated click — webhook table actions
 document.getElementById('webhooksTable').addEventListener('click', async e => {
@@ -3284,12 +3487,14 @@ async function _populateKBFromData(data) {
   _kbArticles   = data.articles   || [];
   _kbCategories.forEach(c => { KB_CAT_LABEL[c.id] = c.label; });
 
-  const sel = document.getElementById('kbCatFilter');
-  sel.innerHTML = '<option value="">All categories</option>';
+  const chipContainer = document.getElementById('kbCatChips');
+  chipContainer.querySelectorAll('.chip-btn').forEach(b => b.remove());
   for (const c of _kbCategories) {
-    const o = document.createElement('option');
-    o.value = c.id; o.textContent = c.label;
-    sel.appendChild(o);
+    const btn = document.createElement('button');
+    btn.className = 'chip-btn';
+    btn.dataset.val = c.id;
+    btn.textContent = c.label;
+    chipContainer.appendChild(btn);
   }
 
   const kdSel = document.getElementById('kdCat');
@@ -3329,12 +3534,14 @@ async function loadKB() {
   } catch (e) { if (e.message !== '401') showAlert('kbAlert', 'Failed to load KB articles.'); }
 }
 
+let _kbCatSelection = new Set();
+
 function renderKB() {
-  const q   = document.getElementById('kbSearch').value.trim().toLowerCase();
-  const cat = document.getElementById('kbCatFilter').value;
+  const q    = document.getElementById('kbSearch').value.trim().toLowerCase();
+  const cats = _kbCatSelection;
 
   let list = _kbArticles.filter(a => {
-    if (cat && a.category !== cat) return false;
+    if (cats.size && !cats.has(a.category)) return false;
     if (q && !(a.title.toLowerCase().includes(q) || (a.body||'').toLowerCase().includes(q) || (a.snippet||'').toLowerCase().includes(q))) return false;
     return true;
   });
@@ -3547,10 +3754,17 @@ document.getElementById('kbSeedBtn').addEventListener('click', async () => {
 
 // Filter listeners
 document.getElementById('kbSearch').addEventListener('input', renderKB);
-document.getElementById('kbCatFilter').addEventListener('change', renderKB);
+document.getElementById('kbCatChips').addEventListener('click', e => {
+  const btn = e.target.closest('.chip-btn');
+  if (!btn) return;
+  btn.classList.toggle('active');
+  _kbCatSelection = _getActiveChips('kbCatChips');
+  renderKB();
+});
 document.getElementById('kbClearFilters').addEventListener('click', () => {
   document.getElementById('kbSearch').value = '';
-  document.getElementById('kbCatFilter').value = '';
+  document.querySelectorAll('#kbCatChips .chip-btn').forEach(b => b.classList.remove('active'));
+  _kbCatSelection = new Set();
   renderKB();
 });
 
