@@ -94,11 +94,9 @@ class TestProfileEditFlow:
         auth_page.goto("/profile.html")
         auth_page.wait_for_selector("#profileEditBtn", timeout=8_000)
         auth_page.click("#profileEditBtn")
-        auth_page.wait_for_timeout(300)
         toolbar = auth_page.locator("#mdToolbar")
-        expect(toolbar).to_be_visible()
-        # Toolbar should have formatting buttons
-        expect(toolbar.locator(".md-btn").first).to_be_visible()
+        expect(toolbar).to_be_visible(timeout=5_000)
+        expect(toolbar.locator(".md-btn").first).to_be_visible(timeout=5_000)
 
     def test_cancel_profile_edit_hides_textarea(self, auth_page):
         auth_page.goto("/profile.html")
