@@ -1338,7 +1338,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/admin/runs",
-            "description": "All Drive run folders across all users with type detection (resume vs interview_prep), `created_at`, and `web_view_link`. Also includes any still-active in-memory runs."
+            "description": "All agent run records across all users from the persistent AgentRun store. Each record includes id, type (resume/interview_prep/aq/optimize/thank_you/scoring), status, started_at, finished_at, company, role, user_id, user_email, app_id, initiated_by, gdrive_folder_id, gdrive_folder_url, output_files, score, score_category, score_reasoning, round_type, optimize_instruction, and error. In-memory status is overlaid for currently active runs."
           }
         }
       ]
