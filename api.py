@@ -106,6 +106,7 @@ from scripts import email_verification as ev
 from scripts import calendar as cal_store
 from scripts import applications as app_store
 from scripts import notification_state as notif_state
+from scripts import agent_runs
 from scripts.notification_tokens import create_token as _create_notif_token
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
 from scripts.session import create_session_token, verify_session_token
@@ -325,7 +326,15 @@ def _trigger_match_scoring(
         from scripts.applications import save_match_score, get_application, save_application
 
         def _run():
+            score_run_id = str(uuid.uuid4())
+            app_rec = get_application(user_id, app_id) if app_id else None
+            agent_runs.create(run_id=score_run_id, run_type="scoring",
+                              user_id=user_id, user_email=user_label,
+                              app_id=app_id, initiated_by="system",
+                              company=(app_rec or {}).get("company", ""),
+                              role=(app_rec or {}).get("role_title", ""))
             try:
+                agent_runs.update(user_id, score_run_id, status="running")
                 config = WorkflowConfig(progress=lambda _: None, user_label=user_label,
                                         master_resume=resume_path)
                 if folder_id:
@@ -352,8 +361,12 @@ def _trigger_match_scoring(
                         "changes":   {"score": match_score["score"], "category": match_score["category"]},
                     })
                     save_application(user_id, record)
+                agent_runs.complete(user_id, score_run_id,
+                                    score=match_score.get("score"),
+                                    score_category=match_score.get("category", ""),
+                                    score_reasoning=match_score.get("reasoning", ""))
             except Exception:
-                pass
+                agent_runs.fail(user_id, score_run_id, "Scoring failed")
 
         threading.Thread(target=_run, daemon=True).start()
     except Exception:
@@ -1551,6 +1564,7 @@ def _worker_thread(
     try:
         with _get_user_lock(user_id):
             store[entry_id]["status"] = "running"
+            agent_runs.update(user_id, entry_id, status="running")
 
             def progress(msg: str):
                 q.put({"type": "progress", "message": msg})
@@ -1564,6 +1578,13 @@ def _worker_thread(
                 user_audit.log(user_id, audit_success, user_email, **kw)
                 payload = {"type": "done", entry_id.split("_")[0] + "_id": entry_id}
                 payload.update(done_payload_fn(result))
+                folder_url = payload.get("folder_url", "")
+                folder_id = folder_url.rstrip("/").split("/")[-1] if folder_url else ""
+                output_files = list(payload.get("files", {}).values()) if payload.get("files") else []
+                agent_runs.complete(user_id, entry_id,
+                                    gdrive_folder_id=folder_id,
+                                    gdrive_folder_url=folder_url,
+                                    output_files=output_files)
                 q.put(payload)
             except WorkflowError as exc:
                 store[entry_id]["status"]       = "error"
@@ -1572,6 +1593,7 @@ def _worker_thread(
                 kw = audit_kwargs(None) if callable(audit_kwargs) else audit_kwargs
                 user_audit.log(user_id, audit_failure, user_email,
                                error=str(exc), **kw)
+                agent_runs.fail(user_id, entry_id, str(exc))
                 q.put({"type": "error", "message": str(exc)})
             except Exception as exc:
                 msg = f"Unexpected error: {type(exc).__name__}: {exc}"
@@ -1582,6 +1604,7 @@ def _worker_thread(
                 kw = audit_kwargs(None) if callable(audit_kwargs) else audit_kwargs
                 user_audit.log(user_id, audit_failure, user_email,
                                error=msg, **kw)
+                agent_runs.fail(user_id, entry_id, msg)
                 q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
             finally:
                 q.put(None)
@@ -2241,6 +2264,10 @@ async def create_run(req: RunRequest, request: Request, response: Response):
     user_audit.log(user_id, "run_started", user_data["email"], _client_ip(request),
                    run_id=run_id, company=req.company, role=req.role,
                    app_id=req.app_id or "")
+    agent_runs.create(run_id=run_id, run_type="resume", user_id=user_id,
+                      user_email=user_data["email"], company=req.company,
+                      role=req.role, app_id=req.app_id or "",
+                      initiated_by=user_data["email"])
 
     # Pin this browser session to the machine that owns this run's state
     if FLY_MACHINE_ID:
@@ -2531,6 +2558,11 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
     user_audit.log(user_id, "prep_started", user_data["email"], _client_ip(request),
                    prep_id=prep_id, company=req.company, role=req.role,
                    round_type=req.round_type, app_id=req.app_id or "")
+    agent_runs.create(run_id=prep_id, run_type="interview_prep", user_id=user_id,
+                      user_email=user_data["email"], company=req.company,
+                      role=req.role, app_id=req.app_id or "",
+                      initiated_by=user_data["email"],
+                      round_type=req.round_type)
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
@@ -2693,6 +2725,10 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
     }
     user_audit.log(user_id, "aq_started", user_data["email"], _client_ip(request),
                    aq_id=aq_id, company=req.company, role=req.role)
+    agent_runs.create(run_id=aq_id, run_type="aq", user_id=user_id,
+                      user_email=user_data["email"], company=req.company,
+                      role=req.role, app_id=req.app_id or "",
+                      initiated_by=user_data["email"])
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
@@ -2706,6 +2742,7 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
         try:
             with _get_user_lock(user_id):
                 _app_questions[aq_id]["status"] = "running"
+                agent_runs.update(user_id, aq_id, status="running")
 
                 def progress(msg: str):
                     q.put({"type": "progress", "message": msg})
@@ -2752,6 +2789,7 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
                                          result_dir=Path("."), folder_url="")
                     user_audit.log(user_id, "aq_completed", user_data["email"],
                                    aq_id=aq_id, company=req.company, role=req.role)
+                    agent_runs.complete(user_id, aq_id)
                     q.put({
                         "type": "done",
                         "aq_id": aq_id,
@@ -2766,6 +2804,7 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
                     _app_questions[aq_id]["_finished_at"] = time.time()
                     user_audit.log(user_id, "aq_failed", user_data["email"],
                                    error=str(exc), aq_id=aq_id, company=req.company, role=req.role)
+                    agent_runs.fail(user_id, aq_id, str(exc))
                     q.put({"type": "error", "message": str(exc)})
                 except Exception as exc:
                     msg = f"Unexpected error: {type(exc).__name__}: {exc}"
@@ -2775,6 +2814,7 @@ async def create_aq(req: AQRequest, request: Request, response: Response):
                     _app_questions[aq_id]["_finished_at"] = time.time()
                     user_audit.log(user_id, "aq_failed", user_data["email"],
                                    error=msg, aq_id=aq_id, company=req.company, role=req.role)
+                    agent_runs.fail(user_id, aq_id, msg)
                     q.put({"type": "error", "message": "An unexpected error occurred. Please try again."})
                 finally:
                     q.put(None)
@@ -2878,6 +2918,10 @@ async def create_thankyou(req: ThankYouRequest, request: Request, response: Resp
     _thank_yous[ty_id] = {"queue": q, "status": "queued", "result": None, "error": None, "user_id": user_id}
     user_audit.log(user_id, "thankyou_started", user_data["email"], _client_ip(request),
                    ty_id=ty_id, company=req.company, role=req.role)
+    agent_runs.create(run_id=ty_id, run_type="thank_you", user_id=user_id,
+                      user_email=user_data["email"], company=req.company,
+                      role=req.role, app_id=req.app_id or "",
+                      initiated_by=user_data["email"])
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)
@@ -3045,6 +3089,12 @@ async def create_optimize(req: OptimizeRequest, request: Request, response: Resp
     user_audit.log(user_id, "optimize_started", user_data["email"], _client_ip(request),
                    optimize_id=optimize_id, company=req.company, role=req.role,
                    folder_id=req.folder_id)
+    agent_runs.create(run_id=optimize_id, run_type="optimize", user_id=user_id,
+                      user_email=user_data["email"], company=req.company,
+                      role=req.role, app_id=req.app_id or "",
+                      initiated_by=user_data["email"],
+                      gdrive_folder_id=req.folder_id,
+                      optimize_instruction=instruction)
 
     if FLY_MACHINE_ID:
         response.set_cookie("fly-force-instance-id", FLY_MACHINE_ID, path="/", samesite="lax", httponly=True)

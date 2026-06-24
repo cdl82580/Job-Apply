@@ -65,7 +65,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 ### Admin Dashboard
 - **Users** — manage all accounts, email verification, role, active/deactivated status; view runs count, last login, joined date; search, filter, sort, paginate
 - **All Applications** — cross-user application oversight with full filtering, sorting, pagination, and Excel/CSV export
-- **All Agent Runs** — full Drive-backed run history across all users with type detection, filters, sort, export
+- **All Agent Runs** — persistent `AgentRun` records in S3 (`agent-runs/users/{user_id}/{run_id}.json`) with type, status, timing, Drive links, and scoring data; filters, sort, export
 - **Audit Log** — unified event log across user and application events; server-side pagination, filter by event ID, action, actor, source, date range
 - **Webhooks** — create and manage outbound webhooks for event streaming to Slack, MS Teams, Grafana Loki, and custom endpoints
 - **Knowledge Base** — create, edit, and delete KB articles and categories; Quill WYSIWYG editor with Source/Preview toggle; seed KB from frontend constants; filter by category or search
@@ -128,6 +128,7 @@ job-apply/
 │   ├── calendar.py            ← Calendar + reminder storage layer
 │   ├── session.py             ← Shared HMAC session token helpers
 │   ├── user_audit.py          ← Per-user audit event log (per-event S3 objects)
+│   ├── agent_runs.py          ← Persistent AgentRun records (per-run S3 objects)
 │   ├── webhooks.py            ← Webhook storage + delivery engine
 │   ├── email_verification.py  ← One-time verification tokens
 │   └── office/                ← DOCX unpack / pack / validate
@@ -421,7 +422,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | PUT | `/api/admin/applications/{uid}/{aid}` | admin | Admin update application |
 | DELETE | `/api/admin/applications/{uid}/{aid}` | admin | Admin delete application |
 | POST | `/api/admin/applications/{uid}/{aid}/comments` | admin | Admin add comment |
-| GET | `/api/admin/runs` | admin | All Drive run folders across all users |
+| GET | `/api/admin/runs` | admin | All agent run records across all users |
 | GET | `/api/admin/audit` | admin | Unified audit log (paginated) |
 | GET | `/api/admin/audit/export` | admin | Full audit log (no pagination, for export) |
 | GET | `/api/admin/audit/action-types` | admin | Known audit action type list |
