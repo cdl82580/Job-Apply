@@ -16,6 +16,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import concurrent.futures
 import ipaddress
 import socket
 import time
@@ -119,18 +120,15 @@ class AppUpdate(BaseModel):
 async def list_users(request: Request):
     admin = _admin(request)
     users = storage.list_all_users()
-    result = []
-    for u in users:
+
+    def _enrich(u):
         uid = u["user_id"]
         try:
             apps = app_store.list_applications(uid)
             app_count = apps["total"]
         except Exception:
             app_count = 0
-
-        last_login = user_audit.get_last_login(uid)
-
-        result.append({
+        return {
             "user_id":        uid,
             "email":          u.get("email", ""),
             "display_name":   u.get("display_name", ""),
@@ -138,10 +136,13 @@ async def list_users(request: Request):
             "active":         u.get("active", True),
             "email_verified": u.get("email_verified", True),
             "created_at":     u.get("created_at", ""),
-            "last_login":     last_login,
+            "last_login":     user_audit.get_last_login(uid),
             "app_count":      app_count,
             "has_resume":     storage.has_resume(uid),
-        })
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        result = list(pool.map(_enrich, users))
 
     result.sort(key=lambda u: u.get("created_at", ""))
     return result
@@ -251,8 +252,8 @@ async def list_all_applications(request: Request):
     """Return all applications across all users with a '_user_email' field added."""
     _admin(request)
     users = storage.list_all_users()
-    all_apps = []
-    for u in users:
+
+    def _fetch(u):
         uid = u["user_id"]
         try:
             result = app_store.list_applications(uid)
@@ -260,10 +261,14 @@ async def list_all_applications(request: Request):
             for item in items:
                 item["_user_id"]    = uid
                 item["_user_email"] = u.get("email", "")
-            all_apps.extend(items)
+            return items
         except Exception:
-            pass
+            return []
 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        batches = list(pool.map(_fetch, users))
+
+    all_apps = [app for batch in batches for app in batch]
     all_apps.sort(key=lambda a: a.get("last_updated", ""), reverse=True)
     return all_apps
 
@@ -535,56 +540,54 @@ async def get_unified_audit_log(
     user_map    = {u["user_id"]: u.get("email", "") for u in users}
     all_events: list[dict[str, Any]] = []
 
-    # ── 1. User-level audit events ──────────────────────────────────
-    if source in (None, "user"):
-        for u in users:
-            uid   = u["user_id"]
-            email = u.get("email", "")
-            try:
-                events = user_audit.get_events(uid)   # newest-first list
-                for e in events:
-                    all_events.append({
-                        **e,
-                        "source":     "user",
-                        "user_id":    uid,
-                        "user_email": email,
-                        "entity_id":  None,
-                        "entity_label": None,
-                    })
-            except Exception:
-                pass
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        # ── 1. User-level audit events ──────────────────────────────
+        if source in (None, "user"):
+            def _user_events(u):
+                uid   = u["user_id"]
+                email = u.get("email", "")
+                try:
+                    return [{**e, "source": "user", "user_id": uid,
+                             "user_email": email, "entity_id": None,
+                             "entity_label": None}
+                            for e in user_audit.get_events(uid)]
+                except Exception:
+                    return []
+            for batch in pool.map(_user_events, users):
+                all_events.extend(batch)
 
-    # ── 2. Application-level audit events ───────────────────────────
-    if source in (None, "application"):
-        for u in users:
-            uid = u["user_id"]
-            try:
-                result = app_store.list_applications(uid)
-                items  = result.get("items", result) if isinstance(result, dict) else result
-                for item in items:
-                    app_id = item["id"]
-                    try:
-                        full = app_store.get_application(uid, app_id)
-                        if not full:
-                            continue
-                        label = f"{full.get('company','')} · {full.get('role_title','')}"
-                        for e in full.get("audit_log", []):
-                            all_events.append({
-                                **e,
-                                "source":       "application",
-                                "user_id":      uid,
-                                "user_email":   user_map.get(uid, ""),
-                                "entity_id":    app_id,
-                                "entity_label": label,
-                                # Normalise field names to match user events
-                                "actor":        e.get("actor", ""),
-                                "ip":           e.get("ip"),
-                                "details":      e.get("changes") or e.get("details") or {},
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+        # ── 2. Application-level audit events ───────────────────────
+        if source in (None, "application"):
+            def _app_events(u):
+                uid = u["user_id"]
+                events = []
+                try:
+                    result = app_store.list_applications(uid)
+                    items  = result.get("items", result) if isinstance(result, dict) else result
+                    for item in items:
+                        try:
+                            full = app_store.get_application(uid, item["id"])
+                            if not full:
+                                continue
+                            label = f"{full.get('company','')} · {full.get('role_title','')}"
+                            for e in full.get("audit_log", []):
+                                events.append({
+                                    **e, "source": "application",
+                                    "user_id": uid,
+                                    "user_email": user_map.get(uid, ""),
+                                    "entity_id": item["id"],
+                                    "entity_label": label,
+                                    "actor": e.get("actor", ""),
+                                    "ip": e.get("ip"),
+                                    "details": e.get("changes") or e.get("details") or {},
+                                })
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                return events
+            for batch in pool.map(_app_events, users):
+                all_events.extend(batch)
 
     # ── 3. Filter ───────────────────────────────────────────────────
     if action:
@@ -648,37 +651,43 @@ async def export_audit_log(
     user_map = {u["user_id"]: u.get("email", "") for u in users}
     all_events: list[dict[str, Any]] = []
 
-    for u in users:
-        uid   = u["user_id"]
-        email = u.get("email", "")
-        try:
-            for e in user_audit.get_events(uid):
-                all_events.append({**e, "source": "user", "user_id": uid,
-                                   "user_email": email, "entity_id": None, "entity_label": None})
-        except Exception:
-            pass
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        def _user_ev(u):
+            uid, email = u["user_id"], u.get("email", "")
+            try:
+                return [{**e, "source": "user", "user_id": uid,
+                         "user_email": email, "entity_id": None, "entity_label": None}
+                        for e in user_audit.get_events(uid)]
+            except Exception:
+                return []
 
-    for u in users:
-        uid = u["user_id"]
-        try:
-            result = app_store.list_applications(uid)
-            items  = result.get("items", result) if isinstance(result, dict) else result
-            for item in items:
-                try:
-                    full = app_store.get_application(uid, item["id"])
-                    if not full:
-                        continue
-                    label = f"{full.get('company','')} · {full.get('role_title','')}"
-                    for e in full.get("audit_log", []):
-                        all_events.append({**e, "source": "application",
+        def _app_ev(u):
+            uid, events = u["user_id"], []
+            try:
+                result = app_store.list_applications(uid)
+                items  = result.get("items", result) if isinstance(result, dict) else result
+                for item in items:
+                    try:
+                        full = app_store.get_application(uid, item["id"])
+                        if not full:
+                            continue
+                        label = f"{full.get('company','')} · {full.get('role_title','')}"
+                        for e in full.get("audit_log", []):
+                            events.append({**e, "source": "application",
                                            "user_id": uid, "user_email": user_map.get(uid, ""),
                                            "entity_id": item["id"], "entity_label": label,
                                            "actor": e.get("actor", ""), "ip": e.get("ip"),
                                            "details": e.get("changes") or e.get("details") or {}})
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            return events
+
+        for batch in pool.map(_user_ev, users):
+            all_events.extend(batch)
+        for batch in pool.map(_app_ev, users):
+            all_events.extend(batch)
 
     if action:    all_events = [e for e in all_events if e.get("action") == action]
     if actor:     all_events = [e for e in all_events if actor.lower() in (e.get("actor") or "").lower()]

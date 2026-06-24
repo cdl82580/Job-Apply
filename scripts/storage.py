@@ -131,6 +131,10 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
 
 def list_all_users() -> list[dict[str, Any]]:
     """Scan user_ids/ prefix and return all user records. Admin use only."""
+    from . import cache
+    cached = cache.get("all_users")
+    if cached is not None:
+        return cached
     try:
         paginator = _client().get_paginator("list_objects_v2")
         users = []
@@ -143,7 +147,7 @@ def list_all_users() -> list[dict[str, Any]]:
                 u = get_user_by_id(user_id)
                 if u:
                     users.append(u)
-        return users
+        return cache.put("all_users", users)
     except Exception:
         logger.exception("list_all_users failed — check S3 credentials and bucket config")
         return []
@@ -183,6 +187,8 @@ def save_user(user: dict[str, Any]) -> None:
     put_text(f"user_ids/{user['user_id']}.txt", user["email"])
     if user.get("google_id"):
         put_text(f"google_ids/{user['google_id']}.txt", user["email"])
+    from . import cache
+    cache.invalidate("all_users")
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +207,12 @@ def get_resume(user_id: str) -> bytes | None:
 
 
 def has_resume(user_id: str) -> bool:
-    return exists(f"resumes/{user_id}/master.docx")
+    from . import cache
+    ck = f"has_resume:{user_id}"
+    cached = cache.get(ck)
+    if cached is not None:
+        return cached
+    return cache.put(ck, exists(f"resumes/{user_id}/master.docx"))
 
 
 def save_profile(user_id: str, text: str) -> None:

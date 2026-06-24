@@ -166,6 +166,10 @@ def list_for_user(user_id: str) -> list[dict[str, Any]]:
 
 def list_all() -> list[dict[str, Any]]:
     """Return all run records across all users, newest first."""
+    from . import cache
+    cached = cache.get("agent_runs_all")
+    if cached is not None:
+        return cached
     runs: list[dict[str, Any]] = []
     for key in storage.list_keys(_ALL_PREFIX):
         raw = storage.get_text(key)
@@ -176,7 +180,7 @@ def list_all() -> list[dict[str, Any]]:
         except Exception:
             pass
     runs.sort(key=lambda r: r.get("started_at", ""), reverse=True)
-    return runs
+    return cache.put("agent_runs_all", runs)
 
 
 # ---------------------------------------------------------------------------
@@ -188,5 +192,7 @@ def _save(user_id: str, run_id: str, record: dict[str, Any]) -> None:
         return
     try:
         storage.put_text(_run_key(user_id, run_id), json.dumps(record))
+        from . import cache
+        cache.invalidate("agent_runs_all")
     except Exception:
         pass
