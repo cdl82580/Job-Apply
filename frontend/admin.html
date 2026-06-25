@@ -377,8 +377,9 @@
     .filter-toggle-btn.open .arrow { transform: rotate(180deg); }
     .filter-toggle-count { font-size: .7rem; background: var(--primary); color: #fff; border-radius: 999px;
                            padding: .1rem .45rem; min-width: 1.1rem; text-align: center; display: none; }
-    .filter-section { overflow: hidden; transition: max-height .25s ease, opacity .2s ease; max-height: 600px; opacity: 1; }
-    .filter-section.collapsed { max-height: 0; opacity: 0; pointer-events: none; margin: 0; }
+    .filter-section { overflow: visible; max-height: none; opacity: 1; }
+    .filter-section.collapsing { overflow: hidden; transition: max-height .25s ease, opacity .2s ease; }
+    .filter-section.collapsed { max-height: 0; opacity: 0; overflow: hidden; pointer-events: none; margin: 0; }
 
     /* Multi-select search box (action filter) */
     .ms-search-wrap { position: relative; flex: 1; min-width: 0; }
@@ -1426,9 +1427,30 @@ document.querySelectorAll('.filter-toggle-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const section = document.getElementById(btn.dataset.filters);
     if (!section) return;
-    const open = !section.classList.contains('collapsed');
-    section.classList.toggle('collapsed', open);
-    btn.classList.toggle('open', !open);
+    const isOpen = !section.classList.contains('collapsed');
+    if (isOpen) {
+      // Collapse: measure current height, animate to 0
+      section.style.maxHeight = section.scrollHeight + 'px';
+      section.classList.add('collapsing');
+      requestAnimationFrame(() => {
+        section.classList.add('collapsed');
+        section.style.maxHeight = '0';
+      });
+      section.addEventListener('transitionend', () => {
+        section.classList.remove('collapsing');
+        section.style.maxHeight = '';
+      }, { once: true });
+    } else {
+      // Expand: animate from 0 to measured height, then remove constraints
+      section.classList.remove('collapsed');
+      section.classList.add('collapsing');
+      section.style.maxHeight = section.scrollHeight + 'px';
+      section.addEventListener('transitionend', () => {
+        section.classList.remove('collapsing');
+        section.style.maxHeight = '';
+      }, { once: true });
+    }
+    btn.classList.toggle('open', !isOpen);
   });
 });
 
