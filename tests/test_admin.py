@@ -20,6 +20,7 @@ class TestAdminGate:
 
     @pytest.mark.parametrize("path", [
         "/api/admin/users",
+        "/api/admin/applications",
         "/api/admin/runs",
         "/api/admin/audit",
         "/api/admin/webhooks",
@@ -112,3 +113,33 @@ class TestWebhookCRUD:
         assert r2.status_code == 200
         # Secret should not be returned in plaintext
         assert "my-secret" not in r2.text
+
+
+class TestAdminRuns:
+    def test_admin_can_list_runs(self, admin_client):
+        r = admin_client.get("/api/admin/runs")
+        assert r.status_code == 200
+        body = r.json()
+        assert isinstance(body, list)
+
+    def test_user_cannot_list_runs(self, authed_client):
+        r = authed_client.get("/api/admin/runs")
+        assert r.status_code == 403
+
+
+class TestAdminAuditActionTypes:
+    def test_admin_can_get_action_types(self, admin_client):
+        r = admin_client.get("/api/admin/audit/action-types")
+        assert r.status_code == 200
+        types = r.json()
+        assert isinstance(types, list)
+        assert "aq_started" in types
+        assert "aq_completed" in types
+        assert "thankyou_started" in types
+        assert "optimize_started" in types
+        assert "password_reset_requested" in types
+        assert "password_reset_completed" in types
+
+    def test_user_cannot_get_action_types(self, authed_client):
+        r = authed_client.get("/api/admin/audit/action-types")
+        assert r.status_code == 403
