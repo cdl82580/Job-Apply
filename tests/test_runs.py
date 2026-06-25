@@ -204,3 +204,78 @@ class TestThankYouEndpoint:
     def test_status_unknown_ty(self, authed_client):
         r = authed_client.get(f"/api/thankyou/{uuid.uuid4()}/status")
         assert r.status_code == 404
+
+
+AQ_BODY = {
+    "question": "Why do you want to work here?",
+    "job_posting": JD,
+    "company": "Acme",
+    "role": "Software Engineer",
+    "tone": "professional",
+}
+
+
+class TestAQEndpoint:
+    def test_requires_auth(self, client):
+        r = client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 401
+
+    def test_requires_resume(self, authed_client):
+        r = authed_client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 400
+        assert "resume" in r.json()["detail"].lower()
+
+    def test_requires_profile(self, authed_client, user_record):
+        _store.save_resume(user_record["user_id"], b"PK\x03\x04" + b"\x00" * 100)
+        r = authed_client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 400
+        assert "profile" in r.json()["detail"].lower()
+
+    def test_invalid_tone_rejected(self, authed_client, user_record):
+        _seed_user_with_resume(user_record)
+        body = {**AQ_BODY, "tone": "aggressive"}
+        r = authed_client.post("/api/aq", json=body)
+        assert r.status_code == 400
+        assert "tone" in r.json()["detail"].lower()
+
+    @pytest.mark.parametrize("tone", ["professional", "conversational", "technical", "concise"])
+    def test_valid_tones_accepted(self, authed_client, user_record, tone):
+        _seed_user_with_resume(user_record)
+        with patch("api.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            body = {**AQ_BODY, "tone": tone}
+            r = authed_client.post("/api/aq", json=body)
+        assert r.status_code == 200
+
+    def test_returns_aq_id_and_machine_id(self, authed_client, user_record):
+        _seed_user_with_resume(user_record)
+        with patch("api.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            r = authed_client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 200
+        d = r.json()
+        assert "aq_id" in d
+        assert "machine_id" in d
+        assert uuid.UUID(d["aq_id"])
+
+    def test_admin_blocked(self, admin_client, admin_record):
+        _seed_user_with_resume(admin_record)
+        r = admin_client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 403
+
+    def test_corrupt_resume_rejected(self, authed_client, user_record):
+        _store.save_resume(user_record["user_id"], b"NOT_A_ZIP" + b"\x00" * 100)
+        _store.save_profile(user_record["user_id"], "# Profile\n\nVoice guide text.")
+        r = authed_client.post("/api/aq", json=AQ_BODY)
+        assert r.status_code == 400
+        assert "corrupt" in r.json()["detail"].lower()
+
+    def test_status_unknown_aq(self, authed_client):
+        r = authed_client.get(f"/api/aq/{uuid.uuid4()}/status")
+        assert r.status_code == 404
+
+    def test_requires_question_field(self, authed_client, user_record):
+        _seed_user_with_resume(user_record)
+        body = {k: v for k, v in AQ_BODY.items() if k != "question"}
+        r = authed_client.post("/api/aq", json=body)
+        assert r.status_code == 422

@@ -154,3 +154,26 @@ class TestWebhookFilters:
     def test_app_id_filter_no_match(self):
         wh = self._webhook(filter_app_id="app-123")
         assert self.passes(wh, self._event(entity_id="app-456")) is False
+
+    def test_event_filter_wildcard_matches_all(self):
+        wh = self._webhook(events=["*"])
+        assert self.passes(wh, self._event(action="aq_completed")) is True
+        assert self.passes(wh, self._event(action="thankyou_failed")) is True
+
+    def test_event_filter_specific_match(self):
+        wh = self._webhook(events=["aq_completed", "aq_failed"])
+        assert self.passes(wh, self._event(action="aq_completed")) is True
+
+    def test_event_filter_specific_no_match(self):
+        wh = self._webhook(events=["run_completed"])
+        assert self.passes(wh, self._event(action="aq_completed")) is False
+
+    @pytest.mark.parametrize("action", [
+        "aq_started", "aq_completed", "aq_failed",
+        "thankyou_started", "thankyou_completed", "thankyou_failed",
+        "optimize_started", "optimize_completed", "optimize_failed",
+        "password_reset_requested", "password_reset_completed",
+    ])
+    def test_new_event_types_pass_wildcard(self, action):
+        wh = self._webhook(events=["*"])
+        assert self.passes(wh, self._event(action=action)) is True
