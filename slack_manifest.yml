@@ -131,6 +131,7 @@ oauth_config:
       - im:write      # open DM channels
       - im:history    # read DMs / Messages tab
       - im:read       # list DM channels
+      - files:read    # download uploaded files (resume uploads via DM)
 
 settings:
   # Socket Mode — requires SLACK_APP_TOKEN (xapp-...) set as a Fly secret.

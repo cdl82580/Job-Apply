@@ -178,7 +178,8 @@
         "chat:write",
         "im:write",
         "im:history",
-        "im:read"
+        "im:read",
+        "files:read"
       ]
     }
   },
