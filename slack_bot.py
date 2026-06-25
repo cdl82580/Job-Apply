@@ -1799,6 +1799,8 @@ def handle_message_with_file(body, client, logger):
         # Download from Slack using the bot token
         dl = requests.get(dl_url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
         dl.raise_for_status()
+        logger.info(f"Slack file download: status={dl.status_code}, content_type={dl.headers.get('Content-Type')}, "
+                     f"size={len(dl.content)}, first_bytes={dl.content[:20]!r}")
 
         # Upload to API
         r = _api("post", "/api/profile/resume",
