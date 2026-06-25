@@ -28,9 +28,9 @@ class TestAgentPageStructure:
 
     def test_nav_links_present(self, auth_page):
         auth_page.goto(AGENT_PAGE)
-        expect(auth_page.locator("a[href='/tracking.html']")).to_be_visible()
-        expect(auth_page.locator("a[href='/calendar.html']")).to_be_visible()
-        expect(auth_page.locator("a[href='/profile.html']")).to_be_visible()
+        expect(auth_page.locator("a.header-icon-btn[href='/tracking.html']")).to_be_visible()
+        expect(auth_page.locator("a.header-icon-btn[href='/calendar.html']")).to_be_visible()
+        expect(auth_page.locator("a.header-icon-btn[href='/profile.html']")).to_be_visible()
 
     def test_theme_toggle_present(self, auth_page):
         auth_page.goto(AGENT_PAGE)
