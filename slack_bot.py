@@ -1809,6 +1809,14 @@ def handle_message_with_file(body, client, logger):
             channel=user_id,
             text=f":white_check_mark: Resume *{f['name']}* saved as your master resume.",
         )
+    except requests.exceptions.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.response.json().get("detail", "")
+        except Exception:
+            detail = exc.response.text[:200] if exc.response is not None else ""
+        logger.error(f"Resume upload failed: {exc} — detail: {detail}")
+        client.chat_postMessage(channel=user_id, text=f":x: Failed to save resume: {detail or exc}")
     except Exception as exc:
         logger.error(f"Resume upload failed: {exc}")
         client.chat_postMessage(channel=user_id, text=f":x: Failed to save resume: {exc}")
