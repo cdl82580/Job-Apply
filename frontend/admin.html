@@ -3036,6 +3036,12 @@ async function logExport(screen, format, rowCount, filters = {}) {
 }
 
 // ── Data specs per screen ─────────────────────────────────────────────
+const _RUN_TYPE_LABELS = {
+  resume: 'Resume', optimize: 'Optimize', aq: 'App Questions',
+  interview_prep: 'Interview Prep', thank_you: 'Thank You',
+  scoring: 'Match Score', job_description: 'Job Description',
+};
+
 function _userRows(list) {
   const runsByEmail = {};
   for (const r of _allRuns) if (r.user_email) runsByEmail[r.user_email] = (runsByEmail[r.user_email]||0)+1;
@@ -3044,41 +3050,64 @@ function _userRows(list) {
     u.active !== false ? 'Yes' : 'No',
     u.email_verified !== false ? 'Yes' : 'No',
     u.app_count||0, runsByEmail[u.email]||0,
+    u.has_resume ? 'Yes' : 'No',
     u.last_login||'', u.created_at||'',
   ]);
 }
-const USER_HEADERS = ['User ID','Display Name','Email','Role','Active','Email Verified','Apps','Runs','Last Login','Joined'];
+const USER_HEADERS = ['User ID','Display Name','Email','Role','Active','Email Verified','Apps','Runs','Has Resume','Last Login','Joined'];
 
 function _appRows(list) {
-  return list.map(a => [
-    a.id||'', a.company||'', a.domain||'', a.role_title||'', a.status||'', a.priority||'',
-    a._user_email||'', a.date_applied||'', a.last_updated||'', a.url||'',
-    a.recruiter_name||'', a.recruiter_email||'',
-    a.location||'', a.salary_range||'', a.job_source||'',
-    a.dua ? 'Yes' : 'No',
-  ]);
+  return list.map(a => {
+    const ms = a.match_score;
+    const linked = a.linked_runs;
+    return [
+      a.id||'', a.company||'', a.domain||'', a.role_title||'', a.status||'', a.priority||'',
+      a._user_email||'', a.date_applied||'', a.created_at||'', a.last_updated||'', a.status_changed_at||'',
+      a.url||'', a.recruiter_name||'', a.recruiter_email||'',
+      a.location||'', a.salary_range||'', a.job_source||'',
+      a.dua ? 'Yes' : 'No',
+      ms ? (ms.score ?? '') : '', ms ? (ms.category || '') : '',
+      linked ? linked.length : 0,
+    ];
+  });
 }
 const APP_HEADERS = ['Application ID','Company','Domain','Role Title','Status','Priority','Owner Email',
-                     'Date Applied','Last Updated','URL','Recruiter Name','Recruiter Email',
-                     'Location','Salary Range','Job Source','DUA'];
+                     'Date Applied','Created At','Last Updated','Status Changed At',
+                     'URL','Recruiter Name','Recruiter Email',
+                     'Location','Salary Range','Job Source','DUA',
+                     'Match Score','Match Category','Linked Runs'];
 
 function _runRows(list) {
   return list.map(r => [
-    r.id||'',
-    r.type === 'interview_prep' ? 'Interview Prep' : r.type === 'thank_you' ? 'Thank You' : r.type === 'job_description' ? 'Job Description' : 'Resume',
-    r.app_company||'', r.app_role||'', r.name||'', r.user_email||'', r.status||'', r.created_at||'', r.web_view_link||'',
+    r.id||'', _RUN_TYPE_LABELS[r.type] || r.type || '',
+    r.app_company || r.company || '', r.app_role || r.role || '',
+    r.user_email||'', r.user_id||'', r.app_id||'',
+    r.status||'', r.initiated_by||'',
+    r.started_at || r.created_at || '', r.finished_at||'',
+    r.error||'',
+    r.gdrive_folder_url || r.web_view_link || '',
+    r.round_type||'', r.optimize_instruction||'',
+    r.score ?? '', r.score_category||'', r.score_reasoning||'',
+    (r.output_files || []).join(', '),
   ]);
 }
-const RUN_HEADERS = ['Folder ID','Type','Company','Role','Folder Name','User Email','Status','Created At','Drive URL'];
+const RUN_HEADERS = ['Run ID','Type','Company','Role',
+                     'User Email','User ID','App ID',
+                     'Status','Initiated By',
+                     'Started At','Finished At','Error',
+                     'Drive URL',
+                     'Round Type','Optimize Instruction',
+                     'Score','Score Category','Score Reasoning',
+                     'Output Files'];
 
 function _auditRows(events) {
   return events.map(e => [
     e.id||'', e.timestamp||'', e.action||'', e.actor||'', e.user_email||'',
-    e.source||'', e.entity_label||'', e.ip||'',
+    e.user_id||'', e.source||'', e.entity_id||'', e.entity_label||'', e.ip||'',
     e.details ? JSON.stringify(e.details) : '',
   ]);
 }
-const AUDIT_HEADERS = ['Event ID','Timestamp','Action','Actor','User Email','Source','Entity','IP','Details'];
+const AUDIT_HEADERS = ['Event ID','Timestamp','Action','Actor','User Email','User ID','Source','Entity ID','Entity','IP','Details'];
 
 function _today() { return new Date().toISOString().slice(0,10); }
 function _ts()    {
