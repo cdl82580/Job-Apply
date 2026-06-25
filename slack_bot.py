@@ -1796,29 +1796,32 @@ def handle_message_with_file(body, client, logger):
     dl_url   = f.get("url_private_download") or f.get("url_private")
 
     try:
-        # Download from Slack — try url_private_download first, fall back to url_private
-        dl = requests.get(dl_url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
-        dl.raise_for_status()
-        file_bytes = dl.content
+        # Download file from Slack — use url_private with bot token
+        # Slack may return HTML if the bot lacks files:read scope or the URL has changed.
+        # Try both url_private_download and url_private with proper auth.
+        file_bytes = None
+        for url in [f.get("url_private_download"), f.get("url_private")]:
+            if not url:
+                continue
+            dl = requests.get(url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
+            dl.raise_for_status()
+            if dl.content[:4] == b"PK\x03\x04":
+                file_bytes = dl.content
+                break
+            logger.warning(f"Slack URL {url[:80]} returned non-ZIP: "
+                           f"content_type={dl.headers.get('Content-Type')}, "
+                           f"size={len(dl.content)}, first_bytes={dl.content[:40]!r}")
 
-        # If Slack returned HTML instead of the actual file, the download URL may
-        # require a different approach — fall back to the Slack files.info API
-        if not file_bytes[:4] == b"PK\x03\x04":
-            logger.warning(f"Slack download returned non-ZIP content (content_type={dl.headers.get('Content-Type')}, "
-                           f"size={len(file_bytes)}, first_bytes={file_bytes[:40]!r}). "
-                           f"Trying url_private fallback.")
-            fallback_url = f.get("url_private")
-            if fallback_url and fallback_url != dl_url:
-                dl2 = requests.get(fallback_url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
-                dl2.raise_for_status()
-                file_bytes = dl2.content
-            if not file_bytes[:4] == b"PK\x03\x04":
-                client.chat_postMessage(
-                    channel=user_id,
-                    text=(f":warning: *{f['name']}* couldn't be downloaded from Slack as a valid .docx file. "
-                          "Try uploading the file again, or upload it directly at https://apply.cdlav.us/profile.html"),
-                )
-                return
+        if file_bytes is None:
+            logger.error("All Slack download URLs returned non-ZIP content. "
+                         "Check that the bot has files:read scope.")
+            client.chat_postMessage(
+                channel=user_id,
+                text=(f":warning: *{f['name']}* couldn't be downloaded from Slack. "
+                      "This may be a Slack permissions issue — please upload directly "
+                      "at https://apply.cdlav.us/profile.html"),
+            )
+            return
 
         # Upload to API
         r = _api("post", "/api/profile/resume",
