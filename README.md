@@ -101,6 +101,12 @@ job-apply/
 ├── slack_bot.py               ← Slack bot (all slash commands)
 ├── slack_manifest.yml         ← Slack app manifest (copy into app config)
 ├── slack_manifest.json        ← Same manifest in JSON format
+├── teams_bot/                 ← Microsoft Teams Bot Framework integration
+│   ├── app.py                 ← aiohttp entry point (webhook receiver)
+│   ├── bot.py                 ← ActivityHandler (commands + Adaptive Cards)
+│   ├── api_client.py          ← HTTP client for FastAPI backend
+│   ├── cards/                 ← Adaptive Card JSON templates
+│   └── manifest/              ← Teams app manifest
 ├── CLAUDE.md                  ← Agent workflow instructions (Claude Code reads this)
 ├── profile.md                 ← Corey's voice, stories, metrics, do-not-use phrases
 ├── frontend/
@@ -392,6 +398,7 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/optimize/{id}/files/{name}` | cookie | Download optimized DOCX |
 | POST | `/api/jd/format` | cookie | AI-format a raw job description (returns cleaned Markdown) |
 | GET | `/api/postman` | — | Download the Postman collection JSON |
+| GET | `/api/agent-runs` | cookie | List structured agent run records for the current user (type, status, timing, Drive links) |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
 | GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt`; ownership verified via Tigris app records |
 | PUT | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Upsert `job_description.md` in Drive folder |

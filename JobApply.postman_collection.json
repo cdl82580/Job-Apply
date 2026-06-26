@@ -1075,6 +1075,30 @@
       ]
     },
     {
+      "name": "Agent Runs",
+      "item": [
+        {
+          "name": "List Agent Runs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agent-runs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent-runs"
+              ]
+            },
+            "description": "List structured agent run records for the authenticated user from Tigris S3. Returns {runs: [{id, type, status, company, role, started_at, finished_at, gdrive_folder_url, ...}]}. Sorted newest first."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Local Runs",
       "item": [
         {

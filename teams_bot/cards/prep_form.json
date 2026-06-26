@@ -1,0 +1,81 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Interview Prep",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Generate an interview prep reference card.",
+      "wrap": true,
+      "spacing": "None",
+      "isSubtle": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "company",
+      "label": "Company name",
+      "placeholder": "Acme Corp",
+      "isRequired": true,
+      "errorMessage": "Company name is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "role",
+      "label": "Role title",
+      "placeholder": "Solutions Engineer",
+      "isRequired": true,
+      "errorMessage": "Role title is required"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "round_type",
+      "label": "Interview round",
+      "isRequired": true,
+      "errorMessage": "Round type is required",
+      "choices": [
+        { "title": "Recruiter Screen", "value": "recruiter_screen" },
+        { "title": "Hiring Manager", "value": "hiring_manager" },
+        { "title": "Technical", "value": "technical" },
+        { "title": "Panel", "value": "panel" },
+        { "title": "Final", "value": "final" },
+        { "title": "Take Home", "value": "take_home" }
+      ]
+    },
+    {
+      "type": "Input.Text",
+      "id": "interviewer",
+      "label": "Interviewer name (optional)",
+      "placeholder": "John Doe"
+    },
+    {
+      "type": "Input.Text",
+      "id": "focus",
+      "label": "Focus areas (optional)",
+      "placeholder": "API design, system architecture"
+    },
+    {
+      "type": "Input.Text",
+      "id": "job_posting",
+      "label": "Job posting (paste full text)",
+      "placeholder": "Paste the full job description here…",
+      "isMultiline": true,
+      "isRequired": true,
+      "errorMessage": "Job posting is required"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Generate Prep",
+      "data": {
+        "action": "prep_submit"
+      }
+    }
+  ]
+}

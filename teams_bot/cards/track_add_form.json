@@ -1,0 +1,79 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Add Application",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "Input.Text",
+      "id": "company",
+      "label": "Company name",
+      "placeholder": "Acme Corp",
+      "isRequired": true,
+      "errorMessage": "Company name is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "role",
+      "label": "Role title",
+      "placeholder": "Solutions Engineer",
+      "isRequired": true,
+      "errorMessage": "Role title is required"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "status",
+      "label": "Status",
+      "value": "Researching",
+      "choices": [
+        { "title": "Not Applying", "value": "Not Applying" },
+        { "title": "Researching", "value": "Researching" },
+        { "title": "Applied", "value": "Applied" },
+        { "title": "Phone Screen", "value": "Phone Screen" },
+        { "title": "Interviewing", "value": "Interviewing" },
+        { "title": "On Hold", "value": "On Hold" },
+        { "title": "Offer", "value": "Offer" },
+        { "title": "Rejected", "value": "Rejected" }
+      ]
+    },
+    {
+      "type": "Input.Text",
+      "id": "url",
+      "label": "Job posting URL (optional)",
+      "placeholder": "https://..."
+    },
+    {
+      "type": "Input.Text",
+      "id": "location",
+      "label": "Location (optional)",
+      "placeholder": "Remote / New York, NY"
+    },
+    {
+      "type": "Input.Text",
+      "id": "salary_range",
+      "label": "Salary range (optional)",
+      "placeholder": "$120k–$150k"
+    },
+    {
+      "type": "Input.Text",
+      "id": "note",
+      "label": "Initial note (optional)",
+      "placeholder": "Found via LinkedIn",
+      "isMultiline": true
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Add Application",
+      "data": {
+        "action": "track_add_submit"
+      }
+    }
+  ]
+}

@@ -2504,6 +2504,17 @@ async def gdrive_save_job_posting(folder_id: str, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Agent run records (structured data from Tigris)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/agent-runs")
+async def list_agent_runs(request: Request):
+    user_data = _require_user(request)
+    runs = agent_runs.list_for_user(user_data["user_id"])
+    return {"runs": runs}
+
+
+# ---------------------------------------------------------------------------
 # Run listing (for interview prep dropdown)
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,50 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Optimize Documents",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Refine the documents from an existing agent run. The bot will find the most recent Drive folder for the selected application.",
+      "wrap": true,
+      "spacing": "None",
+      "isSubtle": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "instruction",
+      "label": "Optimization prompt",
+      "placeholder": "e.g. Strengthen the eHealth bullets to emphasize platform scalability. Tighten the cover letter opening.",
+      "isMultiline": true,
+      "isRequired": true,
+      "errorMessage": "Optimization prompt is required"
+    },
+    {
+      "type": "Input.Toggle",
+      "id": "optimize_resume",
+      "title": "Resume",
+      "value": "true"
+    },
+    {
+      "type": "Input.Toggle",
+      "id": "optimize_cover_letter",
+      "title": "Cover letter",
+      "value": "true"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Optimize",
+      "data": {
+        "action": "optimize_submit"
+      }
+    }
+  ]
+}

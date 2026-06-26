@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{{MICROSOFT_APP_ID}}",
+  "developer": {
+    "name": "Corey Laverdiere",
+    "websiteUrl": "https://apply.cdlav.us",
+    "privacyUrl": "https://apply.cdlav.us/privacy",
+    "termsOfUseUrl": "https://apply.cdlav.us/terms"
+  },
+  "name": {
+    "short": "Job Apply",
+    "full": "Job Apply Agent"
+  },
+  "description": {
+    "short": "AI-powered job application agent",
+    "full": "Generate tailored resumes, ATS-optimized resumes, cover letters, and interview prep materials using AI. Track applications, manage your pipeline, and stay organized throughout your job search."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#1A3C5E",
+  "bots": [
+    {
+      "botId": "{{MICROSOFT_APP_ID}}",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            { "title": "apply", "description": "Generate resume + cover letter for a job" },
+            { "title": "aq", "description": "Answer an application question" },
+            { "title": "prep", "description": "Generate interview prep doc" },
+            { "title": "optimize", "description": "Refine existing run documents" },
+            { "title": "tracker", "description": "Pipeline summary" },
+            { "title": "track list", "description": "List applications" },
+            { "title": "track add", "description": "Add a new application" },
+            { "title": "track view", "description": "View application details" },
+            { "title": "runs", "description": "List recent Drive run folders" },
+            { "title": "help", "description": "Command reference" }
+          ]
+        }
+      ]
+    }
+  ],
+  "validDomains": ["apply.cdlav.us"]
+}
