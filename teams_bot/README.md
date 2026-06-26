@@ -10,11 +10,12 @@ to Microsoft Teams. Built with the Bot Framework SDK for Python (`botbuilder`).
 | `apply` | Generate a tailored resume, ATS resume, and cover letter |
 | `aq` | Answer an application question using resume + JD context |
 | `prep` | Generate an interview prep reference card |
+| `optimize` | Refine existing run documents (resume/cover letter) |
 | `tracker` | Pipeline summary (counts by status) |
 | `track list [status]` | List applications, optionally filtered |
 | `track add` | Add a new application (Adaptive Card form) |
 | `track view` | View full application details |
-| `runs` | List recent Google Drive run folders |
+| `runs` | List recent agent runs (structured records with type, status, Drive links) |
 | `help` | Command reference |
 
 ## Architecture
@@ -97,7 +98,7 @@ back as a message activity with `activity.value` populated — the bot routes
 based on `data.action`.
 
 ### Long-Running Jobs
-Agent commands (apply, prep, aq) use the same async pattern as the Slack bot:
+Agent commands (apply, prep, aq, optimize) use the same async pattern as the Slack bot:
 1. Send an immediate "⏳ Starting…" message
 2. Spawn a background thread that POSTs to the API, then polls for completion
 3. When done, send a proactive message back to the conversation using the
@@ -120,6 +121,7 @@ teams_bot/
 ├── cards/                 # Adaptive Card JSON templates
 │   ├── apply_form.json
 │   ├── aq_form.json
+│   ├── optimize_form.json
 │   ├── prep_form.json
 │   └── track_add_form.json
 ├── manifest/              # Teams app manifest
