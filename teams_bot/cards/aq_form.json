@@ -1,0 +1,81 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Answer Application Question",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Generate a tailored answer to an application question using your resume and the JD.",
+      "wrap": true,
+      "spacing": "None",
+      "isSubtle": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "company",
+      "label": "Company name",
+      "placeholder": "Acme Corp",
+      "isRequired": true,
+      "errorMessage": "Company name is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "role",
+      "label": "Role title",
+      "placeholder": "Solutions Engineer",
+      "isRequired": true,
+      "errorMessage": "Role title is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "question",
+      "label": "Application question",
+      "placeholder": "Why do you want to work at our company?",
+      "isMultiline": true,
+      "isRequired": true,
+      "errorMessage": "Question is required"
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "tone",
+      "label": "Tone",
+      "value": "professional",
+      "choices": [
+        { "title": "Professional", "value": "professional" },
+        { "title": "Conversational", "value": "conversational" },
+        { "title": "Technical", "value": "technical" },
+        { "title": "Concise", "value": "concise" }
+      ]
+    },
+    {
+      "type": "Input.Number",
+      "id": "char_limit",
+      "label": "Character limit (optional)",
+      "placeholder": "500"
+    },
+    {
+      "type": "Input.Text",
+      "id": "job_posting",
+      "label": "Job posting (paste full text)",
+      "placeholder": "Paste the full job description here…",
+      "isMultiline": true,
+      "isRequired": true,
+      "errorMessage": "Job posting is required"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Generate Answer",
+      "data": {
+        "action": "aq_submit"
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Generate Application",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Generate a tailored resume, ATS resume, and cover letter.",
+      "wrap": true,
+      "spacing": "None",
+      "isSubtle": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "company",
+      "label": "Company name",
+      "placeholder": "Acme Corp",
+      "isRequired": true,
+      "errorMessage": "Company name is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "role",
+      "label": "Role title",
+      "placeholder": "Solutions Engineer",
+      "isRequired": true,
+      "errorMessage": "Role title is required"
+    },
+    {
+      "type": "Input.Text",
+      "id": "contact",
+      "label": "Hiring manager name (optional)",
+      "placeholder": "Jane Smith"
+    },
+    {
+      "type": "Input.Text",
+      "id": "job_posting",
+      "label": "Job posting (paste full text)",
+      "placeholder": "Paste the full job description here…",
+      "isMultiline": true,
+      "isRequired": true,
+      "errorMessage": "Job posting is required"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Generate",
+      "data": {
+        "action": "apply_submit"
+      }
+    }
+  ]
+}
