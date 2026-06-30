@@ -20,6 +20,15 @@ to Microsoft Teams. Built with the Bot Framework SDK for Python (`botbuilder`).
 
 ## Architecture
 
+In production, this bot is **mounted directly onto the main FastAPI app**
+(`api.py`, the `web` Fly process) via `routers/teams.py` — it is not a
+separate Fly machine or port. `routers/teams.py` adds `teams_bot/` to
+`sys.path` and imports `bot.py`/`config.py` as flat top-level modules (the
+same way `app.py` does when run standalone), then exposes `POST
+/api/messages` as a FastAPI route. This means the bot rides on the app's
+existing public domain (`https://apply.cdlav.us`) and TLS cert — no extra
+Azure-facing infrastructure to stand up or keep alive.
+
 ```
 Teams Client
     │
@@ -27,14 +36,22 @@ Teams Client
 Azure Bot Service (webhook relay)
     │
     ▼
-app.py (aiohttp web server, port 3978)
+POST https://apply.cdlav.us/api/messages
+    │
+    ▼
+routers/teams.py (FastAPI route, part of the `web` Fly process)
     │
     ▼
 bot.py (ActivityHandler — command routing + Adaptive Cards)
     │
     ▼
-api_client.py (HTTP client → FastAPI backend at flowshift.cdlav.us)
+api_client.py (HTTP client → FastAPI backend, same process)
 ```
+
+`teams_bot/app.py` (the standalone aiohttp server on port 3978) still exists
+for **local development only** — it's the fastest way to iterate with the
+Bot Framework Emulator without touching the deployed app. It is not used in
+production.
 
 - **Adaptive Cards** replace Slack's Block Kit modals for rich form input
 - **Proactive messaging** via `ConversationReference` for long-running agent
@@ -82,69 +99,45 @@ App ID.
 3. **Type of App**: choose **"Use existing app registration"**
 4. Paste in the **App ID** and **Tenant ID** from step 1
 5. Create the resource
-6. Once created, open it → **Settings → Configuration** → set the **Messaging endpoint** to `https://<your-host>/api/messages`
-   - For local testing this can be a placeholder for now (e.g. `https://localhost/api/messages`) — you'll update it once you have a real public URL in step 5
+6. Once created, open it → **Settings → Configuration** → set the **Messaging endpoint** to `https://apply.cdlav.us/api/messages` (this is the production endpoint — see step 4 below; it's already live once the secrets are deployed)
 7. Under **Settings → Channels**, add the **Microsoft Teams** channel and accept the terms
 
-### 3. Environment Variables
+### 3. Set Secrets on Fly
+
+The bot runs as part of the deployed `web` process (see Architecture above),
+so credentials go in as Fly secrets, not local env vars:
 
 ```bash
-export MICROSOFT_APP_ID="<Application (client) ID from step 1>"
-export MICROSOFT_APP_PASSWORD="<client secret VALUE from step 1>"
-export MICROSOFT_APP_TENANT_ID="<Directory (tenant) ID from step 1>"
-export BOT_API_KEY="same-key-as-slack-bot"
-export JOB_APPLY_API_URL="https://flowshift.cdlav.us"  # optional, this is the default
+fly secrets set --app job-apply-corey \
+  MICROSOFT_APP_ID="<Application (client) ID from step 1>" \
+  MICROSOFT_APP_PASSWORD="<client secret VALUE from step 1>" \
+  MICROSOFT_APP_TENANT_ID="<Directory (tenant) ID from step 1>"
 ```
 
-`MICROSOFT_APP_TENANT_ID` is required for single-tenant app registrations
-(the common case). Leave it unset only if you registered a true multi-tenant
-app.
+`BOT_API_KEY` is already set on Fly (shared with the Slack bot) — no action
+needed there. `MICROSOFT_APP_TENANT_ID` is required for single-tenant app
+registrations (the common case); omit it only for a true multi-tenant app.
+Setting secrets triggers a redeploy automatically.
 
-### 4. Install & Run Locally
+### 4. Verify
 
-```bash
-cd teams_bot
-pip install -r requirements.txt
-python app.py
-```
+Once the deploy finishes:
+1. `curl https://apply.cdlav.us/api/health` → should return a healthy response (confirms the `web` machine is up)
+2. Go to the Azure Bot resource → **Test in Web Chat** and send a message (e.g. `help`) → confirms Azure can reach `/api/messages` and the bot responds, before touching Teams at all. This isolates "is the bot reachable and authenticating" from "is Teams sideloading working" — much easier to debug one at a time.
 
-The bot listens on port 3978 by default (set `PORT` to override). Confirm
-it's up with `curl http://localhost:3978/health` → should return `OK`.
+### 5. Local Development (optional)
 
-### 5. Expose it publicly and point the Bot resource at it
+You don't need any of this to use the bot in Teams — it's only for iterating
+on bot logic without redeploying:
 
-Azure needs to reach your bot over HTTPS. For local testing, use a tunnel:
+1. `cd teams_bot && pip install -r requirements.txt`
+2. Either:
+   - **Bot Framework Emulator**: download it from the [releases page](https://github.com/microsoft/BotFramework-Emulator/releases), run `python app.py` with `MICROSOFT_APP_ID`/`MICROSOFT_APP_PASSWORD` left empty (unauthenticated mode), connect the emulator to `http://localhost:3978/api/messages`. Validates bot logic only — not real Azure AD auth.
+   - **ngrok tunnel**: `python app.py` (with real credentials exported as env vars), then `ngrok http 3978`, then temporarily point the Azure Bot resource's messaging endpoint at the ngrok URL to test against real Teams traffic without touching production.
 
-```bash
-ngrok http 3978
-```
+### 6. Build and Sideload the Teams App Package
 
-Take the `https://...ngrok-free.app` URL ngrok gives you and:
-1. Go back to the Azure Bot resource → **Settings → Configuration**
-2. Set **Messaging endpoint** to `https://<ngrok-url>/api/messages`
-3. Save
-
-Now go to the Azure Bot resource → **Test in Web Chat** and send a message
-(e.g. `help`) to confirm the round trip works end to end before touching
-Teams at all. This isolates "is my bot reachable and authenticating" from
-"is Teams sideloading working" — much easier to debug one at a time.
-
-For permanent hosting (no ngrok), deploy `teams_bot/` as its own process —
-see "Deploying" below — and point the messaging endpoint at that instead.
-
-### 6. Local Development with Bot Framework Emulator (alternative to ngrok)
-
-For testing without any Azure resources at all:
-1. Download the [Bot Framework Emulator](https://github.com/microsoft/BotFramework-Emulator/releases)
-2. Run `python app.py` with `MICROSOFT_APP_ID`/`MICROSOFT_APP_PASSWORD` empty (unauthenticated mode)
-3. Connect the emulator to `http://localhost:3978/api/messages`
-
-This only validates bot logic — it does not test real Azure AD auth or Teams
-sideloading, so still do step 5 before going further.
-
-### 7. Build and Sideload the Teams App Package
-
-Only do this once step 5's Web Chat test works.
+Only do this once step 4's Web Chat test works.
 
 1. In `manifest/manifest.json`, replace **both** `{{MICROSOFT_APP_ID}}` placeholders (the `id` field and `bots[0].botId`) with your actual Application (client) ID from step 1
 2. Add a 32×32 `outline.png` and a 192×192 `color.png` to `manifest/` (transparent background, simple icon — Teams will reject the upload without both files present)
@@ -163,7 +156,7 @@ Only do this once step 5's Web Chat test works.
 |---|---|
 | "Unauthorized" / 401 in bot logs when messaging from Teams | Missing `MICROSOFT_APP_TENANT_ID` on a single-tenant app registration |
 | Web Chat test in Azure works, but Teams sideload fails to even install | `{{MICROSOFT_APP_ID}}` placeholder not replaced in `manifest.json`, or zip contains a parent folder instead of the files directly |
-| Bot installs in Teams but never responds | Messaging endpoint in Azure Bot config doesn't match where `app.py` is actually reachable (stale ngrok URL is the usual culprit — they expire/rotate) |
+| Bot installs in Teams but never responds | Messaging endpoint in Azure Bot config doesn't match `https://apply.cdlav.us/api/messages`, or (if testing locally) a stale ngrok URL — those expire/rotate |
 | "Upload a custom app" option missing in Teams | Org policy blocks custom app uploads — needs a Teams admin to enable it |
 | Cards/forms don't render, plain text does | Adaptive Card JSON schema version mismatch with the Teams client — check `cards/*.json` against the [Adaptive Cards schema explorer](https://adaptivecards.io/explorer/) |
 
@@ -188,7 +181,10 @@ Agent commands (apply, prep, aq, optimize) use the same async pattern as the Sla
    saved `ConversationReference`
 
 ### Backend Integration
-All data flows through `api_client.py` → the FastAPI backend at `flowshift.cdlav.us`.
+All data flows through `api_client.py` → the FastAPI backend (`JOB_APPLY_API_URL`,
+default `https://flowshift.cdlav.us`). In production this is a same-process
+call since `routers/teams.py` mounts the bot onto the same FastAPI app — the
+HTTP round trip only matters for local/standalone runs of `teams_bot/app.py`.
 The Teams bot authenticates with the same `BOT_API_KEY` Bearer token as the
 Slack bot. No separate user accounts or auth flow needed.
 
@@ -196,11 +192,11 @@ Slack bot. No separate user accounts or auth flow needed.
 
 ```
 teams_bot/
-├── app.py                 # aiohttp entry point
+├── app.py                 # standalone aiohttp entry point — local dev only, not used in production
 ├── bot.py                 # ActivityHandler (command routing + card handling)
 ├── api_client.py          # HTTP client for FastAPI backend
 ├── config.py              # Environment variable configuration
-├── requirements.txt       # Python dependencies
+├── requirements.txt       # Python dependencies (for standalone/local runs)
 ├── cards/                 # Adaptive Card JSON templates
 │   ├── apply_form.json
 │   ├── aq_form.json
@@ -210,4 +206,6 @@ teams_bot/
 ├── manifest/              # Teams app manifest
 │   └── manifest.json
 └── README.md
+
+routers/teams.py           # production mount point — POST /api/messages on the main FastAPI app
 ```
