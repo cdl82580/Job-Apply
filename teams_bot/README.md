@@ -33,7 +33,7 @@ app.py (aiohttp web server, port 3978)
 bot.py (ActivityHandler — command routing + Adaptive Cards)
     │
     ▼
-api_client.py (HTTP client → FastAPI backend at apply.cdlav.us)
+api_client.py (HTTP client → FastAPI backend at flowshift.cdlav.us)
 ```
 
 - **Adaptive Cards** replace Slack's Block Kit modals for rich form input
@@ -56,7 +56,7 @@ api_client.py (HTTP client → FastAPI backend at apply.cdlav.us)
 export MICROSOFT_APP_ID="your-app-id"
 export MICROSOFT_APP_PASSWORD="your-app-password"
 export BOT_API_KEY="same-key-as-slack-bot"
-export JOB_APPLY_API_URL="https://apply.cdlav.us"  # optional, this is the default
+export JOB_APPLY_API_URL="https://flowshift.cdlav.us"  # optional, this is the default
 ```
 
 ### 3. Install & Run
@@ -105,7 +105,7 @@ Agent commands (apply, prep, aq, optimize) use the same async pattern as the Sla
    saved `ConversationReference`
 
 ### Backend Integration
-All data flows through `api_client.py` → the FastAPI backend at `apply.cdlav.us`.
+All data flows through `api_client.py` → the FastAPI backend at `flowshift.cdlav.us`.
 The Teams bot authenticates with the same `BOT_API_KEY` Bearer token as the
 Slack bot. No separate user accounts or auth flow needed.
 
