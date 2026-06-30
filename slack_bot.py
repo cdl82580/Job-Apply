@@ -5,7 +5,7 @@ Environment variables required:
   SLACK_BOT_TOKEN       xoxb-... token from the Slack app
   SLACK_SIGNING_SECRET  signing secret from the Slack app Basic Information page
   BOT_API_KEY           must match the BOT_API_KEY set on the Fly.io app
-  JOB_APPLY_API_URL     base URL of the deployed app (default: https://apply.cdlav.us)
+  JOB_APPLY_API_URL     base URL of the deployed app (default: https://flowshift.cdlav.us)
 
 Run locally:
   python slack_bot.py
@@ -79,7 +79,7 @@ SLACK_BOT_TOKEN      = os.environ["SLACK_BOT_TOKEN"]
 SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
 SLACK_APP_TOKEN      = os.environ.get("SLACK_APP_TOKEN", "")  # xapp-... for Socket Mode
 BOT_API_KEY          = os.environ["BOT_API_KEY"]
-API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://apply.cdlav.us").rstrip("/")
+API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://flowshift.cdlav.us").rstrip("/")
 PORT                 = int(os.environ.get("PORT", "3000"))
 
 # Slack user ID authorised to run test suites (resolved once at startup).
@@ -1819,7 +1819,7 @@ def handle_message_with_file(body, client, logger):
                 channel=user_id,
                 text=(f":warning: *{f['name']}* couldn't be downloaded from Slack. "
                       "This may be a Slack permissions issue — please upload directly "
-                      "at https://apply.cdlav.us/profile.html"),
+                      "at https://flowshift.cdlav.us/profile.html"),
             )
             return
 
@@ -3065,7 +3065,7 @@ def handle_app_home_opened(client, event, logger):
         {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"<{API_BASE}|apply.cdlav.us>  ·  Powered by Claude"},
+                {"type": "mrkdwn", "text": f"<{API_BASE}|flowshift.cdlav.us>  ·  Powered by Claude"},
             ],
         },
     ]

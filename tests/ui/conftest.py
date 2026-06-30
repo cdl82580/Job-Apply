@@ -4,7 +4,7 @@ Playwright UI test configuration.
 Tests run against a configurable base URL (defaults to live app).
 Set environment variables to control behavior:
 
-    UI_BASE_URL      — target (default: https://apply.cdlav.us)
+    UI_BASE_URL      — target (default: https://flowshift.cdlav.us)
     UI_TEST_EMAIL    — test account email
     UI_TEST_PASSWORD — test account password
 
@@ -24,7 +24,7 @@ from playwright.sync_api import Page, BrowserContext, expect
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BASE_URL       = os.environ.get("UI_BASE_URL",       "https://apply.cdlav.us").rstrip("/")
+BASE_URL       = os.environ.get("UI_BASE_URL",       "https://flowshift.cdlav.us").rstrip("/")
 TEST_EMAIL     = os.environ.get("UI_TEST_EMAIL",     "cdl825+testuser@gmail.com")
 TEST_PASSWORD  = os.environ.get("UI_TEST_PASSWORD",  "")
 ADMIN_EMAIL    = os.environ.get("UI_ADMIN_EMAIL",    "cdl825+testadmin@gmail.com")
