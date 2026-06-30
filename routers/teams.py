@@ -58,7 +58,10 @@ async def teams_messages(request: Request):
     activity = Activity().deserialize(body)
     auth_header = request.headers.get("Authorization", "")
 
-    invoke_response = await _ADAPTER.process_activity(activity, auth_header, _BOT.on_turn)
+    try:
+        invoke_response = await _ADAPTER.process_activity(activity, auth_header, _BOT.on_turn)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     if invoke_response:
         return Response(
             content=json.dumps(invoke_response.body) if invoke_response.body else None,
