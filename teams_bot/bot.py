@@ -16,6 +16,7 @@ Commands (type in chat):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -152,7 +153,7 @@ class JobApplyBot(ActivityHandler):
 
     async def _cmd_optimize(self, ctx: TurnContext):
         try:
-            apps = api_client.get_applications()
+            apps = await asyncio.to_thread(api_client.get_applications)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error loading applications: {exc}"))
             return
@@ -182,10 +183,14 @@ class JobApplyBot(ActivityHandler):
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     # ── Instant commands ─────────────────────────────────────────────────
+    # api_client calls below run via asyncio.to_thread: in production this
+    # bot is mounted on the same FastAPI process it calls over HTTP, so a
+    # direct blocking `requests` call here would stall the only event loop
+    # — including the inbound self-request it's waiting on.
 
     async def _cmd_tracker(self, ctx: TurnContext):
         try:
-            apps = api_client.get_applications()
+            apps = await asyncio.to_thread(api_client.get_applications)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Could not reach the tracker: {exc}"))
             return
@@ -224,7 +229,7 @@ class JobApplyBot(ActivityHandler):
                 return
 
         try:
-            apps = api_client.get_applications(status=resolved)
+            apps = await asyncio.to_thread(api_client.get_applications, status=resolved)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -253,7 +258,7 @@ class JobApplyBot(ActivityHandler):
 
     async def _cmd_track_view(self, ctx: TurnContext):
         try:
-            apps = api_client.get_applications()
+            apps = await asyncio.to_thread(api_client.get_applications)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -289,7 +294,7 @@ class JobApplyBot(ActivityHandler):
 
     async def _cmd_runs(self, ctx: TurnContext):
         try:
-            runs = api_client.get_agent_runs()
+            runs = await asyncio.to_thread(api_client.get_agent_runs)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -526,7 +531,7 @@ class JobApplyBot(ActivityHandler):
             return
 
         try:
-            record = api_client.get_application(app_id)
+            record = await asyncio.to_thread(api_client.get_application, app_id)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
             return
@@ -608,7 +613,7 @@ class JobApplyBot(ActivityHandler):
                 payload[field] = val
 
         try:
-            result = api_client.create_application(payload)
+            result = await asyncio.to_thread(api_client.create_application, payload)
             await ctx.send_activity(
                 MessageFactory.text(
                     f"✅ Added **{company}** — {role} ({status_val})"
@@ -624,7 +629,7 @@ class JobApplyBot(ActivityHandler):
             return
 
         try:
-            a = api_client.get_application(app_id)
+            a = await asyncio.to_thread(api_client.get_application, app_id)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
