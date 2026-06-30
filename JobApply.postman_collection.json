@@ -99,7 +99,7 @@
               "name": "200 OK (authenticated)",
               "status": "OK",
               "code": 200,
-              "body": "{\"status\": \"ok\", \"storage\": \"ok\", \"email\": \"configured\", \"gdrive\": \"configured\", \"model\": \"claude-sonnet-4-6\", \"anthropic\": \"configured\", \"fly_machine\": \"abc123\", \"fly_app\": \"job-apply-corey\"}"
+              "body": "{\"status\": \"ok\", \"storage\": \"ok\", \"email\": \"configured\", \"gdrive\": \"configured\", \"model\": \"claude-sonnet-5\", \"anthropic\": \"configured\", \"fly_machine\": \"abc123\", \"fly_app\": \"job-apply-corey\"}"
             }
           ]
         }
@@ -1169,7 +1169,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"model\": \"claude-sonnet-4-6\"\n}"
+              "raw": "{\n  \"model\": \"claude-sonnet-5\"\n}"
             }
           }
         },

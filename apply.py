@@ -107,7 +107,7 @@ UNPACK_DIR    = Path("unpacked")
 OUTPUT_DIR    = Path("output")
 SCRIPTS_DIR   = Path("scripts/office")
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 ROUND_TYPES = (
     "Phone Screen",
