@@ -19,7 +19,11 @@ from botbuilder.integration.aiohttp import BotFrameworkHttpAdapter
 from config import Config
 from bot import JobApplyBot
 
-SETTINGS = BotFrameworkAdapterSettings(Config.APP_ID, Config.APP_PASSWORD)
+SETTINGS = BotFrameworkAdapterSettings(
+    Config.APP_ID,
+    Config.APP_PASSWORD,
+    channel_auth_tenant=Config.APP_TENANT_ID or None,
+)
 ADAPTER = BotFrameworkHttpAdapter(SETTINGS)
 
 
