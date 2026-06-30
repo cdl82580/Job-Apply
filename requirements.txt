@@ -12,3 +12,5 @@ boto3>=1.34.0
 python-multipart>=0.0.9
 slack-bolt>=1.18.0
 cryptography>=42.0.0
+botbuilder-core>=4.16.0
+aiohttp>=3.9.0
