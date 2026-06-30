@@ -571,6 +571,7 @@ _PUBLIC_PATHS = frozenset({
     "/api/companies/search",
     "/api/health",
     "/favicon.ico",
+    "/api/messages",  # Teams webhook — Bot Framework JWT, not our session/BOT_API_KEY auth
 })
 
 
