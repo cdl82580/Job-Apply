@@ -4,7 +4,7 @@ A Claude-powered web app (and Slack bot) that takes a job posting and produces a
 tailored resume, ATS resume, cover letter, and interview prep doc in under 2 minutes.
 Includes a full-featured application tracker, calendar, admin dashboard, webhook system, and audit logging.
 
-**Live app:** https://apply.cdlav.us/
+**Live app:** https://flowshift.cdlav.us/
 
 ---
 
@@ -150,7 +150,7 @@ job-apply/
 
 ## Web App Usage
 
-1. Go to https://apply.cdlav.us/
+1. Go to https://flowshift.cdlav.us/
 2. Register (email/password or Google) and upload `master.docx` + paste your `profile.md`
 3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; use **Application Questions** to draft answers to supplemental app questions; or use **Interview Prep** for a prep doc
 4. **Tracker tab** — track applications, add notes, link to agent runs
@@ -266,7 +266,7 @@ fly secrets set GDRIVE_TOKEN_JSON="$(cat ~/.config/job-apply/gdrive_token.json)"
 ## Google OAuth Setup (one-time)
 
 1. Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client → Web application
-2. Authorized redirect URI: `https://apply.cdlav.us/api/auth/google/callback`
+2. Authorized redirect URI: `https://flowshift.cdlav.us/api/auth/google/callback`
 3. `fly secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...`
 
 ---
@@ -302,7 +302,7 @@ Both process groups share the same Docker image and all Fly secrets.
 | `BUCKET_NAME` | Tigris bucket name |
 | `RESEND_API_KEY` | Resend — email verification, password-change, and calendar reminder emails |
 | `RESEND_FROM` | Sender address (default: `Job Apply <hello@cdlav.us>`) |
-| `APP_URL` | Public app URL (default: `https://apply.cdlav.us`) |
+| `APP_URL` | Public app URL (default: `https://flowshift.cdlav.us`) |
 | `APP_USER_EMAIL` | Primary user email — used by the Slack bot to resolve its API identity |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
