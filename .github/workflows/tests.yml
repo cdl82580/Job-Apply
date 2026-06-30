@@ -40,7 +40,7 @@ jobs:
 
       - name: Run UI tests
         env:
-          UI_BASE_URL: https://apply.cdlav.us
+          UI_BASE_URL: https://flowshift.cdlav.us
           UI_TEST_EMAIL: ${{ secrets.UI_TEST_EMAIL }}
           UI_TEST_PASSWORD: ${{ secrets.UI_TEST_PASSWORD }}
           UI_ADMIN_EMAIL: ${{ secrets.UI_ADMIN_EMAIL }}

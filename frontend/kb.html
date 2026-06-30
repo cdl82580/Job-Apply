@@ -457,7 +457,7 @@ const KB = {
 <p>Save the job posting as plain text in <code>jobs/job.txt</code>, then run the command above. The agent reads the file and executes all 8 steps.</p>
 
 <h3>2. Web App</h3>
-<p>Go to <a href="https://apply.cdlav.us/" target="_blank">apply.cdlav.us</a>, paste the job posting into the form, fill in company and role, then click <strong>Run</strong>. Progress streams live via SSE.</p>
+<p>Go to <a href="https://flowshift.cdlav.us/" target="_blank">flowshift.cdlav.us</a>, paste the job posting into the form, fill in company and role, then click <strong>Run</strong>. Progress streams live via SSE.</p>
 
 <h2>Output Structure</h2>
 <p>Each run creates a subfolder under <code>output/</code>:</p>
@@ -1117,7 +1117,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       readTime: '3 min',
       body: `
 <h2>The Web App</h2>
-<p>The web app is deployed at <a href="https://apply.cdlav.us/" target="_blank">apply.cdlav.us</a> on Fly.io. It provides a browser interface for both the run workflow and the interview prep workflow.</p>
+<p>The web app is deployed at <a href="https://flowshift.cdlav.us/" target="_blank">flowshift.cdlav.us</a> on Fly.io. It provides a browser interface for both the run workflow and the interview prep workflow.</p>
 
 <h2>How Progress Streams</h2>
 <p>The run and prep workflows stream progress via Server-Sent Events (SSE). The client opens an <code>EventSource</code> connection after the run is initiated. Each step of the workflow emits a progress event that updates the UI in real time.</p>
@@ -1455,7 +1455,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
   <tr><td><code>SLACK_BOT_TOKEN</code></td><td><code>xoxb-…</code> token from the Slack app credentials</td></tr>
   <tr><td><code>SLACK_SIGNING_SECRET</code></td><td>Signing secret from Slack app Basic Information page</td></tr>
   <tr><td><code>BOT_API_KEY</code></td><td>Must match the <code>BOT_API_KEY</code> secret set on the Fly.io app</td></tr>
-  <tr><td><code>JOB_APPLY_API_URL</code></td><td>Base URL of the deployed app (default: <code>https://apply.cdlav.us</code>)</td></tr>
+  <tr><td><code>JOB_APPLY_API_URL</code></td><td>Base URL of the deployed app (default: <code>https://flowshift.cdlav.us</code>)</td></tr>
 </table>
 
 <h2>Optional Environment Variables</h2>

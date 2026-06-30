@@ -399,7 +399,7 @@ def _verify_password(password: str, stored: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _FROM_ADDRESS    = os.environ.get("RESEND_FROM", "Job Apply <hello@cdlav.us>")
-_APP_URL         = os.environ.get("APP_URL", "https://apply.cdlav.us")
+_APP_URL         = os.environ.get("APP_URL", "https://flowshift.cdlav.us")
 _LOGO_URL        = f"{_APP_URL}/img/logo.png"
 _LOGODEV_PUB_KEY = os.environ.get("LOGODEV_PUBLIC_KEY") or os.environ.get("LOGODEV_API_KEY", "")
 
@@ -1870,7 +1870,7 @@ async def logout(request: Request):
 @app.get("/api/auth/verify-email")
 async def verify_email(token: str = ""):
     """Public — clicked from email link. Marks user verified and redirects."""
-    app_url = os.environ.get("APP_URL", "https://apply.cdlav.us")
+    app_url = os.environ.get("APP_URL", "https://flowshift.cdlav.us")
     fail_url = f"{app_url}/login.html?auth_error="
 
     if not token:
