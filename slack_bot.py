@@ -2277,7 +2277,7 @@ def _latest_claude_sonnet() -> str | None:
         ]
         if not sonnet_ids:
             return None
-        # Sort by model ID descending — Anthropic uses date-embedded IDs like claude-sonnet-4-6
+        # Sort by model ID descending — Anthropic uses date-embedded IDs like claude-sonnet-5
         sonnet_ids.sort(reverse=True)
         return sonnet_ids[0]
     except Exception:
