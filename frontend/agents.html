@@ -660,6 +660,11 @@
 
   <!-- ── Input form ──────────────────────────────────────────────── -->
   <div class="card" id="formCard">
+    <div class="card-head" id="formToggle">
+      <h2>New Application</h2>
+      <span class="chevron open" id="formChevron">&#9660;</span>
+    </div>
+    <div class="card-body" id="formBody">
     <form id="runForm">
 
       <!-- App picker -->
@@ -712,6 +717,7 @@
         </span>
       </div>
     </form>
+    </div>
   </div>
 
   <!-- ── Progress ───────────────────────────────────────────────── -->
@@ -1849,6 +1855,16 @@
       emptyEl.classList.remove('hidden');
     }
   }
+
+  // ── New Application (resume agent) ─────────────────────────────────
+
+  document.getElementById('formToggle').addEventListener('click', () => {
+    const body    = document.getElementById('formBody');
+    const chevron = document.getElementById('formChevron');
+    const isOpen  = !body.classList.contains('hidden');
+    if (isOpen) { body.classList.add('hidden'); chevron.classList.remove('open'); }
+    else        { body.classList.remove('hidden'); chevron.classList.add('open'); }
+  });
 
   // ── Optimize Run ──────────────────────────────────────────────────
 
