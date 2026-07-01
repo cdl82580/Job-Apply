@@ -182,7 +182,7 @@ Agent commands (apply, prep, aq, optimize) use the same async pattern as the Sla
 
 ### Backend Integration
 All data flows through `api_client.py` → the FastAPI backend (`JOB_APPLY_API_URL`,
-default `https://flowshift.cdlav.us`). In production this is a same-process
+default `https://apply.cdlav.us`). In production this is a same-process
 call since `routers/teams.py` mounts the bot onto the same FastAPI app — the
 HTTP round trip only matters for local/standalone runs of `teams_bot/app.py`.
 The Teams bot authenticates with the same `BOT_API_KEY` Bearer token as the

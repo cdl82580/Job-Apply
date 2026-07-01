@@ -71,7 +71,7 @@ def main() -> None:
     print(f"  Password: {password}")
     print(f"  User ID:  {user_id}")
     print()
-    print("Log in at: https://flowshift.cdlav.us/login.html")
+    print("Log in at: https://apply.cdlav.us/login.html")
 
 
 if __name__ == "__main__":

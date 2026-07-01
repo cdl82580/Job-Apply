@@ -5,9 +5,9 @@
   "id": "{{MICROSOFT_APP_ID}}",
   "developer": {
     "name": "Corey Laverdiere",
-    "websiteUrl": "https://flowshift.cdlav.us",
-    "privacyUrl": "https://flowshift.cdlav.us/privacy",
-    "termsOfUseUrl": "https://flowshift.cdlav.us/terms"
+    "websiteUrl": "https://apply.cdlav.us",
+    "privacyUrl": "https://apply.cdlav.us/privacy",
+    "termsOfUseUrl": "https://apply.cdlav.us/terms"
   },
   "name": {
     "short": "Job Apply",
@@ -47,5 +47,5 @@
       ]
     }
   ],
-  "validDomains": ["flowshift.cdlav.us"]
+  "validDomains": ["apply.cdlav.us"]
 }
