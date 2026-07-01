@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
   "manifestVersion": "1.17",
   "version": "1.0.0",
-  "id": "{{MICROSOFT_APP_ID}}",
+  "id": "f71306b1-602b-496c-a579-7a8afa62be37",
   "developer": {
     "name": "Corey Laverdiere",
     "websiteUrl": "https://apply.cdlav.us",
@@ -24,7 +24,7 @@
   "accentColor": "#1A3C5E",
   "bots": [
     {
-      "botId": "{{MICROSOFT_APP_ID}}",
+      "botId": "f71306b1-602b-496c-a579-7a8afa62be37",
       "scopes": ["personal", "team", "groupChat"],
       "supportsFiles": false,
       "isNotificationOnly": false,
@@ -40,6 +40,9 @@
             { "title": "track list", "description": "List applications" },
             { "title": "track add", "description": "Add a new application" },
             { "title": "track view", "description": "View application details" },
+            { "title": "confirm", "description": "Link your Teams identity to a Job Apply account" },
+            { "title": "whoami", "description": "Show which account you're linked as" },
+            { "title": "unlink", "description": "Remove your Teams identity's link" },
             { "title": "runs", "description": "List recent Drive run folders" },
             { "title": "help", "description": "Command reference" }
           ]

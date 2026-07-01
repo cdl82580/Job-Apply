@@ -34,3 +34,4 @@ htmlcov/
 .pytest_cache/
 tests/ui/artifacts/
 .env.test.local
+jobapply-teams.zip
