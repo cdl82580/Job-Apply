@@ -283,7 +283,10 @@ def claude(system: str, user: str, max_tokens: int = 4096,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
-    return response.content[0].text
+    for block in response.content:
+        if block.type == "text":
+            return block.text
+    raise WorkflowError("Claude response contained no text block")
 
 # ---------------------------------------------------------------------------
 # Tagline width validation
