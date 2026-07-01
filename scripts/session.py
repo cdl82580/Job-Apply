@@ -16,6 +16,13 @@ import time
 SESSION_DAYS = 30
 
 
+def verify_bot_key(auth_header: str, expected_key: str) -> bool:
+    """Verify a Bearer token against a shared bot API key (constant-time)."""
+    if not expected_key or not auth_header.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(auth_header[7:], expected_key)
+
+
 def pw_version(password_hash: str) -> str:
     """Return a short fingerprint of the stored password hash.
     Embedded in session tokens so a password change immediately invalidates

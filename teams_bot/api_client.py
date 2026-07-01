@@ -1,4 +1,9 @@
-"""HTTP client for the Job Apply FastAPI backend — mirrors slack_bot.py helpers."""
+"""HTTP client for the Job Apply FastAPI backend — mirrors slack_bot.py helpers.
+
+Every call carries the shared BOT_API_KEY. Calls made on behalf of a linked
+Teams user also carry X-Teams-User-Email so the API resolves that specific
+account (see api.py:_bot_user) instead of the single primary account.
+"""
 
 from __future__ import annotations
 
@@ -10,18 +15,49 @@ import requests
 from config import Config
 
 
-def _api(method: str, path: str, **kwargs) -> requests.Response:
+def _api(method: str, path: str, user_email: str | None = None, **kwargs) -> requests.Response:
     headers = kwargs.pop("headers", {})
     headers["Authorization"] = f"Bearer {Config.BOT_API_KEY}"
+    if user_email:
+        headers["X-Teams-User-Email"] = user_email
     return getattr(requests, method)(
         f"{Config.API_BASE}{path}", headers=headers, timeout=30, **kwargs,
     )
 
 
+# ── Teams identity linking ──────────────────────────────────────────────
+# No user_email — these establish/inspect the link itself.
+
+def teams_link_status(aad_object_id: str) -> dict:
+    r = _api("post", "/api/teams/link-status", json={"aad_object_id": aad_object_id})
+    r.raise_for_status()
+    return r.json()
+
+
+def teams_account_lookup(email: str) -> dict:
+    r = _api("post", "/api/teams/account-lookup", json={"email": email})
+    r.raise_for_status()
+    return r.json()
+
+
+def teams_link_confirm(aad_object_id: str, email: str) -> dict:
+    r = _api("post", "/api/teams/link-confirm", json={"aad_object_id": aad_object_id, "email": email})
+    if r.status_code == 404:
+        return {"linked": False}
+    r.raise_for_status()
+    return r.json()
+
+
+def teams_unlink(aad_object_id: str) -> None:
+    r = _api("post", "/api/teams/unlink", json={"aad_object_id": aad_object_id})
+    r.raise_for_status()
+
+
 # ── Agent runs ───────────────────────────────────────────────────────────
 
-def post_run(job_posting: str, company: str, role: str, contact: str = "") -> dict:
-    r = _api("post", "/api/run", json={
+def post_run(job_posting: str, company: str, role: str, contact: str = "",
+             user_email: str | None = None) -> dict:
+    r = _api("post", "/api/run", user_email=user_email, json={
         "job_posting": job_posting,
         "company": company,
         "role": role,
@@ -31,10 +67,10 @@ def post_run(job_posting: str, company: str, role: str, contact: str = "") -> di
     return r.json()
 
 
-def poll_run(run_id: str, timeout: int = 300) -> dict:
+def poll_run(run_id: str, timeout: int = 300, user_email: str | None = None) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = _api("get", f"/api/run/{run_id}/status")
+        r = _api("get", f"/api/run/{run_id}/status", user_email=user_email)
         r.raise_for_status()
         data = r.json()
         if data["status"] in ("done", "error"):
@@ -44,8 +80,9 @@ def poll_run(run_id: str, timeout: int = 300) -> dict:
 
 
 def post_prep(job_posting: str, company: str, role: str,
-              round_type: str, focus: str = "", interviewer: str = "") -> dict:
-    r = _api("post", "/api/prep", json={
+              round_type: str, focus: str = "", interviewer: str = "",
+              user_email: str | None = None) -> dict:
+    r = _api("post", "/api/prep", user_email=user_email, json={
         "job_posting": job_posting,
         "company": company,
         "role": role,
@@ -57,10 +94,10 @@ def post_prep(job_posting: str, company: str, role: str,
     return r.json()
 
 
-def poll_prep(prep_id: str, timeout: int = 300) -> dict:
+def poll_prep(prep_id: str, timeout: int = 300, user_email: str | None = None) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = _api("get", f"/api/prep/{prep_id}/status")
+        r = _api("get", f"/api/prep/{prep_id}/status", user_email=user_email)
         r.raise_for_status()
         data = r.json()
         if data["status"] in ("done", "error"):
@@ -70,7 +107,8 @@ def poll_prep(prep_id: str, timeout: int = 300) -> dict:
 
 
 def post_aq(question: str, job_posting: str, company: str, role: str,
-            tone: str = "professional", char_limit: int | None = None) -> dict:
+            tone: str = "professional", char_limit: int | None = None,
+            user_email: str | None = None) -> dict:
     payload: dict[str, Any] = {
         "question": question,
         "job_posting": job_posting,
@@ -80,15 +118,15 @@ def post_aq(question: str, job_posting: str, company: str, role: str,
     }
     if char_limit:
         payload["char_limit"] = char_limit
-    r = _api("post", "/api/aq", json=payload)
+    r = _api("post", "/api/aq", user_email=user_email, json=payload)
     r.raise_for_status()
     return r.json()
 
 
-def poll_aq(aq_id: str, timeout: int = 300) -> dict:
+def poll_aq(aq_id: str, timeout: int = 300, user_email: str | None = None) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = _api("get", f"/api/aq/{aq_id}/status")
+        r = _api("get", f"/api/aq/{aq_id}/status", user_email=user_email)
         r.raise_for_status()
         data = r.json()
         if data["status"] in ("done", "error"):
@@ -99,31 +137,31 @@ def poll_aq(aq_id: str, timeout: int = 300) -> dict:
 
 # ── Tracker ──────────────────────────────────────────────────────────────
 
-def get_applications(status: str | None = None) -> list[dict]:
+def get_applications(status: str | None = None, user_email: str | None = None) -> list[dict]:
     params = {}
     if status:
         params["status"] = status
-    r = _api("get", "/api/applications", params=params)
+    r = _api("get", "/api/applications", user_email=user_email, params=params)
     r.raise_for_status()
     return r.json().get("items", [])
 
 
-def get_application(app_id: str) -> dict:
-    r = _api("get", f"/api/applications/{app_id}")
+def get_application(app_id: str, user_email: str | None = None) -> dict:
+    r = _api("get", f"/api/applications/{app_id}", user_email=user_email)
     r.raise_for_status()
     return r.json()
 
 
-def create_application(data: dict) -> dict:
-    r = _api("post", "/api/applications", json=data)
+def create_application(data: dict, user_email: str | None = None) -> dict:
+    r = _api("post", "/api/applications", user_email=user_email, json=data)
     r.raise_for_status()
     return r.json()
 
 
 # ── Profile ──────────────────────────────────────────────────────────────
 
-def get_profile() -> dict:
-    r = _api("get", "/api/profile")
+def get_profile(user_email: str | None = None) -> dict:
+    r = _api("get", "/api/profile", user_email=user_email)
     r.raise_for_status()
     return r.json()
 
@@ -133,8 +171,9 @@ def get_profile() -> dict:
 def post_optimize(app_id: str, folder_id: str, instruction: str,
                   company: str, role: str,
                   optimize_resume: bool = True,
-                  optimize_cover_letter: bool = True) -> dict:
-    r = _api("post", "/api/optimize", json={
+                  optimize_cover_letter: bool = True,
+                  user_email: str | None = None) -> dict:
+    r = _api("post", "/api/optimize", user_email=user_email, json={
         "app_id": app_id,
         "folder_id": folder_id,
         "instruction": instruction,
@@ -147,10 +186,10 @@ def post_optimize(app_id: str, folder_id: str, instruction: str,
     return r.json()
 
 
-def poll_optimize(optimize_id: str, timeout: int = 300) -> dict:
+def poll_optimize(optimize_id: str, timeout: int = 300, user_email: str | None = None) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = _api("get", f"/api/optimize/{optimize_id}/status")
+        r = _api("get", f"/api/optimize/{optimize_id}/status", user_email=user_email)
         r.raise_for_status()
         data = r.json()
         if data["status"] in ("done", "error"):
@@ -161,15 +200,15 @@ def poll_optimize(optimize_id: str, timeout: int = 300) -> dict:
 
 # ── Agent runs ───────────────────────────────────────────────────────────
 
-def get_agent_runs() -> list[dict]:
-    r = _api("get", "/api/agent-runs")
+def get_agent_runs(user_email: str | None = None) -> list[dict]:
+    r = _api("get", "/api/agent-runs", user_email=user_email)
     r.raise_for_status()
     return r.json().get("runs", [])
 
 
 # ── Runs (legacy) ────────────────────────────────────────────────────────
 
-def get_drive_runs() -> list[dict]:
-    r = _api("get", "/api/gdrive/runs")
+def get_drive_runs(user_email: str | None = None) -> list[dict]:
+    r = _api("get", "/api/gdrive/runs", user_email=user_email)
     r.raise_for_status()
     return r.json()

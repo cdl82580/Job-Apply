@@ -11,7 +11,17 @@ Commands (type in chat):
   track add  — add a new application
   track view — view application details
   runs       — list recent Drive run folders
+  confirm    — link your Teams identity to a Job Apply account
+  whoami     — show which account you're linked as
+  unlink     — remove your Teams identity's link
   help       — command reference
+
+Auth model: the bot has no notion of "logged in" beyond a per-Teams-identity
+link to a Job Apply account (see scripts/teams_links.py). The first time a
+linked-or-not-yet-linked user runs any command other than help/confirm/unlink,
+_resolve_user() checks the link, and if missing/expired, looks up the caller's
+email via the Teams roster API and offers to link it. Links expire after
+LINK_DAYS (scripts/teams_links.py) and must be re-confirmed.
 """
 
 from __future__ import annotations
@@ -24,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from botbuilder.core import ActivityHandler, CardFactory, MessageFactory, TurnContext
+from botbuilder.core.teams import TeamsInfo
 from botbuilder.schema import (
     Activity,
     ActivityTypes,
@@ -54,6 +65,9 @@ STATUS_EMOJI = {
     "Not Applying":  "\U0001f6ab",
 }
 
+# Commands that must work even without a linked account.
+_NO_AUTH_COMMANDS = ("help", "/help", "confirm", "/confirm", "unlink", "/unlink")
+
 
 def _load_card(name: str) -> dict:
     with open(CARDS_DIR / f"{name}.json") as f:
@@ -81,11 +95,6 @@ class JobApplyBot(ActivityHandler):
                 await turn_context.send_activity(MessageFactory.text(welcome))
 
     async def on_message_activity(self, turn_context: TurnContext):
-        # Adaptive Card submissions come as message activities with a value payload
-        if turn_context.activity.value:
-            await self._handle_card_submit(turn_context)
-            return
-
         text = (turn_context.activity.text or "").strip().lower()
 
         # Strip bot mention in group chats
@@ -95,35 +104,182 @@ class JobApplyBot(ActivityHandler):
                     mention_text = entity.additional_properties.get("text", "")
                     text = text.replace(mention_text.lower(), "").strip()
 
-        if text in ("apply", "/apply"):
+        if text in ("help", "/help"):
+            await self._cmd_help(turn_context)
+            return
+        if text in ("confirm", "/confirm"):
+            await self._cmd_confirm(turn_context)
+            return
+        if text in ("unlink", "/unlink"):
+            await self._cmd_unlink(turn_context)
+            return
+
+        user = await self._resolve_user(turn_context)
+        if user is None:
+            return  # _resolve_user already told them what's wrong / what to do
+
+        # Adaptive Card submissions come as message activities with a value payload
+        if turn_context.activity.value:
+            await self._handle_card_submit(turn_context, user)
+            return
+
+        if text in ("whoami", "/whoami"):
+            await self._cmd_whoami(turn_context, user)
+        elif text in ("apply", "/apply"):
             await self._cmd_apply(turn_context)
         elif text in ("aq", "/aq"):
             await self._cmd_aq(turn_context)
         elif text in ("prep", "/prep"):
             await self._cmd_prep(turn_context)
         elif text in ("tracker", "/tracker"):
-            await self._cmd_tracker(turn_context)
+            await self._cmd_tracker(turn_context, user)
         elif text.startswith(("track list", "/track-list", "track-list")):
             status_filter = text.split(maxsplit=2)[-1] if len(text.split()) > 2 else ""
             if status_filter in ("list", "track-list", "/track-list", "track"):
                 status_filter = ""
-            await self._cmd_track_list(turn_context, status_filter)
+            await self._cmd_track_list(turn_context, status_filter, user)
         elif text in ("track add", "/track-add", "track-add"):
             await self._cmd_track_add(turn_context)
         elif text.startswith(("track view", "/track-view", "track-view")):
-            await self._cmd_track_view(turn_context)
+            await self._cmd_track_view(turn_context, user)
         elif text in ("optimize", "/optimize"):
-            await self._cmd_optimize(turn_context)
+            await self._cmd_optimize(turn_context, user)
         elif text in ("runs", "/runs"):
-            await self._cmd_runs(turn_context)
-        elif text in ("help", "/help"):
-            await self._cmd_help(turn_context)
+            await self._cmd_runs(turn_context, user)
         else:
             await turn_context.send_activity(
                 MessageFactory.text(
                     "I didn't recognise that command. Type **help** to see what I can do."
                 )
             )
+
+    # ── Identity resolution ──────────────────────────────────────────────
+
+    @staticmethod
+    def _aad_object_id(turn_context: TurnContext) -> str | None:
+        from_prop = turn_context.activity.from_property
+        return getattr(from_prop, "aad_object_id", None) if from_prop else None
+
+    async def _teams_email(self, turn_context: TurnContext) -> str | None:
+        """Look up the caller's email via the Teams roster API."""
+        member_id = turn_context.activity.from_property.id
+        member = await TeamsInfo.get_member(turn_context, member_id)
+        return (member.email or member.user_principal_name or "").strip() or None
+
+    async def _resolve_user(self, turn_context: TurnContext) -> dict | None:
+        """Return {"email": ...} for a linked caller, or None after telling
+        them why they can't proceed (no account, or needs to confirm)."""
+        aad_object_id = self._aad_object_id(turn_context)
+        if not aad_object_id:
+            await turn_context.send_activity(MessageFactory.text(
+                "❌ I can't verify your identity here — no Azure AD object id on this message."
+            ))
+            return None
+
+        try:
+            status = await asyncio.to_thread(api_client.teams_link_status, aad_object_id)
+        except Exception as exc:
+            await turn_context.send_activity(
+                MessageFactory.text(f"❌ Could not check your account link: {exc}")
+            )
+            return None
+
+        if status.get("linked"):
+            return {"email": status["email"]}
+
+        try:
+            email = await self._teams_email(turn_context)
+        except Exception as exc:
+            await turn_context.send_activity(
+                MessageFactory.text(f"❌ Could not look up your Teams profile: {exc}")
+            )
+            return None
+
+        if not email:
+            await turn_context.send_activity(MessageFactory.text(
+                "❌ I couldn't find an email address on your Teams profile — "
+                "I can't verify your account."
+            ))
+            return None
+
+        try:
+            lookup = await asyncio.to_thread(api_client.teams_account_lookup, email)
+        except Exception as exc:
+            await turn_context.send_activity(
+                MessageFactory.text(f"❌ Error checking your account: {exc}")
+            )
+            return None
+
+        if not lookup.get("exists"):
+            await turn_context.send_activity(MessageFactory.text(
+                f"❌ I don't have a Job Apply account for **{email}**. I can't help you."
+            ))
+            return None
+
+        await turn_context.send_activity(MessageFactory.text(
+            f"I found a Job Apply account for **{email}**. "
+            f"Reply **confirm** to let me act on your behalf."
+        ))
+        return None
+
+    async def _cmd_confirm(self, turn_context: TurnContext):
+        aad_object_id = self._aad_object_id(turn_context)
+        if not aad_object_id:
+            await turn_context.send_activity(
+                MessageFactory.text("❌ No Azure AD identity on this message.")
+            )
+            return
+
+        try:
+            email = await self._teams_email(turn_context)
+        except Exception as exc:
+            await turn_context.send_activity(
+                MessageFactory.text(f"❌ Could not look up your Teams profile: {exc}")
+            )
+            return
+
+        if not email:
+            await turn_context.send_activity(
+                MessageFactory.text("❌ No email address found on your Teams profile.")
+            )
+            return
+
+        try:
+            result = await asyncio.to_thread(api_client.teams_link_confirm, aad_object_id, email)
+        except Exception as exc:
+            await turn_context.send_activity(MessageFactory.text(f"❌ Error linking your account: {exc}"))
+            return
+
+        if not result.get("linked"):
+            await turn_context.send_activity(MessageFactory.text(
+                f"❌ I don't have a Job Apply account for **{email}**."
+            ))
+            return
+
+        await turn_context.send_activity(MessageFactory.text(
+            f"✅ Linked as **{result['email']}**. Send your command again."
+        ))
+
+    async def _cmd_whoami(self, turn_context: TurnContext, user: dict):
+        await turn_context.send_activity(
+            MessageFactory.text(f"You're linked as **{user['email']}**.")
+        )
+
+    async def _cmd_unlink(self, turn_context: TurnContext):
+        aad_object_id = self._aad_object_id(turn_context)
+        if not aad_object_id:
+            await turn_context.send_activity(
+                MessageFactory.text("❌ No Azure AD identity on this message.")
+            )
+            return
+        try:
+            await asyncio.to_thread(api_client.teams_unlink, aad_object_id)
+        except Exception as exc:
+            await turn_context.send_activity(MessageFactory.text(f"❌ Error unlinking: {exc}"))
+            return
+        await turn_context.send_activity(
+            MessageFactory.text("✅ Unlinked. Message me again to re-link.")
+        )
 
     # ── Card form launchers ──────────────────────────────────────────────
 
@@ -151,9 +307,9 @@ class JobApplyBot(ActivityHandler):
             MessageFactory.attachment(_card_attachment(card))
         )
 
-    async def _cmd_optimize(self, ctx: TurnContext):
+    async def _cmd_optimize(self, ctx: TurnContext, user: dict):
         try:
-            apps = await asyncio.to_thread(api_client.get_applications)
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error loading applications: {exc}"))
             return
@@ -188,9 +344,9 @@ class JobApplyBot(ActivityHandler):
     # direct blocking `requests` call here would stall the only event loop
     # — including the inbound self-request it's waiting on.
 
-    async def _cmd_tracker(self, ctx: TurnContext):
+    async def _cmd_tracker(self, ctx: TurnContext, user: dict):
         try:
-            apps = await asyncio.to_thread(api_client.get_applications)
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Could not reach the tracker: {exc}"))
             return
@@ -213,7 +369,7 @@ class JobApplyBot(ActivityHandler):
         )
         await ctx.send_activity(MessageFactory.text(text))
 
-    async def _cmd_track_list(self, ctx: TurnContext, status_filter: str):
+    async def _cmd_track_list(self, ctx: TurnContext, status_filter: str, user: dict):
         resolved: str | None = None
         if status_filter:
             matches = [s for s in VALID_STATUSES if s.lower() == status_filter.lower()]
@@ -229,7 +385,9 @@ class JobApplyBot(ActivityHandler):
                 return
 
         try:
-            apps = await asyncio.to_thread(api_client.get_applications, status=resolved)
+            apps = await asyncio.to_thread(
+                api_client.get_applications, status=resolved, user_email=user["email"]
+            )
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -256,9 +414,9 @@ class JobApplyBot(ActivityHandler):
 
         await ctx.send_activity(MessageFactory.text("\n".join(lines)))
 
-    async def _cmd_track_view(self, ctx: TurnContext):
+    async def _cmd_track_view(self, ctx: TurnContext, user: dict):
         try:
-            apps = await asyncio.to_thread(api_client.get_applications)
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -292,9 +450,9 @@ class JobApplyBot(ActivityHandler):
         }
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
-    async def _cmd_runs(self, ctx: TurnContext):
+    async def _cmd_runs(self, ctx: TurnContext, user: dict):
         try:
-            runs = await asyncio.to_thread(api_client.get_agent_runs)
+            runs = await asyncio.to_thread(api_client.get_agent_runs, user_email=user["email"])
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
@@ -350,6 +508,10 @@ class JobApplyBot(ActivityHandler):
             "- **track list** [status] — List applications\n"
             "- **track add** — Add a new application\n"
             "- **track view** — View application details\n\n"
+            "**\U0001f511 Account**\n"
+            "- **confirm** — Link your Teams identity to a Job Apply account\n"
+            "- **whoami** — Show which account you're linked as\n"
+            "- **unlink** — Remove your link\n\n"
             "**\U0001f527 Other**\n"
             "- **runs** — List recent Drive run folders\n"
             "- **help** — This message"
@@ -358,28 +520,28 @@ class JobApplyBot(ActivityHandler):
 
     # ── Card submission handler ──────────────────────────────────────────
 
-    async def _handle_card_submit(self, ctx: TurnContext):
+    async def _handle_card_submit(self, ctx: TurnContext, user: dict):
         data = ctx.activity.value or {}
         action = data.get("action", "")
 
         if action == "apply_submit":
-            await self._submit_apply(ctx, data)
+            await self._submit_apply(ctx, data, user)
         elif action == "prep_submit":
-            await self._submit_prep(ctx, data)
+            await self._submit_prep(ctx, data, user)
         elif action == "aq_submit":
-            await self._submit_aq(ctx, data)
+            await self._submit_aq(ctx, data, user)
         elif action == "track_add_submit":
-            await self._submit_track_add(ctx, data)
+            await self._submit_track_add(ctx, data, user)
         elif action == "optimize_submit":
-            await self._submit_optimize(ctx, data)
+            await self._submit_optimize(ctx, data, user)
         elif action == "track_view_submit":
-            await self._submit_track_view(ctx, data)
+            await self._submit_track_view(ctx, data, user)
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
 
     # ── Long-running agent submissions (threaded) ────────────────────────
 
-    async def _submit_apply(self, ctx: TurnContext, data: dict):
+    async def _submit_apply(self, ctx: TurnContext, data: dict, user: dict):
         company = (data.get("company") or "").strip()
         role = (data.get("role") or "").strip()
         contact = (data.get("contact") or "").strip()
@@ -395,12 +557,13 @@ class JobApplyBot(ActivityHandler):
 
         conv_ref = TurnContext.get_conversation_reference(ctx.activity)
         adapter = ctx.adapter
+        user_email = user["email"]
 
         def _run():
             try:
-                run_data = api_client.post_run(job_posting, company, role, contact)
+                run_data = api_client.post_run(job_posting, company, role, contact, user_email=user_email)
                 run_id = run_data["run_id"]
-                status = api_client.poll_run(run_id)
+                status = api_client.poll_run(run_id, user_email=user_email)
             except Exception as exc:
                 self._proactive_message(adapter, conv_ref, f"❌ Error starting run: {exc}")
                 return
@@ -424,7 +587,7 @@ class JobApplyBot(ActivityHandler):
 
         threading.Thread(target=_run, daemon=True).start()
 
-    async def _submit_prep(self, ctx: TurnContext, data: dict):
+    async def _submit_prep(self, ctx: TurnContext, data: dict, user: dict):
         company = (data.get("company") or "").strip()
         role = (data.get("role") or "").strip()
         round_type = (data.get("round_type") or "").strip()
@@ -444,12 +607,15 @@ class JobApplyBot(ActivityHandler):
 
         conv_ref = TurnContext.get_conversation_reference(ctx.activity)
         adapter = ctx.adapter
+        user_email = user["email"]
 
         def _run():
             try:
-                prep_data = api_client.post_prep(job_posting, company, role, round_type, focus, interviewer)
+                prep_data = api_client.post_prep(
+                    job_posting, company, role, round_type, focus, interviewer, user_email=user_email
+                )
                 prep_id = prep_data["prep_id"]
-                status = api_client.poll_prep(prep_id)
+                status = api_client.poll_prep(prep_id, user_email=user_email)
             except Exception as exc:
                 self._proactive_message(adapter, conv_ref, f"❌ Error: {exc}")
                 return
@@ -469,7 +635,7 @@ class JobApplyBot(ActivityHandler):
 
         threading.Thread(target=_run, daemon=True).start()
 
-    async def _submit_aq(self, ctx: TurnContext, data: dict):
+    async def _submit_aq(self, ctx: TurnContext, data: dict, user: dict):
         company = (data.get("company") or "").strip()
         role = (data.get("role") or "").strip()
         question = (data.get("question") or "").strip()
@@ -491,12 +657,15 @@ class JobApplyBot(ActivityHandler):
 
         conv_ref = TurnContext.get_conversation_reference(ctx.activity)
         adapter = ctx.adapter
+        user_email = user["email"]
 
         def _run():
             try:
-                aq_data = api_client.post_aq(question, job_posting, company, role, tone, char_limit)
+                aq_data = api_client.post_aq(
+                    question, job_posting, company, role, tone, char_limit, user_email=user_email
+                )
                 aq_id = aq_data["aq_id"]
-                status = api_client.poll_aq(aq_id)
+                status = api_client.poll_aq(aq_id, user_email=user_email)
             except Exception as exc:
                 self._proactive_message(adapter, conv_ref, f"❌ Error: {exc}")
                 return
@@ -518,7 +687,7 @@ class JobApplyBot(ActivityHandler):
 
         threading.Thread(target=_run, daemon=True).start()
 
-    async def _submit_optimize(self, ctx: TurnContext, data: dict):
+    async def _submit_optimize(self, ctx: TurnContext, data: dict, user: dict):
         app_id = (data.get("app_id") or "").strip()
         instruction = (data.get("instruction") or "").strip()
         optimize_resume = data.get("optimize_resume", "true") == "true"
@@ -530,8 +699,10 @@ class JobApplyBot(ActivityHandler):
             )
             return
 
+        user_email = user["email"]
+
         try:
-            record = await asyncio.to_thread(api_client.get_application, app_id)
+            record = await asyncio.to_thread(api_client.get_application, app_id, user_email=user_email)
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
             return
@@ -564,10 +735,10 @@ class JobApplyBot(ActivityHandler):
             try:
                 result = api_client.post_optimize(
                     app_id, folder_id, instruction, company, role,
-                    optimize_resume, optimize_cover_letter,
+                    optimize_resume, optimize_cover_letter, user_email=user_email,
                 )
                 optimize_id = result["optimize_id"]
-                status = api_client.poll_optimize(optimize_id)
+                status = api_client.poll_optimize(optimize_id, user_email=user_email)
             except Exception as exc:
                 self._proactive_message(adapter, conv_ref, f"❌ Error: {exc}")
                 return
@@ -593,7 +764,7 @@ class JobApplyBot(ActivityHandler):
 
     # ── Instant card submissions ─────────────────────────────────────────
 
-    async def _submit_track_add(self, ctx: TurnContext, data: dict):
+    async def _submit_track_add(self, ctx: TurnContext, data: dict, user: dict):
         company = (data.get("company") or "").strip()
         role = (data.get("role") or "").strip()
         status_val = (data.get("status") or "Researching").strip()
@@ -613,7 +784,9 @@ class JobApplyBot(ActivityHandler):
                 payload[field] = val
 
         try:
-            result = await asyncio.to_thread(api_client.create_application, payload)
+            result = await asyncio.to_thread(
+                api_client.create_application, payload, user_email=user["email"]
+            )
             await ctx.send_activity(
                 MessageFactory.text(
                     f"✅ Added **{company}** — {role} ({status_val})"
@@ -622,14 +795,14 @@ class JobApplyBot(ActivityHandler):
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
 
-    async def _submit_track_view(self, ctx: TurnContext, data: dict):
+    async def _submit_track_view(self, ctx: TurnContext, data: dict, user: dict):
         app_id = (data.get("app_id") or "").strip()
         if not app_id:
             await ctx.send_activity(MessageFactory.text("❌ No application selected."))
             return
 
         try:
-            a = await asyncio.to_thread(api_client.get_application, app_id)
+            a = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return

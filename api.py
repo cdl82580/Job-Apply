@@ -109,7 +109,7 @@ from scripts import notification_state as notif_state
 from scripts import agent_runs
 from scripts.notification_tokens import create_token as _create_notif_token
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
-from scripts.session import create_session_token, verify_session_token
+from scripts.session import create_session_token, verify_session_token, verify_bot_key
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
@@ -208,18 +208,24 @@ def _verify_session(token: str) -> dict | None:
 
 
 def _bot_user(request: Request) -> dict | None:
-    """Return a synthetic user dict if the request carries a valid bot API key."""
-    if not _BOT_API_KEY:
+    """Return a synthetic user dict if the request carries a valid bot API key.
+
+    Bots that have resolved a specific caller (e.g. the Teams bot, after a
+    user links their Azure AD identity to a Job Apply account — see
+    routers/teams.py) pass X-Teams-User-Email to act on that user's behalf.
+    Bots with no such notion of a caller (e.g. the Slack bot) fall back to
+    the single primary account.
+    """
+    if not verify_bot_key(request.headers.get("Authorization", ""), _BOT_API_KEY):
         return None
-    auth = request.headers.get("Authorization", "")
-    if not (auth.startswith("Bearer ") and hmac.compare_digest(auth[7:], _BOT_API_KEY)):
+    on_behalf_of = request.headers.get("X-Teams-User-Email", "").strip()
+    email = on_behalf_of or _NOTIFY_EMAIL
+    if not email:
         return None
-    # Resolve the primary user account so the bot runs as a real user with
-    # a real resume and profile stored in Tigris.
-    primary = storage.get_user_by_email(_NOTIFY_EMAIL)
-    if not primary:
+    user = storage.get_user_by_email(email)
+    if not user:
         return None
-    return {"user_id": primary["user_id"], "email": primary["email"]}
+    return {"user_id": user["user_id"], "email": user["email"]}
 
 
 def _current_user(request: Request) -> dict | None:

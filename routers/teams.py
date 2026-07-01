@@ -8,12 +8,22 @@ Fly machine and port. teams_bot/ has no __init__.py and uses flat
 run standalone via `python app.py`), so we add it to sys.path once at import
 time rather than rewriting it as a package.
 
-  POST /api/messages — Bot Framework webhook (Azure Bot -> here)
+  POST /api/messages             — Bot Framework webhook (Azure Bot -> here)
+  POST /api/teams/link-status    — has this Teams identity been linked to a Job Apply account?
+  POST /api/teams/account-lookup — does a Job Apply account exist for this email?
+  POST /api/teams/link-confirm   — link a Teams identity to the account for this email
+  POST /api/teams/unlink         — remove a Teams identity's link
+
+The four /api/teams/* endpoints below are for the bot's own use (it calls
+itself over HTTP — see teams_bot/api_client.py) and are gated on the shared
+BOT_API_KEY directly, not on request.state.user: they resolve *other*
+accounts by email, which a normal logged-in session has no business doing.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -21,6 +31,10 @@ from pathlib import Path
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity
 from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
+
+from scripts import storage, teams_links
+from scripts.session import verify_bot_key
 
 _TEAMS_BOT_DIR = str(Path(__file__).resolve().parent.parent / "teams_bot")
 if _TEAMS_BOT_DIR not in sys.path:
@@ -30,6 +44,62 @@ from config import Config as TeamsConfig  # noqa: E402
 from bot import JobApplyBot  # noqa: E402
 
 router = APIRouter(tags=["teams"])
+
+
+def _require_bot(request: Request) -> None:
+    bot_key = os.environ.get("BOT_API_KEY", "")
+    if not verify_bot_key(request.headers.get("Authorization", ""), bot_key):
+        raise HTTPException(401, "Bot key required")
+
+
+class _LinkStatusBody(BaseModel):
+    aad_object_id: str
+
+
+class _AccountLookupBody(BaseModel):
+    email: str
+
+
+class _LinkConfirmBody(BaseModel):
+    aad_object_id: str
+    email: str
+
+
+class _UnlinkBody(BaseModel):
+    aad_object_id: str
+
+
+@router.post("/api/teams/link-status")
+async def teams_link_status(body: _LinkStatusBody, request: Request):
+    _require_bot(request)
+    link = teams_links.get_link(body.aad_object_id)
+    if not link:
+        return {"linked": False}
+    return {"linked": True, "email": link["email"], "expires_at": link["expires_at"]}
+
+
+@router.post("/api/teams/account-lookup")
+async def teams_account_lookup(body: _AccountLookupBody, request: Request):
+    _require_bot(request)
+    return {"exists": storage.get_user_by_email(body.email) is not None}
+
+
+@router.post("/api/teams/link-confirm")
+async def teams_link_confirm(body: _LinkConfirmBody, request: Request):
+    _require_bot(request)
+    user = storage.get_user_by_email(body.email)
+    if not user:
+        raise HTTPException(404, "No Job Apply account for that email")
+    teams_links.save_link(body.aad_object_id, user["user_id"], user["email"])
+    return {"linked": True, "email": user["email"]}
+
+
+@router.post("/api/teams/unlink")
+async def teams_unlink(body: _UnlinkBody, request: Request):
+    _require_bot(request)
+    teams_links.delete_link(body.aad_object_id)
+    return {"ok": True}
+
 
 _SETTINGS = BotFrameworkAdapterSettings(
     TeamsConfig.APP_ID,

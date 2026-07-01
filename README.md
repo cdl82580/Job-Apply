@@ -90,6 +90,12 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 ### Slack Bot
 See [Slack Commands](#slack-commands) section below.
 
+### Teams Bot
+See [Teams Commands](#teams-commands) section below. Unlike the Slack bot (which
+always acts as the single primary account), the Teams bot resolves *which*
+Job Apply account it's acting on behalf of per Teams user — see that section
+for the identity-linking flow.
+
 ---
 
 ## Project Structure
@@ -209,6 +215,37 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 
 ---
 
+## Teams Commands
+
+| Category | Command | Description |
+|---|---|---|
+| 🤖 Agent | `apply` | Generate resume + ATS resume + cover letter |
+| 🤖 Agent | `aq` | Answer an application question |
+| 🤖 Agent | `prep` | Generate interview prep doc |
+| 🤖 Agent | `optimize` | Refine existing run documents |
+| 📋 Tracker | `tracker` | Pipeline summary |
+| 📋 Tracker | `track list [status]` | List applications |
+| 📋 Tracker | `track add` | Add a new application |
+| 📋 Tracker | `track view` | View application details |
+| 🔑 Account | `confirm` | Link your Teams identity to a Job Apply account |
+| 🔑 Account | `whoami` | Show which account you're linked as |
+| 🔑 Account | `unlink` | Remove your Teams identity's link |
+| 🛠️ System | `runs` | List recent Drive run folders |
+| 🛠️ System | `help` | Command reference |
+
+**Identity linking:** the Teams bot has no built-in notion of "logged in." The first
+time a Teams user runs any command other than `help`/`confirm`/`unlink`, the bot
+looks up a `teams_links/{aad_object_id}.json` record in Tigris (`scripts/teams_links.py`).
+If missing or expired, it fetches the caller's email via the Bot Framework's
+`TeamsInfo.get_member()` roster API, checks whether a Job Apply account exists for
+that email, and — if so — asks the user to reply `confirm`. Only after that explicit
+confirmation does it persist the link (30-day expiry, then re-confirmation is
+required). Every subsequent API call the bot makes on that user's behalf carries an
+`X-Teams-User-Email` header so `api.py:_bot_user()` resolves that specific account
+instead of the shared primary account the Slack bot uses.
+
+---
+
 ## CLI Usage
 
 ```bash
@@ -303,15 +340,18 @@ Both process groups share the same Docker image and all Fly secrets.
 | `RESEND_API_KEY` | Resend — email verification, password-change, and calendar reminder emails |
 | `RESEND_FROM` | Sender address (default: `Job Apply <hello@cdlav.us>`) |
 | `APP_URL` | Public app URL (default: `https://apply.cdlav.us`) |
-| `APP_USER_EMAIL` | Primary user email — used by the Slack bot to resolve its API identity |
+| `APP_USER_EMAIL` | Primary user email — used by the Slack bot (always) and Teams bot (fallback, before/without a per-user link) to resolve API identity |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `LOGODEV_API_KEY` | Logo.dev secret key (`sk_`) for company search API |
-| `BOT_API_KEY` | Shared secret between Slack bot and web API |
+| `BOT_API_KEY` | Shared secret between the Slack bot, Teams bot, and web API |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-...`) |
 | `SLACK_SIGNING_SECRET` | Slack signing secret |
 | `SLACK_APP_TOKEN` | App-level token (`xapp-...`) — **required** for Socket Mode |
 | `SLACK_NOTIFY_USER_ID` | Slack user ID to DM for calendar reminders |
+| `MICROSOFT_APP_ID` | Azure Bot Framework app ID (Teams bot channel auth) |
+| `MICROSOFT_APP_PASSWORD` | Azure Bot Framework app password |
+| `MICROSOFT_APP_TENANT_ID` | Azure AD tenant ID (single-tenant Teams app) |
 | `GDRIVE_TOKEN_JSON` | Google Drive OAuth token JSON |
 | `GDRIVE_PARENT_FOLDER_ID` | Drive folder ID for run output (`Job Applications`) |
 | `TEST_RUNNER_SLACK_USER_ID` | Slack user ID authorised to run `/run-tests` (falls back to `SLACK_NOTIFY_USER_ID`) |
@@ -398,6 +438,11 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | GET | `/api/optimize/{id}/files/{name}` | cookie | Download optimized DOCX |
 | POST | `/api/jd/format` | cookie | AI-format a raw job description (returns cleaned Markdown) |
 | GET | `/api/postman` | — | Download the Postman collection JSON |
+| POST | `/api/messages` | Bot Framework JWT | Microsoft Teams Bot Framework webhook (Azure Bot → here) |
+| POST | `/api/teams/link-status` | bot key | Has this Teams identity (`aad_object_id`) been linked to a Job Apply account? |
+| POST | `/api/teams/account-lookup` | bot key | Does a Job Apply account exist for this email? |
+| POST | `/api/teams/link-confirm` | bot key | Link a Teams identity to the account for this email (404 if no such account) |
+| POST | `/api/teams/unlink` | bot key | Remove a Teams identity's link |
 | GET | `/api/agent-runs` | cookie | List structured agent run records for the current user (type, status, timing, Drive links) |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |
 | GET | `/api/gdrive/runs/{folder_id}/job_posting` | cookie | Fetch saved JD from Drive — prefers `job_description.md`, falls back to `job_posting.txt`; ownership verified via Tigris app records |
