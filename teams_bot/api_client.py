@@ -105,7 +105,7 @@ def get_applications(status: str | None = None) -> list[dict]:
         params["status"] = status
     r = _api("get", "/api/applications", params=params)
     r.raise_for_status()
-    return r.json()
+    return r.json().get("items", [])
 
 
 def get_application(app_id: str) -> dict:
