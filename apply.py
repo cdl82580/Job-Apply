@@ -275,14 +275,20 @@ def _get_client() -> anthropic.Anthropic:
 
 def claude(system: str, user: str, max_tokens: int = 4096,
            config: WorkflowConfig | None = None) -> str:
-    """Single-turn Claude call. Returns the text response."""
+    """Single-turn Claude call. Returns the text response.
+
+    Uses the streaming endpoint even though callers get back a plain string —
+    the non-streaming endpoint refuses any call whose max_tokens implies it
+    could run past 10 minutes (SDK-enforced), which large-budget calls like
+    match scoring can trip even when the actual response is fast."""
     model = config.model if config else DEFAULT_MODEL
-    response = _get_client().messages.create(
+    with _get_client().messages.stream(
         model=model,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
-    )
+    ) as stream:
+        response = stream.get_final_message()
     for block in response.content:
         if block.type == "text":
             return block.text
