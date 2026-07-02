@@ -1920,6 +1920,10 @@ Return ONLY a JSON object with exactly these keys:
   "rationale": "<1-2 sentences: the strongest alignment, then the biggest gap>"
 }
 
+Write the rationale in your own words — do not quote phrases verbatim out of the \
+job posting or resume. If you must reference exact wording, escape any double \
+quote character inside the JSON string with a backslash (\\") so the JSON stays valid.
+
 No preamble, no markdown fences, no commentary — JSON only."""
 
 
@@ -1948,33 +1952,49 @@ Candidate Profile Guide:
 {profile_text}
 ---
 """
-    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=8000, config=config)
-    raw = raw.strip()
-    raw = re.sub(r"^```json\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw.strip())
-    # Extract the outermost JSON object, handling braces inside string values
-    start = raw.find("{")
-    if start != -1:
-        depth, in_str, esc, end = 0, False, False, -1
-        for i in range(start, len(raw)):
-            c = raw[i]
-            if esc:
-                esc = False
-            elif c == '\\' and in_str:
-                esc = True
-            elif c == '"':
-                in_str = not in_str
-            elif not in_str:
-                if c == '{':
-                    depth += 1
-                elif c == '}':
-                    depth -= 1
-                    if depth == 0:
-                        end = i
-                        break
-        if end != -1:
-            raw = raw[start:end + 1]
-    data = json.loads(raw)
+    # Claude occasionally quotes JD/resume phrases verbatim into the rationale
+    # without escaping the inner quote marks, which breaks json.loads — retry
+    # once before giving up (the model rarely repeats the same malformed output).
+    last_err: json.JSONDecodeError | None = None
+    data = None
+    for attempt in range(2):
+        raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=8000, config=config)
+        raw = raw.strip()
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw.strip())
+        # Extract the outermost JSON object, handling braces inside string values
+        start = raw.find("{")
+        if start != -1:
+            depth, in_str, esc, end = 0, False, False, -1
+            for i in range(start, len(raw)):
+                c = raw[i]
+                if esc:
+                    esc = False
+                elif c == '\\' and in_str:
+                    esc = True
+                elif c == '"':
+                    in_str = not in_str
+                elif not in_str:
+                    if c == '{':
+                        depth += 1
+                    elif c == '}':
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+            if end != -1:
+                raw = raw[start:end + 1]
+        try:
+            data = json.loads(raw)
+            break
+        except json.JSONDecodeError as e:
+            last_err = e
+            continue
+    if data is None:
+        raise WorkflowError(
+            f"Match scoring: Claude returned malformed JSON twice in a row "
+            f"({last_err}).\n\nRaw:\n{raw[:2000]}"
+        )
 
     score = max(0, min(100, int(round(float(data["score"])))))
     return {
