@@ -286,7 +286,12 @@ def claude(system: str, user: str, max_tokens: int = 4096,
     for block in response.content:
         if block.type == "text":
             return block.text
-    raise WorkflowError("Claude response contained no text block")
+    raise WorkflowError(
+        "Claude response contained no text block "
+        f"(stop_reason={response.stop_reason}, "
+        f"block_types={[b.type for b in response.content]}, "
+        "likely extended thinking consumed the full max_tokens budget — increase max_tokens)"
+    )
 
 # ---------------------------------------------------------------------------
 # Tagline width validation
@@ -1943,7 +1948,7 @@ Candidate Profile Guide:
 {profile_text}
 ---
 """
-    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=2048, config=config)
+    raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=8000, config=config)
     raw = raw.strip()
     raw = re.sub(r"^```json\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw.strip())
@@ -2690,7 +2695,7 @@ Proof point recency rule:
 Return ONLY valid JSON. No preamble, no markdown fences.
 """
 
-    raw = claude(PREP_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    raw = claude(PREP_SYSTEM, prompt, max_tokens=16000, config=wfc)
     raw = re.sub(r"^```json\s*", "", raw.strip())
     raw = re.sub(r"\s*```$",     "", raw.strip())
 
@@ -2924,7 +2929,7 @@ Return ONLY a JSON object. No preamble, no markdown fences."""
     else:
         config.progress("  Analyzing question…")
 
-    raw = claude(AQ_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    raw = claude(AQ_SYSTEM, prompt, max_tokens=12000, config=wfc)
     data = _parse_claude_json(raw)
 
     needs_clarification = data.get("needs_clarification", False)
@@ -3061,7 +3066,7 @@ Write a thank-you email for the interview. Return a JSON object:
 Return ONLY valid JSON. No preamble, no markdown fences."""
 
     config.progress("  Generating thank-you email…")
-    raw = claude(THANKYOU_SYSTEM, prompt, max_tokens=4096, config=wfc)
+    raw = claude(THANKYOU_SYSTEM, prompt, max_tokens=8000, config=wfc)
     data = _parse_claude_json(raw)
 
     subject = data.get("subject", f"Thank you — {config.role} interview")
