@@ -544,7 +544,7 @@ ATS resume; ehealth_bullets and hsp_bullets are separate and drive the styled XM
 
 Return ONLY valid JSON. No preamble, no markdown fences, no commentary.
 """
-    raw = claude(ANALYSIS_SYSTEM, prompt, max_tokens=8000, config=config)
+    raw = claude(ANALYSIS_SYSTEM, prompt, max_tokens=16000, config=config)
     raw = re.sub(r"^```json\s*", "", raw.strip())
     raw = re.sub(r"\s*```$", "", raw.strip())
 
