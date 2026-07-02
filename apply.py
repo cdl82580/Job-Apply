@@ -1954,12 +1954,14 @@ Candidate Profile Guide:
 """
     # json.loads can fail either because Claude quoted JD/resume phrasing
     # verbatim without escaping the inner quotes, or because the response got
-    # cut off mid-string (8000 tokens is occasionally not enough headroom) —
-    # retry once before giving up (the model rarely repeats the same failure).
+    # cut off mid-string. This prompt's "be honest and calibrated" scoring
+    # judgment burns far more reasoning budget than its short JSON output would
+    # suggest — 16000 still truncated on some postings, so give it real headroom.
+    # Retry once before giving up (the model rarely repeats the same failure).
     last_err: json.JSONDecodeError | None = None
     data = None
     for attempt in range(2):
-        raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=16000, config=config)
+        raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=32000, config=config)
         raw = raw.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw.strip())
