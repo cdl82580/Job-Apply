@@ -1958,16 +1958,15 @@ Candidate Profile Guide:
 {profile_text}
 ---
 """
-    # json.loads can fail either because Claude quoted JD/resume phrasing
-    # verbatim without escaping the inner quotes, or because the response got
-    # cut off mid-string. This prompt's "be honest and calibrated" scoring
-    # judgment burns far more reasoning budget than its short JSON output would
-    # suggest — 16000 still truncated on some postings, so give it real headroom.
-    # Retry once before giving up (the model rarely repeats the same failure).
+    # Claude reliably stops at end_turn (not max_tokens) but occasionally omits
+    # the final closing brace/quote on this prompt's free-form rationale field —
+    # confirmed via repeated live sampling (stop_reason=end_turn, output_tokens
+    # far under budget, text otherwise well-formed). Repair a dangling unclosed
+    # string/object before falling back to a full retry.
     last_err: json.JSONDecodeError | None = None
     data = None
     for attempt in range(2):
-        raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=32000, config=config)
+        raw = claude(_MATCH_SCORING_SYSTEM, user, max_tokens=8000, config=config)
         raw = raw.strip()
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw.strip())
@@ -1993,6 +1992,15 @@ Candidate Profile Guide:
                             break
             if end != -1:
                 raw = raw[start:end + 1]
+            else:
+                # No balanced close found — the object is likely just missing
+                # its trailing quote/braces. Close whatever's left open.
+                repaired = raw[start:] + ('"' if in_str else '') + ('}' * max(depth, 0))
+                try:
+                    data = json.loads(repaired)
+                    break
+                except json.JSONDecodeError:
+                    pass
         try:
             data = json.loads(raw)
             break
