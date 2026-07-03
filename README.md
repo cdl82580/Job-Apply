@@ -16,7 +16,7 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 - **Cover letter** — voice-matched DOCX tailored to the role and hiring manager
 - **Application Questions** — answer freeform application questions (e.g. "Describe a time you led a cross-functional team") using tailored resume, JD, and profile context; tone selector (professional/conversational/technical/concise), optional character limit, two-phase clarification flow (agent can ask follow-ups before answering), editable answer with copy-to-clipboard and refinement chips
 - **Thank You Email** — post-interview thank-you email generator with app picker, round/tone selectors, optional interviewer name and key topics discussed; outputs editable email with subject line, copy-to-clipboard, DOCX download, and Google Drive upload
-- **Interview Prep** — compact reference card (0.4" margins, 2-column layout) with 10 sections: elevator pitch (60-second spoken script), interviewer intel, role fit map, gap bridges, dev framework, anchor stories, likely Q&A, questions to ask, differentiating edge, and closing line. Tailored to the interviewer, round type, and focus/slant. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
+- **Interview Prep** — single-column, 2-page flowing DOCX (0.5" margins) with 6 numbered sections separated by rules: elevator pitch (~45-second spoken script + delivery/adapt-live notes), role & company snapshot (role, size/funding, leadership, stack, "how to read this company"), your story mapped to the company's own stated pillars/priorities, likely Q&A (ending on the single hardest/most probing question), smart questions to ask, and before-the-interview prep actions. Content is calibrated internally to the interviewer, round type, and focus/slant, though those aren't shown in the header. Proof points restricted to last 10 years (Applause 2016+, ProdPerfect, HSP Group, eHealth, GitHub projects). Fidelity excluded.
 - **Humanizer prompts** — each text-producing agent has a tailored humanizer directive: Voice Builder (resume/cover letter), Natural Flow Editor (interview prep), AI Pattern Remover (optimize resume), Human Rewrite (optimize cover letter), Authenticity Check (application questions), Voice Builder (thank you email)
 - **GitHub portfolio** — FlowShift, task-api, and job-apply repos injected into every prep prompt as additional proof points
 - **JD persistence** — job description saved as `job_description.md` to Google Drive on every run; when a JD is pasted and the run completes the file is written to the output folder and a `job_description` run is linked to the application so it auto-loads on subsequent runs and prep
@@ -175,7 +175,7 @@ job-apply/
 ### Interview Prep
 - Select an existing tracker application — requires a saved `job_description.md` in the app's Drive folder (run the resume agent first if it doesn't exist)
 - Enter interview round and optional focus/slant; company and role auto-fill from the selected application
-- Output: compact 2-page DOCX reference card uploaded to Drive and available for download
+- Output: single-column 2-page DOCX uploaded to Drive and available for download
 
 ---
 

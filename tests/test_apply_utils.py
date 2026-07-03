@@ -99,37 +99,26 @@ class TestPrepDocxBuild:
         from pathlib import Path
 
         data = {
-            "know_your_interviewer": ["Frame answers around team impact."],
-            "role_fit_map": [
-                {"they_want": "Python APIs", "i_have": "5+ years FastAPI + REST"},
-            ],
-            "gap_bridge": [
-                {"gap": "No Kubernetes listed", "reframe": "Deployed on Fly.io with Docker."},
-            ],
-            "framework_summary": {
-                "short_version": "Discover, design, prototype, deploy, measure.",
-                "steps": [
-                    {"name": "Discover", "what": "Run workshops.", "proof": "HAL at eHealth."},
-                    {"name": "Design", "what": "Architect solution.", "proof": "HSP portal."},
-                    {"name": "Prototype", "what": "Ship early.", "proof": "Tray.ai POCs."},
-                    {"name": "Deploy", "what": "Own go-live.", "proof": "95% routing cut."},
-                    {"name": "Measure", "what": "Produce ROI docs.", "proof": "Leadership buy-in."},
-                ],
-            },
-            "anchor_stories": [
-                {"story_name": "HAL Chatbot", "key_signal": "Solo agentic AI delivery"},
+            "elevator_pitch": "I'm a solutions engineer with 5+ years building integrations.",
+            "pitch_timing": "Timing: ~40-45 seconds. Practice out loud, don't read verbatim.",
+            "pitch_adapt": "Adapt live: if they name a specific product, swap the close to name it.",
+            "snapshot_role": "Role: Solutions Engineer · Remote · ~$120K",
+            "snapshot_company": "Company: Series B, ~50 people, API-first product.",
+            "snapshot_leadership": "Leadership: Jane Smith (VP Eng).",
+            "snapshot_stack": "Stack: Python, FastAPI, Kubernetes.",
+            "snapshot_read": "How to read this: fast-moving, expect ambiguity.",
+            "pillars": [
+                {"name": "API Reliability", "bullets": ["Deployed on Fly.io with Docker."]},
             ],
             "likely_questions": [
                 {"question": "Walk me through your approach.", "answer": "I start with discovery workshops."},
             ],
             "questions_to_ask": ["What does success look like in 90 days?"],
-            "differentiating_edge": ["Solo end-to-end delivery owner."],
-            "closing_line": "Acme is the right place for this work.",
+            "before_interview": ["Re-skim their API docs before the call."],
         }
 
         js = _build_prep_docx_js(
-            data, "Acme", "Solutions Engineer", "Hiring Manager",
-            "Lean into AI angle", "Jane Smith",
+            data, "Acme", "Solutions Engineer", "Jane Smith",
             Path("/tmp/test_out.docx"), {},
         )
         assert isinstance(js, str)

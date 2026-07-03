@@ -2133,19 +2133,24 @@ def run_workflow(
 # ---------------------------------------------------------------------------
 
 PREP_SYSTEM = """\
-You are an expert interview coach preparing Corey Laverdiere for a specific interview round.
+You are an expert interview coach preparing Corey Laverdiere for a specific interview.
 You know his background deeply: integration engineering, AI/ML solutions delivery,
 professional services, and customer-facing technical roles.
 
-Your job is to produce a dense, specific interview reference card with 10 sections.
-All content must be in Corey's voice: direct, specific, first-person, no corporate filler.
-Every prepared answer must be specific enough that it couldn't apply to any other candidate.
-Be ruthlessly specific — name tools, quote numbers, reference real projects.
+Your job is to produce a concise, 2-page interview prep document — a working
+reference Corey will skim right before the call, not a comprehensive report.
+Be ruthlessly specific: name tools, quote numbers, reference real projects by name.
+Never merge two distinct projects or accomplishments into one bullet or one story,
+even if they're thematically similar — attribute every fact to the specific
+project it actually came from.
 
-NATURAL FLOW: Make every answer flow like a real conversation. Vary sentence length —
-mix short punchy statements with longer explanations. Remove repetitive sentence patterns
-(don't start three answers the same way). If something reads like a script, rewrite it
-until it sounds like something Corey would actually say out loud in an interview.
+All content must be in Corey's voice: direct, first-person, no corporate filler.
+Every prepared answer must be specific enough that it couldn't apply to any other
+candidate. If something about the company or role is uncertain, state that plainly
+rather than inventing detail.
+
+NATURAL FLOW: Make every answer sound like something Corey would actually say out
+loud, not a script. Vary sentence length and avoid repetitive sentence patterns.
 
 Return ONLY valid JSON. No preamble, no markdown fences.
 """
@@ -2155,371 +2160,141 @@ def _build_prep_docx_js(
     data: dict,
     company: str,
     role: str,
-    round_type: str,
-    focus: str,
     interviewer: str,
     output_path: Path,
     colors: dict,
 ) -> str:
-    """Return a Node.js script that produces the interview prep reference card DOCX."""
+    """Return a Node.js script that produces the interview prep DOCX.
 
-    # Color palette — navy + teal as primary, light fills for table rows
-    NAVY   = "1F4E79"
-    TEAL   = "00695C"
-    FILL_B = "D6E4F0"   # blue row fill
-    FILL_T = "D0ECEA"   # teal row fill
-    FILL_W = "FFF9C4"   # warning/gap row fill
-    FILL_H = "EBF5FB"   # header row fill (slightly darker blue)
-    WHITE  = "FFFFFF"
-    DARK   = "1A1A1A"
+    Single-column, flowing 2-page document: header block, then 6 numbered
+    sections separated by horizontal rules. Bullets over prose everywhere
+    except the elevator pitch itself.
+    """
+
+    colors = colors or {}
+    NAVY  = colors.get("primary")   or "1F4E79"
+    TEAL  = colors.get("secondary") or "00695C"
+    GRAY  = "555555"
+    DARK  = "1A1A1A"
 
     def esc(text: str) -> str:
         return escape_js_string(" ".join(str(text).split()))
 
     def tr(text: str, bold: bool = False, italic: bool = False,
-           size: int = 18, color: str = DARK) -> str:
+           size: int = 19, color: str = DARK) -> str:
         props = [f'text: "{esc(text)}"', 'font: "Arial"',
                  f'size: {size}', f'color: "{color}"']
         if bold:   props.append("bold: true")
         if italic: props.append("italic: true")
         return "new TextRun({ " + ", ".join(props) + " })"
 
-    def para(children: list[str], before: int = 0, after: int = 60,
+    def para(children: list[str], before: int = 0, after: int = 80,
              left: int = 0, border_bottom_color: str = "") -> str:
         spacing = f"before: {before}, after: {after}"
         indent  = f", indent: {{ left: {left} }}" if left else ""
         border  = (
             f', border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 4, '
-            f'color: "{border_bottom_color}", space: 2 }} }}'
+            f'color: "{border_bottom_color}", space: 4 }} }}'
         ) if border_bottom_color else ""
         return (f'new Paragraph({{ spacing: {{ {spacing} }}{indent}{border}, '
                 f'children: [{", ".join(children)}] }})')
 
-    def section_header(title: str, color: str = NAVY) -> str:
-        return para([tr(title, bold=True, size=19, color=color)],
-                    before=70, after=30, border_bottom_color=color)
+    def bullet(text: str, size: int = 18) -> str:
+        return para([tr(f"•  {text}", size=size)], before=15, after=15, left=200)
 
-    def cell(children_paras: list[str], fill: str = WHITE,
-             width: int = 4680, top_border: bool = False) -> str:
-        borders_inner = (
-            '{ style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }'
-        )
-        borders = (
-            f'top: {borders_inner}, bottom: {borders_inner}, '
-            f'left: {borders_inner}, right: {borders_inner}'
-        )
-        children_str = ",\n          ".join(children_paras)
-        return (
-            f'new TableCell({{\n'
-            f'  width: {{ size: {width}, type: WidthType.DXA }},\n'
-            f'  borders: {{ {borders} }},\n'
-            f'  shading: {{ fill: "{fill}", type: ShadingType.CLEAR }},\n'
-            f'  margins: {{ top: 60, bottom: 60, left: 120, right: 120 }},\n'
-            f'  children: [\n          {children_str}\n        ]\n'
-            f'}})'
-        )
+    def section_header(number: int, title: str, color: str) -> str:
+        return para([tr(f"{number}. {title}", bold=True, size=21, color=color)],
+                    before=200, after=70, border_bottom_color=color)
 
-    def row(cells: list[str]) -> str:
-        cells_str = ",\n      ".join(cells)
-        return f'new TableRow({{ children: [\n      {cells_str}\n    ] }})'
-
-    def table(rows: list[str], col_widths: list[int]) -> str:
-        total = sum(col_widths)
-        widths_str = ", ".join(str(w) for w in col_widths)
-        rows_str   = ",\n    ".join(rows)
-        return (
-            f'new Table({{\n'
-            f'  width: {{ size: {total}, type: WidthType.DXA }},\n'
-            f'  columnWidths: [{widths_str}],\n'
-            f'  rows: [\n    {rows_str}\n  ]\n'
-            f'}})'
-        )
-
-    # -------------------------------------------------------------------------
-    # Page geometry (US Letter, 0.45" margins)
-    # Content width = 12240 - 2*(0.45*1440) = 12240 - 1296 = 10944 DXA
-    # Two equal main columns; inner tables must subtract cell margins (120+120=240)
-    # so usable inner width per column = 5472 - 240 = 5232 DXA
-    # -------------------------------------------------------------------------
-    MARGIN   = 576   # 0.4 inches
-    CONTENT  = 11088
-    COL_L    = 5544
-    COL_R    = 5544
-    CELL_PAD = 240   # left(120) + right(120) cell margins — subtract from inner tables
-    if COL_L + COL_R != CONTENT:
-        raise WorkflowError(f"Column widths {COL_L}+{COL_R} do not sum to content width {CONTENT}")
+    paras: list[str] = []
 
     # =========================================================================
-    # HEADER BAND — full-width title row
+    # HEADER BLOCK
     # =========================================================================
-    interviewer_label = interviewer or "Hiring Team"
-    focus_label       = focus.strip() or ""
-    ctx_parts         = [f"INTERVIEW PREP · {role} · {company} · {round_type}"]
-    if focus_label:
-        ctx_parts.append(f"Focus: {focus_label}")
-
-    header_paras = [
-        para([tr("COREY LAVERDIERE", bold=True, size=28, color=WHITE),
-              tr(f"  ·  {APPLICANT_CONTACT_LINE}", size=18, color="D6E4F0")],
-             before=60, after=40),
-        para([tr(ctx_parts[0], bold=True, size=19, color="D6E4F0")],
-             before=0, after=(30 if focus_label else 60)),
-    ]
-    if focus_label:
-        header_paras.append(
-            para([tr(f"Focus: {focus_label}", italic=True, size=18, color="AED6F1")],
-                 before=0, after=60)
-        )
-
-    header_row = row([cell(header_paras, fill=NAVY, width=CONTENT)])
-    header_tbl = table([header_row], [CONTENT])
+    interviewer_display = (
+        interviewer.strip() if interviewer and interviewer.strip()
+        else "[Name] — [Title/Role]"
+    )
+    paras.append(para([tr(f"{company} — {role}", bold=True, size=30, color=NAVY)],
+                       before=0, after=40))
+    paras.append(para([tr("Interview Prep Sheet · Corey Laverdiere", size=21, color=GRAY)],
+                       before=0, after=30))
+    paras.append(para([tr(f"Interviewer: {interviewer_display}", italic=True, size=19, color=GRAY)],
+                       before=0, after=120, border_bottom_color=NAVY))
 
     # =========================================================================
-    # ELEVATOR PITCH BAND — full width, between header and 2-col body
+    # 1 — Elevator Pitch
     # =========================================================================
-    ep_script = data.get("elevator_pitch", "")
-
-    ep_hdr_row = row([
-        cell(
-            [para([tr("TELL ME ABOUT YOURSELF · ~60-Second Elevator Pitch",
-                       bold=True, size=18, color=WHITE)], before=50, after=50)],
-            fill=TEAL, width=CONTENT,
-        )
-    ])
-    ep_script_row = row([
-        cell(
-            [para([tr(ep_script, size=17)], before=60, after=60, left=120)],
-            fill=FILL_T, width=CONTENT,
-        )
-    ])
-    ep_band_tbl = table([ep_hdr_row, ep_script_row], [CONTENT])
+    paras.append(section_header(1, 'Your Elevator Pitch — “Tell Me About Yourself”', TEAL))
+    pitch = data.get("elevator_pitch", "")
+    if pitch:
+        paras.append(para([tr(f"“{pitch}”", size=19)], before=40, after=60))
+    timing = data.get("pitch_timing", "")
+    if timing:
+        paras.append(para([tr(timing, italic=True, size=17, color=GRAY)], before=0, after=20))
+    adapt = data.get("pitch_adapt", "")
+    if adapt:
+        paras.append(para([tr(adapt, italic=True, size=17, color=GRAY)], before=0, after=80))
 
     # =========================================================================
-    # LEFT COLUMN CONTENT
+    # 2 — Role & Company Snapshot
     # =========================================================================
-    left_paras: list[str] = []
-
-    # Section 1 — Know Your Interviewer
-    left_paras.append(section_header(f"1 · Know Your Interviewer — {interviewer_label}", NAVY))
-    bullets = data.get("know_your_interviewer", [])
-    for b in bullets:
-        left_paras.append(
-            para([tr(f"•  {b}", size=17)], before=20, after=20, left=180)
-        )
-
-    # Section 2 — Role Fit Map
-    # Inner table usable width = COL_L - CELL_PAD = 5472 - 240 = 5232
-    left_paras.append(section_header("2 · Role Fit Map", NAVY))
-    fit_rows = data.get("role_fit_map", [])
-    FIT_C1, FIT_C2 = 1954, 3350  # sum = 5304
-    if fit_rows:
-        fit_table_rows = [
-            row([
-                cell([para([tr("They Want", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=NAVY, width=FIT_C1),
-                cell([para([tr("I Have", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=NAVY, width=FIT_C2),
-            ])
-        ]
-        for i, item in enumerate(fit_rows):
-            fill = FILL_B if i % 2 == 0 else WHITE
-            fit_table_rows.append(row([
-                cell([para([tr(item.get("they_want", ""), size=16)], before=25, after=25)],
-                     fill=fill, width=FIT_C1),
-                cell([para([tr(item.get("i_have", ""), size=16)], before=25, after=25)],
-                     fill=fill, width=FIT_C2),
-            ]))
-        left_paras.append(table(fit_table_rows, [FIT_C1, FIT_C2]))
-
-    # Section 3 — Gap Bridge
-    # Inner table usable width = COL_L - CELL_PAD = 5232
-    left_paras.append(section_header("3 · Gap Bridge — Proactive Reframes", TEAL))
-    gaps = data.get("gap_bridge", [])
-    GAP_C1, GAP_C2 = 1450, 3854  # sum = 5304
-    if gaps:
-        gap_rows = [
-            row([
-                cell([para([tr("Gap", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=TEAL, width=GAP_C1),
-                cell([para([tr("Reframe (say proactively)", bold=True, size=17, color=WHITE)],
-                           before=30, after=30)], fill=TEAL, width=GAP_C2),
-            ])
-        ]
-        for g in gaps:
-            gap_rows.append(row([
-                cell([para([tr(g.get("gap", ""), size=16)], before=25, after=25)],
-                     fill=FILL_W, width=GAP_C1),
-                cell([para([tr(g.get("reframe", ""), size=16)], before=25, after=25)],
-                     fill=FILL_W, width=GAP_C2),
-            ]))
-        left_paras.append(table(gap_rows, [GAP_C1, GAP_C2]))
+    paras.append(section_header(2, "Role & Company Snapshot", NAVY))
+    for key in ("snapshot_role", "snapshot_company", "snapshot_leadership",
+                "snapshot_stack", "snapshot_read"):
+        val = data.get(key, "")
+        if val:
+            paras.append(bullet(val))
 
     # =========================================================================
-    # RIGHT COLUMN CONTENT
+    # 3 — Story Mapped to Their Priorities
     # =========================================================================
-    right_paras: list[str] = []
-
-    # Section 4 — Development Framework
-    # Inner table usable width = COL_R - CELL_PAD = 5472 - 240 = 5232
-    right_paras.append(section_header('4 · My Development Framework in a Nutshell', TEAL))
-    fw = data.get("framework_summary", {})
-    short_ver = fw.get("short_version", "")
-    if short_ver:
-        right_paras.append(
-            para([tr(f'"{short_ver}"', italic=True, size=17, color=NAVY)],
-                 before=20, after=40, left=100)
-        )
-
-    steps = fw.get("steps", [])
-    STEP_C1, STEP_C2 = 1350, 3954  # sum = 5304
-    if steps:
-        step_rows = [
-            row([
-                cell([para([tr("Step", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=TEAL, width=STEP_C1),
-                cell([para([tr("What I Do + Proof Point", bold=True, size=17, color=WHITE)],
-                           before=30, after=30)], fill=TEAL, width=STEP_C2),
-            ])
-        ]
-        for i, s in enumerate(steps):
-            fill = FILL_T if i % 2 == 0 else WHITE
-            step_cell_paras = [
-                para([tr(s.get("what", ""), size=16)], before=25, after=10),
-                para([tr(f"Proof: {s.get('proof', '')}", italic=True, size=15,
-                         color="555555")], before=0, after=25),
-            ]
-            step_rows.append(row([
-                cell([para([tr(s.get("name", ""), bold=True, size=16)], before=25, after=25)],
-                     fill=fill, width=STEP_C1),
-                cell(step_cell_paras, fill=fill, width=STEP_C2),
-            ]))
-        right_paras.append(table(step_rows, [STEP_C1, STEP_C2]))
-
-    # Section 5 — Anchor Stories
-    # Inner table usable width = COL_R - CELL_PAD = 5232
-    right_paras.append(section_header("5 · Anchor Stories (STAR-Ready)", NAVY))
-    stories = data.get("anchor_stories", [])
-    STORY_C1, STORY_C2 = 2054, 3250  # sum = 5304
-    if stories:
-        story_rows = [
-            row([
-                cell([para([tr("Story", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=NAVY, width=STORY_C1),
-                cell([para([tr("Key Signal", bold=True, size=17, color=WHITE)],
-                           before=30, after=30)], fill=NAVY, width=STORY_C2),
-            ])
-        ]
-        for i, s in enumerate(stories):
-            fill = FILL_B if i % 2 == 0 else WHITE
-            story_rows.append(row([
-                cell([para([tr(s.get("story_name", ""), bold=True, size=16)], before=25, after=25)],
-                     fill=fill, width=STORY_C1),
-                cell([para([tr(s.get("key_signal", ""), size=16)], before=25, after=25)],
-                     fill=fill, width=STORY_C2),
-            ]))
-        right_paras.append(table(story_rows, [STORY_C1, STORY_C2]))
+    paras.append(section_header(3, "Your Story, Mapped to Their Priorities", TEAL))
+    for pillar in data.get("pillars", []):
+        name = pillar.get("name", "")
+        if name:
+            paras.append(para([tr(name, bold=True, size=19, color=NAVY)], before=60, after=25))
+        for b in pillar.get("bullets", []):
+            paras.append(bullet(b))
 
     # =========================================================================
-    # MAIN 2-COLUMN TABLE
+    # 4 — Likely Questions + Talking Points
     # =========================================================================
-    main_row  = row([
-        cell(left_paras,  fill=WHITE, width=COL_L),
-        cell(right_paras, fill=WHITE, width=COL_R),
-    ])
-    main_tbl  = table([main_row], [COL_L, COL_R])
+    paras.append(section_header(4, "Likely Questions + Talking Points", NAVY))
+    for item in data.get("likely_questions", []):
+        q = item.get("question", "")
+        a = item.get("answer", "")
+        if q:
+            paras.append(para([tr(f"“{q}”", bold=True, size=18)], before=50, after=10))
+        if a:
+            paras.append(para([tr(a, size=18)], before=0, after=15, left=100))
 
     # =========================================================================
-    # BOTTOM BAND
+    # 5 — Smart Questions to Ask Them
     # =========================================================================
-
-    # Divider header
-    band_hdr_row = row([
-        cell([para([tr("QUICK REFERENCE · Questions · Edge · Closing",
-                       bold=True, size=19, color=WHITE)],
-                   before=60, after=60)], fill=NAVY, width=CONTENT)
-    ])
-    band_hdr_tbl = table([band_hdr_row], [CONTENT])
-
-    # Section 6 — Likely Questions (full width, 2-col table inside)
-    # Inner table usable width = CONTENT - CELL_PAD = 10944 - 240 = 10704
-    q_header = section_header("6 · Likely Questions + Quick Answers", NAVY)
-    qs = data.get("likely_questions", [])
-    Q_C1, Q_C2 = 3250, 7598  # sum = 10848
-    q_cell_paras = [q_header]
-    if qs:
-        q_rows = [
-            row([
-                cell([para([tr("Question", bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=NAVY, width=Q_C1),
-                cell([para([tr("Answer (2 sentences, then stop)",
-                               bold=True, size=17, color=WHITE)], before=30, after=30)],
-                     fill=NAVY, width=Q_C2),
-            ])
-        ]
-        for i, item in enumerate(qs):
-            fill = FILL_B if i % 2 == 0 else WHITE
-            q_rows.append(row([
-                cell([para([tr(item.get("question", ""), size=16)], before=25, after=25)],
-                     fill=fill, width=Q_C1),
-                cell([para([tr(item.get("answer", ""), size=16)], before=25, after=25)],
-                     fill=fill, width=Q_C2),
-            ]))
-        q_cell_paras.append(table(q_rows, [Q_C1, Q_C2]))
-
-    q_band_row = row([cell(q_cell_paras, fill=WHITE, width=CONTENT)])
-    q_band_tbl = table([q_band_row], [CONTENT])
-
-    # Sections 7 + 8 side by side, then 9 full width
-    qta_paras: list[str] = [section_header("7 · Questions to Ask", TEAL)]
+    paras.append(section_header(5, "Smart Questions to Ask Them", TEAL))
     for q in data.get("questions_to_ask", []):
-        qta_paras.append(para([tr(f"•  {q}", size=16)], before=20, after=20, left=140))
-
-    edge_paras: list[str] = [section_header("8 · My Differentiating Edge", NAVY)]
-    for b in data.get("differentiating_edge", []):
-        edge_paras.append(para([tr(f"•  {b}", size=16)], before=20, after=20, left=140))
-
-    half = CONTENT // 2
-    row_78 = row([
-        cell(qta_paras,  fill=WHITE, width=half),
-        cell(edge_paras, fill=WHITE, width=CONTENT - half),
-    ])
-    tbl_78 = table([row_78], [half, CONTENT - half])
-
-    # Section 9 — Closing Line
-    closing = data.get("closing_line", "")
-    row_9   = row([
-        cell([
-            section_header(f"9 · Closing Line — 'Why {company}?' (deploy verbatim)", TEAL),
-            para([tr(f'"{closing}"', italic=True, size=17, color=NAVY)],
-                 before=40, after=40, left=100),
-        ], fill=FILL_T, width=CONTENT)
-    ])
-    tbl_9 = table([row_9], [CONTENT])
+        paras.append(bullet(q))
 
     # =========================================================================
-    # Assemble children list
+    # 6 — Before the Interview
     # =========================================================================
-    children_js = f"""
-      {header_tbl},
-      {ep_band_tbl},
-      {main_tbl},
-      {band_hdr_tbl},
-      {q_band_tbl},
-      {tbl_78},
-      {tbl_9}
-    """
+    paras.append(section_header(6, "Before the Interview", NAVY))
+    for item in data.get("before_interview", []):
+        paras.append(bullet(item))
 
+    children_js = ",\n      ".join(paras)
     out_path_str = str(output_path).replace("\\", "/")
+    MARGIN = 720   # 0.5 inches
 
     return f"""\
 const {{
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  BorderStyle, WidthType, ShadingType
+  Document, Packer, Paragraph, TextRun, BorderStyle
 }} = require('docx');
 const fs = require('fs');
 
 const doc = new Document({{
-  styles: {{ default: {{ document: {{ run: {{ font: "Arial", size: 18 }} }} }} }},
+  styles: {{ default: {{ document: {{ run: {{ font: "Arial", size: 19 }} }} }} }},
   sections: [{{
     properties: {{
       page: {{
@@ -2535,7 +2310,7 @@ const doc = new Document({{
 
 Packer.toBuffer(doc).then(buffer => {{
   fs.writeFileSync('{out_path_str}', buffer);
-  console.log('Interview prep reference card written.');
+  console.log('Interview prep document written.');
 }});
 """
 
@@ -2655,67 +2430,49 @@ Interviewer: {interviewer}
 Interview Round: {config.round_type}
 Focus / Slant: {focus_note}
 
-WORD LIMITS ARE HARD CONSTRAINTS. Count the words. Do not exceed them. A long answer is a wrong answer.
+This is a working document Corey will skim right before the call — concise, not
+comprehensive. It must fit in 2 pages max. WORD LIMITS ARE HARD CONSTRAINTS. Count
+the words. Do not exceed them. A long answer is a wrong answer.
 
 Produce a JSON object with EXACTLY these keys (no extras, no omissions):
 {{
-  "elevator_pitch": "string — 130 to 150 WORDS. A natural, first-person spoken script the candidate can deliver verbatim in about 60 seconds. Cover: (1) career arc and how they got here, (2) most relevant recent experience for THIS role with specific tools or environments, (3) one quantified accomplishment, and — for Hiring Manager / Peer / Technical rounds — (4) a granular technical detail. Direct, no corporate filler. No bullet points. One flowing paragraph.",
-  "know_your_interviewer": [
-    "string — MAX 20 WORDS. One framing insight about this interviewer. No filler."
-  ],
-  "role_fit_map": [
+  "elevator_pitch": "string — 130 to 150 WORDS. A single first-person, quotable paragraph (~40-45 seconds spoken). Structure: background/years of experience -> most relevant recent role -> one flagship, quantifiable accomplishment -> a second distinct accomplishment or project (never merge two different projects into one example — if a build and a metric/outcome came from DIFFERENT initiatives, name them separately) -> outside-of-work projects if relevant -> close with why this specific role. No bullet points, one flowing paragraph.",
+  "pitch_timing": "string — MAX 20 WORDS. Suggested delivery timing plus a reminder to practice out loud rather than read it verbatim.",
+  "pitch_adapt": "string — MAX 25 WORDS. One line on how to adapt the closing line live if the interviewer already named a specific product, pillar, or priority.",
+  "snapshot_role": "string — MAX 20 WORDS. Starts with \\"Role:\\" — title, location, comp if known from the posting.",
+  "snapshot_company": "string — MAX 35 WORDS. Starts with \\"Company:\\" — size and funding status stated PLAINLY (bootstrapped/no funding found vs. VC-backed — this changes pace/risk calibration). Name the company's own stated pillars/priorities if any.",
+  "snapshot_leadership": "string — MAX 25 WORDS. Starts with \\"Leadership:\\" — named leaders and titles if known, otherwise say plainly that none were found.",
+  "snapshot_stack": "string — MAX 25 WORDS. Starts with \\"Stack:\\" — named tools/platforms from the posting or known about the company.",
+  "snapshot_read": "string — MAX 30 WORDS. One line of \\"how to read this company\\" synthesis — what the size/stage/funding combination actually means for how Corey should show up.",
+  "pillars": [
     {{
-      "they_want": "string — MAX 10 WORDS. Specific JD requirement.",
-      "i_have": "string — MAX 18 WORDS. Corey's match with tool names and numbers."
-    }}
-  ],
-  "gap_bridge": [
-    {{
-      "gap": "string — MAX 8 WORDS. The gap.",
-      "reframe": "string — MAX 40 WORDS. Two sentences only. Specific cert/tool/analogy. No padding."
-    }}
-  ],
-  "framework_summary": {{
-    "short_version": "string — MAX 40 WORDS. One sentence summary of Corey's dev framework.",
-    "steps": [
-      {{
-        "name": "string — 3-5 words",
-        "what": "string — MAX 15 WORDS. One sentence.",
-        "proof": "string — MAX 15 WORDS. One real proof point from resume."
-      }}
-    ]
-  }},
-  "anchor_stories": [
-    {{
-      "story_name": "string — 3-6 words",
-      "key_signal": "string — MAX 12 WORDS. The competency this demonstrates."
+      "name": "string — pulled from the company's OWN stated pillar/priority/value language in the posting, not an invented generic category",
+      "bullets": [
+        "string — MAX 30 WORDS. ONE accomplishment, correctly attributed to the specific project/system it came from. Never combine two different initiatives into a single bullet even if thematically similar."
+      ]
     }}
   ],
   "likely_questions": [
     {{
       "question": "string — MAX 20 WORDS.",
-      "answer": "string — MAX 50 WORDS. Two sentences. First person. End on a number or outcome. No throat-clearing."
+      "answer": "string — MAX 45 WORDS. Names the specific project/example by name and follows problem -> action -> outcome."
     }}
   ],
   "questions_to_ask": [
-    "string — MAX 25 WORDS. Sharp question for this interviewer."
+    "string — MAX 25 WORDS. Specific to this company's actual model, stage, and product — not generic culture-fit filler. Prioritize questions whose answers would change whether Corey accepts an offer."
   ],
-  "differentiating_edge": [
-    "string — MAX 25 WORDS. One sentence. Specific to this role and company."
-  ],
-  "closing_line": "string — MAX 60 WORDS. Three sentences. Specific to {company} and this role. First person. No filler phrases."
+  "before_interview": [
+    "string — MAX 20 WORDS. One concrete prep action — what to pull up/rehearse, what to re-skim, or a due-diligence question worth having ready."
+  ]
 }}
 
 Constraints:
 - elevator_pitch: 130–150 words exactly; calibrated to the round type — include technical depth for Peer/Technical/Hiring Manager, keep higher-level for Phone Screen/Executive
-- know_your_interviewer: exactly 4 bullets calibrated to {interviewer} and round: {config.round_type}
-- role_fit_map: exactly 6 rows, covering the most critical JD requirements
-- gap_bridge: exactly 1-2 items (only real gaps, not invented ones)
-- framework_summary.steps: exactly 5 steps matching Corey's development framework
-- anchor_stories: exactly 5 stories drawn from actual resume content
-- likely_questions: exactly 5 questions weighted toward {config.round_type} and focus: {focus_note}
-- questions_to_ask: exactly 4 items calibrated for {interviewer} at {config.round_type} level
-- differentiating_edge: exactly 4 bullets
+- pillars: 2-4 groupings, matching the number of pillars/priorities the company itself states — do not invent categories the posting doesn't support
+- pillars[].bullets: 2-5 bullets each, one accomplishment per bullet
+- likely_questions: 4-6 items weighted toward {config.round_type} and focus: {focus_note}. The LAST item must be the single hardest/most probing question this specific transition invites (seniority mismatch, company-size change, industry switch) — its answer should be honest about the trade-off, not oversold.
+- questions_to_ask: 4-6 items calibrated for {interviewer} at {config.round_type} level
+- before_interview: 3-5 items
 
 Round-specific guidance for "{config.round_type}":
 - Phone Screen: culture fit, career motivation, logistics, high-level experience. QTA: team structure, 90-day success, next steps.
@@ -2728,6 +2485,10 @@ Round-specific guidance for "{config.round_type}":
 Proof point recency rule:
 - Only draw examples from Applause (2016 onward), ProdPerfect, HSP Group, eHealth, and personal GitHub projects.
 - Do NOT reference Fidelity Investments or any experience older than 10 years.
+
+No invented facts — if the posting and your own knowledge of {company} don't cover
+something (funding, team size, tooling, leadership), say so plainly in that field
+rather than guessing.
 
 Return ONLY valid JSON. No preamble, no markdown fences.
 """
@@ -2742,9 +2503,9 @@ Return ONLY valid JSON. No preamble, no markdown fences.
         raise WorkflowError(f"Failed to parse prep JSON: {e}\n\nRaw:\n{raw[:2000]}")
 
     config.progress(
-        f"  ✓ Generated: {len(data.get('likely_questions', []))} questions, "
-        f"{len(data.get('anchor_stories', []))} stories, "
-        f"{len(data.get('role_fit_map', []))} role-fit rows"
+        f"  ✓ Generated: {len(data.get('pillars', []))} priority pillars, "
+        f"{len(data.get('likely_questions', []))} questions, "
+        f"{len(data.get('questions_to_ask', []))} questions to ask"
     )
 
     # Step 2b: Brand colors
@@ -2754,8 +2515,7 @@ Return ONLY valid JSON. No preamble, no markdown fences.
     # Step 3: Build DOCX
     print_step(3, "Building Interview Prep DOCX", wfc)
     js      = _build_prep_docx_js(
-        data, company, role, config.round_type, config.focus,
-        config.interviewer, prep_out, colors
+        data, company, role, config.interviewer, prep_out, colors
     )
     js_path = run_dir / f"interview_prep_gen_{os.urandom(4).hex()}.js"
     write_file(js_path, js)
