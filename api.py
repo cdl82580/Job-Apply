@@ -568,7 +568,7 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 _PUBLIC_PATHS = frozenset({
-    "/login.html", "/register.html",
+    "/", "/login.html", "/register.html",
     "/forgot-password.html", "/reset-password.html",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",

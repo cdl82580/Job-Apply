@@ -116,7 +116,8 @@ job-apply/
 ├── CLAUDE.md                  ← Agent workflow instructions (Claude Code reads this)
 ├── profile.md                 ← Corey's voice, stories, metrics, do-not-use phrases
 ├── frontend/
-│   ├── index.html             ← Agent SPA (run form, prep form, progress, results)
+│   ├── index.html             ← Public marketing landing page (redirects logged-in users to tracking.html/admin.html)
+│   ├── agents.html            ← Agent SPA (run form, prep form, progress, results)
 │   ├── tracking.html          ← Application tracker
 │   ├── calendar.html          ← Calendar view
 │   ├── admin.html             ← Admin dashboard (users, apps, runs, audit, webhooks, KB)
@@ -126,7 +127,7 @@ job-apply/
 │   ├── register.html
 │   ├── profile.html           ← Profile settings (Markdown editor)
 │   ├── marked.min.js          ← Bundled marked.js (used by profile.html)
-│   └── img/logo.png           ← Single transparent-background logo (light + dark compatible)
+│   └── img/                   ← logo.png + landing page assets (Slack/Teams brand icons, Unsplash photos)
 ├── routers/
 │   ├── applications.py        ← Tracker CRUD + comments + linked runs
 │   ├── calendar.py            ← Calendar event + reminder CRUD
@@ -156,7 +157,7 @@ job-apply/
 
 ## Web App Usage
 
-1. Go to https://apply.cdlav.us/
+1. Go to https://apply.cdlav.us/ — public marketing/landing page (`frontend/index.html`); logged-in visitors are auto-redirected to `/tracking.html` (or `/admin.html`)
 2. Register (email/password or Google) and upload `master.docx` + paste your `profile.md`
 3. **Agent tab** — paste a job posting, enter company + role, hit **Generate**; use **Application Questions** to draft answers to supplemental app questions; or use **Interview Prep** for a prep doc
 4. **Tracker tab** — track applications, add notes, link to agent runs

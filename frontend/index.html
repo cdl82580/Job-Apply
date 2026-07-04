@@ -2,10 +2,445 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=/tracking.html">
-  <title>Redirecting…</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Apply — AI Job Application Copilot</title>
+  <meta name="description" content="Paste a job posting, get a tailored resume, ATS resume, cover letter, and interview prep in under 2 minutes. Full application tracker, calendar, and Slack/Teams bots included.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --primary:      #1A3C5E;
+      --border:       #2B6CB0;
+      --fill:         #EEF4FB;
+      --text:         #111827;
+      --muted:        #6B7280;
+      --bg-page:      #F9FAFB;
+      --bg-card:      #FFFFFF;
+      --bg-alt:       #F3F6FA;
+      --card-border:  #E5E7EB;
+    }
+    [data-theme="dark"] { color-scheme: dark;
+      --primary:      #A5B4FC;
+      --border:       #6366F1;
+      --fill:         #1A1A2E;
+      --text:         #F0F0F5;
+      --muted:        #94A3B8;
+      --bg-page:      #0A0A0A;
+      --bg-card:      #111111;
+      --bg-alt:       #131320;
+      --card-border:  #1E1E1E;
+    }
+
+    html { background: #F9FAFB; scroll-behavior: smooth; }
+    html[data-theme="dark"] { background: #0A0A0A; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-page); color: var(--text);
+      transition: background .2s, color .2s;
+      opacity: 0;
+    }
+    body.ready { opacity: 1; transition: background .2s, color .2s, opacity .15s; }
+
+    a { color: inherit; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* Nav */
+    nav {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--bg-card); border-bottom: 1px solid var(--card-border);
+      backdrop-filter: blur(6px);
+    }
+    .nav-inner {
+      max-width: 1120px; margin: 0 auto; padding: .85rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.05rem; }
+    .brand img { width: 28px; height: 28px; }
+    .nav-links { display: flex; gap: 1.5rem; font-size: .9rem; color: var(--muted); }
+    .nav-links a:hover { color: var(--text); }
+    .nav-actions { display: flex; align-items: center; gap: .6rem; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+      padding: .55rem 1.1rem; border-radius: 7px; font-size: .9rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; border: 1px solid transparent;
+      transition: filter .15s, border-color .15s, background .15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.12); }
+    .btn-ghost { background: transparent; color: var(--text); border-color: var(--card-border); }
+    .btn-ghost:hover { border-color: var(--border); }
+    .btn-lg { padding: .8rem 1.6rem; font-size: 1rem; }
+
+    .theme-toggle {
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 20px; padding: .3rem .6rem; cursor: pointer;
+      font-size: .8rem; color: var(--muted);
+    }
+    .theme-toggle:hover { border-color: var(--border); color: var(--text); }
+
+    /* Hero */
+    .hero { padding: 5rem 0 4rem; text-align: center; }
+    .eyebrow {
+      display: inline-block; font-size: .8rem; font-weight: 600; color: var(--primary);
+      background: var(--fill); border-radius: 20px; padding: .3rem .85rem; margin-bottom: 1.25rem;
+    }
+    .hero h1 { font-size: 2.6rem; line-height: 1.15; margin: 0 0 1rem; font-weight: 800; letter-spacing: -.02em; }
+    .hero p.lead { font-size: 1.15rem; color: var(--muted); max-width: 640px; margin: 0 auto 2rem; }
+    .hero-actions { display: flex; gap: .85rem; justify-content: center; flex-wrap: wrap; }
+
+    .stat-row {
+      display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
+      margin-top: 3.5rem; padding-top: 2.5rem; border-top: 1px solid var(--card-border);
+    }
+    .stat { text-align: center; }
+    .stat .num { font-size: 1.9rem; font-weight: 800; color: var(--primary); }
+    .stat .label { font-size: .825rem; color: var(--muted); margin-top: .15rem; }
+
+    /* Sections */
+    section { padding: 4.5rem 0; }
+    .section-alt { background: var(--bg-alt); }
+    .section-head { text-align: center; max-width: 620px; margin: 0 auto 3rem; }
+    .section-head .kicker { font-size: .8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: .06em; }
+    .section-head h2 { font-size: 1.9rem; margin: .5rem 0 .6rem; font-weight: 800; letter-spacing: -.01em; }
+    .section-head p { color: var(--muted); font-size: 1rem; }
+
+    /* Feature grid */
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 12px;
+      padding: 1.5rem; transition: border-color .15s, transform .15s;
+    }
+    .card:hover { border-color: var(--border); transform: translateY(-2px); }
+    .card .icon { font-size: 1.6rem; margin-bottom: .75rem; display: block; }
+    .card h3 { font-size: 1.05rem; margin: 0 0 .5rem; font-weight: 700; }
+    .card p { font-size: .875rem; color: var(--muted); line-height: 1.55; margin: 0; }
+
+    /* Split (feature-detail) sections */
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
+    .split h2 { font-size: 1.75rem; font-weight: 800; margin: 0 0 1rem; letter-spacing: -.01em; }
+    .split ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .9rem; }
+    .split li { display: flex; gap: .6rem; font-size: .95rem; color: var(--text); }
+    .split li::before { content: '✓'; color: var(--primary); font-weight: 700; flex-shrink: 0; }
+    .split-visual {
+      background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 14px;
+      min-height: 220px; display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .split-visual img { width: 100%; height: 100%; min-height: 220px; object-fit: cover; display: block; }
+
+    /* Integrations */
+    .integ-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .integ-card {
+      background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 1.25rem; text-align: center;
+    }
+    .integ-card .icon { font-size: 1.5rem; margin-bottom: .5rem; display: block; }
+    .integ-card .icon-img { width: 28px; height: 28px; margin-bottom: .5rem; }
+    .integ-card h4 { font-size: .925rem; margin: 0 0 .4rem; font-weight: 700; }
+    .integ-card p { font-size: .8rem; color: var(--muted); margin: 0; line-height: 1.5; }
+
+    /* Security strip */
+    .trust-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: .9rem 2rem; max-width: 760px; margin: 0 auto; }
+    .trust-item { display: flex; gap: .6rem; font-size: .9rem; }
+    .trust-item::before { content: '🔒'; flex-shrink: 0; }
+
+    /* Steps */
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .step { text-align: center; }
+    .step .n {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 700;
+      margin: 0 auto 1rem;
+    }
+    .step h4 { font-size: .975rem; margin: 0 0 .4rem; font-weight: 700; }
+    .step p { font-size: .85rem; color: var(--muted); margin: 0; line-height: 1.5; }
+
+    /* CTA band */
+    .cta-band {
+      background: var(--primary); color: #fff; border-radius: 16px;
+      padding: 3rem 2rem; text-align: center; margin: 0 1.5rem;
+    }
+    .cta-band h2 { font-size: 1.75rem; margin: 0 0 .5rem; font-weight: 800; }
+    .cta-band p { opacity: .85; margin: 0 0 1.5rem; }
+    .cta-band .btn-primary { background: #fff; color: var(--primary); }
+    .cta-band .btn-ghost { border-color: rgba(255,255,255,.4); color: #fff; }
+
+    footer { padding: 2.5rem 0; text-align: center; color: var(--muted); font-size: .825rem; }
+    footer a { text-decoration: none; font-weight: 600; }
+    footer .foot-links { display: flex; gap: 1.25rem; justify-content: center; margin-bottom: .75rem; flex-wrap: wrap; }
+
+    @media (max-width: 860px) {
+      .nav-links { display: none; }
+      .grid { grid-template-columns: repeat(2, 1fr); }
+      .integ-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps { grid-template-columns: repeat(2, 1fr); }
+      .split { grid-template-columns: 1fr; }
+      .split-visual { order: -1; }
+      .hero h1 { font-size: 2rem; }
+      .trust-list { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: 1fr; }
+      .integ-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .stat-row { gap: 1.75rem; }
+    }
+  </style>
 </head>
 <body>
-  <script>window.location.replace('/tracking.html');</script>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand"><img src="/img/logo.png" alt="Logo"> Job Apply</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#tracker">Tracker</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#how-it-works">How it Works</a>
+      <a href="/kb.html">Knowledge Base</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
+      <a class="btn btn-ghost" href="/login.html">Log In</a>
+      <a class="btn btn-primary" href="/register.html">Get Started</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">AI Job Application Copilot</span>
+    <h1>Turn any job posting into a tailored application in minutes</h1>
+    <p class="lead">
+      Paste a job description and get a styled resume, ATS-safe resume, cover letter,
+      and interview prep doc — tailored to that role, written in your voice, and
+      synced to Google Drive automatically.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="/register.html">Get Started Free</a>
+      <a class="btn btn-ghost btn-lg" href="/login.html">Log In</a>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="num">&lt;2 min</div><div class="label">per application</div></div>
+      <div class="stat"><div class="num">6</div><div class="label">agents on tap</div></div>
+      <div class="stat"><div class="num">1</div><div class="label">master resume, every run</div></div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Agents</div>
+      <h2>One job posting. A full application.</h2>
+      <p>Every document starts fresh from your master resume and is rewritten to match the role's own framing.</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <span class="icon">📄</span>
+        <h3>Tailored Resume</h3>
+        <p>Styled DOCX with brand colors, a rewritten tagline and summary, a competency grid mapped to the JD, and bullets reframed around the role's core identity.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🤖</span>
+        <h3>ATS Resume</h3>
+        <p>A plain, single-column DOCX — no tables, text boxes, or color — built specifically so applicant tracking systems can parse it linearly without losing content.</p>
+      </div>
+      <div class="card">
+        <span class="icon">✉️</span>
+        <h3>Cover Letter</h3>
+        <p>Opens with their framing, not yours. Two evidence paragraphs, a differentiator specific to the role, and a short close — written in your voice, not a template's.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🎯</span>
+        <h3>Interview Prep</h3>
+        <p>A single-column prep doc: elevator pitch, company snapshot, your story mapped to their stated priorities, likely Q&amp;A, smart questions to ask, and before-interview actions.</p>
+      </div>
+      <div class="card">
+        <span class="icon">💬</span>
+        <h3>Application Questions</h3>
+        <p>Answers freeform application questions using your tailored resume, the JD, and your profile — with a tone selector and a two-phase clarification flow.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🙏</span>
+        <h3>Thank You Email</h3>
+        <p>Post-interview thank-you generator with round/tone selectors and optional interviewer name — outputs an editable email plus a DOCX synced to Drive.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tracker" class="section-alt">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <h2>Track every application in one place</h2>
+        <ul>
+          <li>Full CRUD for applications — company, role, status, recruiter, salary, DUA reporting</li>
+          <li>Claude-powered match scoring (0–100) with a category badge and per-dimension breakdown</li>
+          <li>Run any agent straight from a tracker row, with the JD pre-loaded from Drive</li>
+          <li>Comments, timestamped notes, and linked agent runs on every application</li>
+          <li>CSV and formatted Excel export with frozen headers</li>
+        </ul>
+      </div>
+      <div class="split-visual"><img src="/img/tracker-hero.jpg" alt="Kanban-style task board with colorful sticky notes" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div class="split-visual" style="order:-1"><img src="/img/calendar-hero.jpg" alt="Colorful sticky notes used for scheduling reminders" loading="lazy"></div>
+      <div>
+        <h2>Never miss an interview or deadline</h2>
+        <ul>
+          <li>Create and manage interviews, deadlines, follow-ups, and custom events</li>
+          <li>Reminders by email or Slack DM, with configurable offsets</li>
+          <li>Events link directly to tracker records and agent runs</li>
+          <li>Available in the web UI and via Slack calendar commands</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="integrations" class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Integrations</div>
+      <h2>Work from wherever you already are</h2>
+    </div>
+    <div class="integ-grid">
+      <div class="integ-card">
+        <img class="icon-img" src="/img/slack-icon.svg" alt="Slack">
+        <h4>Slack Bot</h4>
+        <p>Run agents, manage the tracker, and get calendar reminders without leaving Slack.</p>
+      </div>
+      <div class="integ-card">
+        <img class="icon-img" src="/img/teams-icon.svg" alt="Microsoft Teams">
+        <h4>Teams Bot</h4>
+        <p>Same workflow inside Microsoft Teams, with per-user account linking.</p>
+      </div>
+      <div class="integ-card">
+        <span class="icon">🔗</span>
+        <h4>Webhooks</h4>
+        <p>Stream every event to Slack, MS Teams, Grafana Loki, or a custom endpoint — HMAC signed.</p>
+      </div>
+      <div class="integ-card">
+        <span class="icon">📚</span>
+        <h4>Knowledge Base</h4>
+        <p>Searchable articles covering how the app and its agents work, end to end.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Security</div>
+      <h2>Built with the basics done right</h2>
+    </div>
+    <div class="trust-list">
+      <div class="trust-item">Scrypt password hashing + HMAC-signed session cookies</div>
+      <div class="trust-item">Google OAuth sign-in, with email verification for new accounts</div>
+      <div class="trust-item">Rate limiting on every auth-sensitive endpoint</div>
+      <div class="trust-item">Webhook secrets encrypted at rest (AES-256-GCM)</div>
+      <div class="trust-item">SSRF guards on all outbound webhook URLs</div>
+      <div class="trust-item">Full audit log across user and application events</div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">How it Works</div>
+      <h2>From posting to polished, in one run</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h4>Paste a posting</h4>
+        <p>Drop in a job description, or link it from a tracker row.</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h4>Agents tailor your docs</h4>
+        <p>Resume, ATS resume, and cover letter generate in under 2 minutes, streamed live.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h4>Review &amp; download</h4>
+        <p>Every file auto-syncs to Google Drive alongside a saved copy of the JD.</p>
+      </div>
+      <div class="step">
+        <div class="n">4</div>
+        <h4>Track &amp; prep</h4>
+        <p>Log the application, get reminders, and generate interview prep when it's time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-band">
+      <h2>Ready to apply smarter?</h2>
+      <p>Your master resume, one click, a complete application.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="/register.html">Get Started Free</a>
+        <a class="btn btn-ghost btn-lg" href="/login.html">Log In</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="/kb.html">Knowledge Base</a>
+      <a href="/login.html">Log In</a>
+      <a href="/register.html">Create Account</a>
+    </div>
+    Job Apply — built for one job search, shared with anyone running theirs.
+  </div>
+</footer>
+
+<script>
+  const ICONS = { light: '☀', dark: '🌙' };
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('theme', t);
+    document.getElementById('themeIcon').textContent = ICONS[t];
+  }
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  document.getElementById('themeIcon').textContent =
+    ICONS[document.documentElement.getAttribute('data-theme')] || ICONS.light;
+
+  // Already signed in? Skip the marketing page.
+  fetch('/api/auth/me')
+    .then(r => r.ok ? r.json() : null)
+    .then(me => {
+      if (me) {
+        window.location.replace(me.role === 'admin' ? '/admin.html' : '/tracking.html');
+      } else {
+        document.body.classList.add('ready');
+      }
+    })
+    .catch(() => document.body.classList.add('ready'));
+</script>
 </body>
 </html>
