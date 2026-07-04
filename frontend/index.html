@@ -50,42 +50,56 @@
     body.ready { opacity: 1; transition: background .2s, color .2s, opacity .15s; }
 
     a { color: inherit; }
-    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
 
-    /* Nav */
-    nav {
-      position: sticky; top: 0; z-index: 20;
-      background: var(--bg-card); border-bottom: 1px solid var(--card-border);
-      backdrop-filter: blur(6px);
+    /* Header — matches the shared app header (tracking.html, agents.html, etc.) */
+    header {
+      border-bottom: 2px solid var(--primary);
+      padding: 0 1rem;
     }
-    .nav-inner {
-      max-width: 1120px; margin: 0 auto; padding: .85rem 1.5rem;
-      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    .header-inner {
+      max-width: 1100px; margin: 0 auto; padding: 1.25rem 0 1rem;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
     }
-    .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.05rem; }
-    .brand img { width: 28px; height: 28px; }
-    .nav-links { display: flex; gap: 1.5rem; font-size: .9rem; color: var(--muted); }
-    .nav-links a:hover { color: var(--text); }
-    .nav-actions { display: flex; align-items: center; gap: .6rem; }
+    .header-left { display: flex; align-items: flex-start; gap: .875rem; }
+    .app-logo { width: 44px; height: 44px; flex-shrink: 0; }
+    .app-logo img { width: 44px; height: 44px; }
+    .header-title { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
+    header p  { color: var(--muted); margin: 0; font-size: .9rem; }
+    .header-actions { display: flex; align-items: center; gap: 1.25rem; flex-shrink: 0; margin-top: .125rem; }
+    .header-nav-links { display: flex; gap: 1.5rem; font-size: .9rem; color: var(--muted); }
+    .header-nav-links a:hover { color: var(--text); }
 
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
       padding: .55rem 1.1rem; border-radius: 7px; font-size: .9rem; font-weight: 600;
       cursor: pointer; text-decoration: none; border: 1px solid transparent;
+      background: var(--primary); color: #fff;
       transition: filter .15s, border-color .15s, background .15s;
     }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { filter: brightness(1.12); }
-    .btn-ghost { background: transparent; color: var(--text); border-color: var(--card-border); }
-    .btn-ghost:hover { border-color: var(--border); }
+    .btn:hover { filter: brightness(1.12); }
+    .btn-ghost { background: var(--bg-card); color: var(--primary); border-color: var(--border); }
+    .btn-ghost:hover { background: var(--fill); filter: none; }
     .btn-lg { padding: .8rem 1.6rem; font-size: 1rem; }
 
     .theme-toggle {
-      background: var(--bg-card); border: 1px solid var(--card-border);
-      border-radius: 20px; padding: .3rem .6rem; cursor: pointer;
+      background: none; border: 1px solid var(--card-border);
+      border-radius: 20px; padding: .3rem .65rem; cursor: pointer;
       font-size: .8rem; color: var(--muted);
+      display: flex; align-items: center; gap: .3rem;
     }
     .theme-toggle:hover { border-color: var(--border); color: var(--text); }
+
+    @media (max-width: 620px) {
+      .header-nav-links { display: none; }
+      header { padding: 0 .75rem; }
+      .header-inner { padding: 1rem 0 .875rem; }
+      .header-left { gap: .6rem; }
+      .app-logo, .app-logo img { width: 36px; height: 36px; }
+      .header-title { font-size: 1.15rem; }
+      header p  { display: none; }
+      .header-actions { gap: .5rem; }
+    }
 
     /* Hero */
     .hero { padding: 5rem 0 4rem; text-align: center; }
@@ -179,7 +193,6 @@
     footer .foot-links { display: flex; gap: 1.25rem; justify-content: center; margin-bottom: .75rem; flex-wrap: wrap; }
 
     @media (max-width: 860px) {
-      .nav-links { display: none; }
       .grid { grid-template-columns: repeat(2, 1fr); }
       .integ-grid { grid-template-columns: repeat(2, 1fr); }
       .steps { grid-template-columns: repeat(2, 1fr); }
@@ -198,25 +211,31 @@
 </head>
 <body>
 
-<nav>
-  <div class="nav-inner">
-    <div class="brand"><img src="/img/logo.png" alt="Logo"> Job Apply</div>
-    <div class="nav-links">
-      <a href="#features">Features</a>
-      <a href="#tracker">Tracker</a>
-      <a href="#integrations">Integrations</a>
-      <a href="#how-it-works">How it Works</a>
-      <a href="/kb.html">Knowledge Base</a>
+<header>
+  <div class="header-inner">
+    <div class="header-left">
+      <div class="app-logo"><img src="/img/logo.png" alt="Logo"></div>
+      <div>
+        <div class="header-title">Job Apply</div>
+        <p>AI-powered job application copilot</p>
+      </div>
     </div>
-    <div class="nav-actions">
+    <div class="header-actions">
+      <nav class="header-nav-links">
+        <a href="#features">Features</a>
+        <a href="#tracker">Tracker</a>
+        <a href="#integrations">Integrations</a>
+        <a href="#how-it-works">How it Works</a>
+        <a href="/kb.html">Knowledge Base</a>
+      </nav>
       <button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
       <a class="btn btn-ghost" href="/login.html">Log In</a>
-      <a class="btn btn-primary" href="/register.html">Get Started</a>
+      <a class="btn" href="/register.html">Get Started</a>
     </div>
   </div>
-</nav>
+</header>
 
-<header class="hero">
+<section class="hero">
   <div class="wrap">
     <span class="eyebrow">AI Job Application Copilot</span>
     <h1>Turn any job posting into a tailored application in minutes</h1>
@@ -235,7 +254,7 @@
       <div class="stat"><div class="num">1</div><div class="label">master resume, every run</div></div>
     </div>
   </div>
-</header>
+</section>
 
 <section id="features">
   <div class="wrap">

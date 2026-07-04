@@ -660,7 +660,7 @@
 
   async function doLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login.html';
+    window.location.href = '/';
   }
   document.getElementById('logoutBtn').addEventListener('click', doLogout);
   document.getElementById('logoutBtnHeader').addEventListener('click', doLogout);

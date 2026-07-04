@@ -568,7 +568,7 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 _PUBLIC_PATHS = frozenset({
-    "/", "/login.html", "/register.html",
+    "/", "/login.html", "/register.html", "/kb.html",
     "/forgot-password.html", "/reset-password.html",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",
@@ -581,7 +581,7 @@ _PUBLIC_PATHS = frozenset({
 })
 
 
-_PUBLIC_PREFIXES = ("/img/", "/js/", "/css/", "/fonts/")
+_PUBLIC_PREFIXES = ("/img/", "/js/", "/css/", "/fonts/", "/api/kb/")
 
 
 @app.middleware("http")
