@@ -27,6 +27,15 @@ If no Job Apply account matches the Teams email, _offer_manual_link() sends a
 sign-in card (see scripts/teams_link_tokens.py + frontend/teams-link.html)
 so the user can link an existing account under a different email instead —
 password or Google, whichever they used to originally register.
+
+apply/prep/aq only operate on a tracked application — there's no free-text
+company/role entry. Each form's "Application" field is an Adaptive Card
+dynamic typeahead (dataset "myApplications", handled in _search_my_applications)
+searching the caller's own applications, with each result's company logo shown
+as the search result icon. Submitting that first step (_submit_*_select) looks
+up a saved job_description.md in the application's most recent linked Drive
+folder (_resolve_app_and_jd); if one exists, the run starts immediately,
+otherwise a follow-up card asks the user to paste the JD (_submit_*_final).
 """
 
 from __future__ import annotations
@@ -114,30 +123,22 @@ class JobApplyBot(ActivityHandler):
 
     async def on_invoke_activity(self, turn_context: TurnContext):
         # Adaptive Card dynamic typeahead search (track_add_form's "company"
-        # field) — not covered by the base SDK's invoke dispatch, so it's
-        # intercepted here rather than via an on_teams_* override.
+        # field, and the "app_id" field on apply/prep/aq) — not covered by
+        # the base SDK's invoke dispatch, so it's intercepted here rather
+        # than via an on_teams_* override.
         if turn_context.activity.name == "application/search":
-            return await self._handle_company_search(turn_context)
+            return await self._handle_dynamic_search(turn_context)
         return await super().on_invoke_activity(turn_context)
 
-    async def _handle_company_search(self, turn_context: TurnContext):
+    async def _handle_dynamic_search(self, turn_context: TurnContext):
         value = turn_context.activity.value or {}
+        dataset = value.get("dataset", "")
         query = (value.get("queryText") or "").strip()
 
-        results = []
-        if len(query) >= 2:
-            try:
-                companies = await asyncio.to_thread(api_client.search_companies, query)
-            except Exception:
-                companies = []
-            for c in companies[:8]:
-                name = c.get("name", "?")
-                domain = c.get("domain", "")
-                title = f"{name} ({domain})" if domain else name
-                item = {"title": title[:75], "value": f"{name}|||{domain}"[:250]}
-                if c.get("logo_url"):
-                    item["icon"] = c["logo_url"]
-                results.append(item)
+        if dataset == "myApplications":
+            results = await self._search_my_applications(turn_context, query)
+        else:
+            results = await self._search_companies(query)
 
         # Not using self._create_invoke_response() here — it runs the body through
         # the SDK's msrest serializer, which expects a typed Model, not a plain dict.
@@ -148,6 +149,57 @@ class JobApplyBot(ActivityHandler):
                 "value": {"results": results},
             },
         )
+
+    @staticmethod
+    async def _search_companies(query: str) -> list[dict]:
+        if len(query) < 2:
+            return []
+        try:
+            companies = await asyncio.to_thread(api_client.search_companies, query)
+        except Exception:
+            return []
+        results = []
+        for c in companies[:8]:
+            name = c.get("name", "?")
+            domain = c.get("domain", "")
+            title = f"{name} ({domain})" if domain else name
+            item = {"title": title[:75], "value": f"{name}|||{domain}"[:250]}
+            if c.get("logo_url"):
+                item["icon"] = c["logo_url"]
+            results.append(item)
+        return results
+
+    async def _search_my_applications(self, turn_context: TurnContext, query: str) -> list[dict]:
+        """Search the calling user's own tracked applications by company/role
+        substring — backs the app_id typeahead on apply/prep/aq forms."""
+        aad_object_id = self._aad_object_id(turn_context)
+        if not aad_object_id:
+            return []
+        try:
+            link = await asyncio.to_thread(api_client.teams_link_status, aad_object_id)
+        except Exception:
+            return []
+        if not link.get("linked"):
+            return []
+
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=link["email"])
+        except Exception:
+            return []
+
+        q = query.lower()
+        matches = [
+            a for a in apps
+            if not q or q in a.get("company", "").lower() or q in a.get("role_title", "").lower()
+        ]
+        results = []
+        for a in matches[:8]:
+            title = f"{a.get('company', '?')} | {a.get('role_title', '?')}"
+            item = {"title": title[:75], "value": a["id"]}
+            if a.get("logo_url"):
+                item["icon"] = a["logo_url"]
+            results.append(item)
+        return results
 
     async def on_message_activity(self, turn_context: TurnContext):
         text = (turn_context.activity.text or "").strip().lower()
@@ -181,11 +233,11 @@ class JobApplyBot(ActivityHandler):
         if text in ("whoami", "/whoami"):
             await self._cmd_whoami(turn_context, user)
         elif text in ("apply", "/apply"):
-            await self._cmd_apply(turn_context)
+            await self._cmd_apply(turn_context, user)
         elif text in ("aq", "/aq"):
-            await self._cmd_aq(turn_context)
+            await self._cmd_aq(turn_context, user)
         elif text in ("prep", "/prep"):
-            await self._cmd_prep(turn_context)
+            await self._cmd_prep(turn_context, user)
         elif text in ("tracker", "/tracker"):
             await self._cmd_tracker(turn_context, user)
         elif text.startswith(("track list", "/track-list", "track-list")):
@@ -409,19 +461,41 @@ class JobApplyBot(ActivityHandler):
 
     # ── Card form launchers ──────────────────────────────────────────────
 
-    async def _cmd_apply(self, ctx: TurnContext):
+    async def _require_any_application(self, ctx: TurnContext, user: dict) -> bool:
+        """Agent commands only operate on a tracked application — no more
+        free-text company/role. Confirms at least one exists first so the
+        error is a clear message instead of an empty search box."""
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Error loading applications: {exc}"))
+            return False
+        if not apps:
+            await ctx.send_activity(
+                MessageFactory.text("❌ No applications on file yet. Add one with **track add** first.")
+            )
+            return False
+        return True
+
+    async def _cmd_apply(self, ctx: TurnContext, user: dict):
+        if not await self._require_any_application(ctx, user):
+            return
         card = _load_card("apply_form")
         await ctx.send_activity(
             MessageFactory.attachment(_card_attachment(card))
         )
 
-    async def _cmd_aq(self, ctx: TurnContext):
+    async def _cmd_aq(self, ctx: TurnContext, user: dict):
+        if not await self._require_any_application(ctx, user):
+            return
         card = _load_card("aq_form")
         await ctx.send_activity(
             MessageFactory.attachment(_card_attachment(card))
         )
 
-    async def _cmd_prep(self, ctx: TurnContext):
+    async def _cmd_prep(self, ctx: TurnContext, user: dict):
+        if not await self._require_any_application(ctx, user):
+            return
         card = _load_card("prep_form")
         await ctx.send_activity(
             MessageFactory.attachment(_card_attachment(card))
@@ -699,7 +773,8 @@ class JobApplyBot(ActivityHandler):
     async def _cmd_help(self, ctx: TurnContext):
         text = (
             "**Job Apply — Teams Bot Commands**\n\n"
-            "**\U0001f916 Agent Commands**\n"
+            "**\U0001f916 Agent Commands** _(pick from your tracked applications — "
+            "add one with **track add** first if you don't have any yet)_\n"
             "- **apply** — Generate resume + ATS resume + cover letter\n"
             "- **aq** — Answer an application question\n"
             "- **prep** — Generate interview prep doc\n"
@@ -727,11 +802,25 @@ class JobApplyBot(ActivityHandler):
         action = data.get("action", "")
 
         if action == "apply_submit":
+            # Kept for any apply_form card already open in a chat from before
+            # the app-select flow shipped — see _submit_apply_select/_final.
             await self._submit_apply(ctx, data, user)
+        elif action == "apply_select_submit":
+            await self._submit_apply_select(ctx, data, user)
+        elif action == "apply_final_submit":
+            await self._submit_apply_final(ctx, data, user)
         elif action == "prep_submit":
             await self._submit_prep(ctx, data, user)
+        elif action == "prep_select_submit":
+            await self._submit_prep_select(ctx, data, user)
+        elif action == "prep_final_submit":
+            await self._submit_prep_final(ctx, data, user)
         elif action == "aq_submit":
             await self._submit_aq(ctx, data, user)
+        elif action == "aq_select_submit":
+            await self._submit_aq_select(ctx, data, user)
+        elif action == "aq_final_submit":
+            await self._submit_aq_final(ctx, data, user)
         elif action == "track_add_submit":
             await self._submit_track_add(ctx, data, user)
         elif action == "optimize_submit":
@@ -740,6 +829,172 @@ class JobApplyBot(ActivityHandler):
             await self._submit_track_view(ctx, data, user)
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
+
+    # ── Application selection + JD lookup (apply/prep/aq share this) ─────
+
+    async def _resolve_app_and_jd(self, app_id: str, user: dict) -> tuple[dict, str | None]:
+        """Return (application record, saved job posting text or None).
+
+        None means no job_description.md was found in the application's
+        most recently linked Drive folder (or it has no linked folder at
+        all yet) — the caller should ask the user to paste one instead.
+        """
+        app = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
+        runs = [r for r in (app.get("linked_runs") or []) if r.get("gdrive_folder_id")]
+        if not runs:
+            return app, None
+        runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+        folder_id = runs[0]["gdrive_folder_id"]
+        try:
+            job_posting = await asyncio.to_thread(
+                api_client.get_job_posting, folder_id, user_email=user["email"]
+            )
+        except Exception:
+            job_posting = None
+        return app, job_posting
+
+    @staticmethod
+    def _jd_paste_card(action: str, extra_data: dict) -> dict:
+        """Follow-up card asking for the JD text, carrying forward everything
+        already collected in the first step via the submit action's data —
+        Action.Submit's static data merges with this card's one input."""
+        return {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Paste the Job Description", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "isSubtle": True, "spacing": "None",
+                    "text": "I couldn't find a saved job description for this application yet — paste it below.",
+                },
+                {
+                    "type": "Input.Text", "id": "job_posting", "label": "Job posting",
+                    "isMultiline": True, "isRequired": True, "errorMessage": "Job posting is required",
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Generate", "data": {"action": action, **extra_data}},
+            ],
+        }
+
+    async def _submit_apply_select(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        contact = (data.get("contact") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Please select an application."))
+            return
+
+        try:
+            app, job_posting = await self._resolve_app_and_jd(app_id, user)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        company = app.get("company", "?")
+        role = app.get("role_title", "?")
+        if job_posting:
+            await self._submit_apply(
+                ctx, {"company": company, "role": role, "contact": contact, "job_posting": job_posting}, user,
+            )
+            return
+
+        card = self._jd_paste_card("apply_final_submit", {
+            "app_id": app_id, "company": company, "role": role, "contact": contact,
+        })
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_apply_final(self, ctx: TurnContext, data: dict, user: dict):
+        job_posting = (data.get("job_posting") or "").strip()
+        if not job_posting:
+            await ctx.send_activity(MessageFactory.text("❌ Job posting is required."))
+            return
+        await self._submit_apply(ctx, {
+            "company": data.get("company", ""), "role": data.get("role", ""),
+            "contact": data.get("contact", ""), "job_posting": job_posting,
+        }, user)
+
+    async def _submit_prep_select(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        round_type = (data.get("round_type") or "").strip()
+        interviewer = (data.get("interviewer") or "").strip()
+        focus = (data.get("focus") or "").strip()
+        if not app_id or not round_type:
+            await ctx.send_activity(MessageFactory.text("❌ Application and interview round are required."))
+            return
+
+        try:
+            app, job_posting = await self._resolve_app_and_jd(app_id, user)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        company = app.get("company", "?")
+        role = app.get("role_title", "?")
+        if job_posting:
+            await self._submit_prep(ctx, {
+                "company": company, "role": role, "round_type": round_type,
+                "interviewer": interviewer, "focus": focus, "job_posting": job_posting,
+            }, user)
+            return
+
+        card = self._jd_paste_card("prep_final_submit", {
+            "app_id": app_id, "company": company, "role": role,
+            "round_type": round_type, "interviewer": interviewer, "focus": focus,
+        })
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_prep_final(self, ctx: TurnContext, data: dict, user: dict):
+        job_posting = (data.get("job_posting") or "").strip()
+        if not job_posting:
+            await ctx.send_activity(MessageFactory.text("❌ Job posting is required."))
+            return
+        await self._submit_prep(ctx, {
+            "company": data.get("company", ""), "role": data.get("role", ""),
+            "round_type": data.get("round_type", ""), "interviewer": data.get("interviewer", ""),
+            "focus": data.get("focus", ""), "job_posting": job_posting,
+        }, user)
+
+    async def _submit_aq_select(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        question = (data.get("question") or "").strip()
+        tone = (data.get("tone") or "professional").strip()
+        char_limit = data.get("char_limit")
+        if not app_id or not question:
+            await ctx.send_activity(MessageFactory.text("❌ Application and question are required."))
+            return
+
+        try:
+            app, job_posting = await self._resolve_app_and_jd(app_id, user)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        company = app.get("company", "?")
+        role = app.get("role_title", "?")
+        if job_posting:
+            await self._submit_aq(ctx, {
+                "company": company, "role": role, "question": question,
+                "tone": tone, "char_limit": char_limit, "job_posting": job_posting,
+            }, user)
+            return
+
+        card = self._jd_paste_card("aq_final_submit", {
+            "app_id": app_id, "company": company, "role": role,
+            "question": question, "tone": tone, "char_limit": char_limit,
+        })
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_aq_final(self, ctx: TurnContext, data: dict, user: dict):
+        job_posting = (data.get("job_posting") or "").strip()
+        if not job_posting:
+            await ctx.send_activity(MessageFactory.text("❌ Job posting is required."))
+            return
+        await self._submit_aq(ctx, {
+            "company": data.get("company", ""), "role": data.get("role", ""),
+            "question": data.get("question", ""), "tone": data.get("tone", "professional"),
+            "char_limit": data.get("char_limit"), "job_posting": job_posting,
+        }, user)
 
     # ── Long-running agent submissions (threaded) ────────────────────────
 

@@ -11,26 +11,24 @@
     },
     {
       "type": "TextBlock",
-      "text": "Generate an interview prep reference card.",
+      "text": "Generate an interview prep reference card for a tracked application.",
       "wrap": true,
       "spacing": "None",
       "isSubtle": true
     },
     {
-      "type": "Input.Text",
-      "id": "company",
-      "label": "Company name",
-      "placeholder": "Acme Corp",
+      "type": "Input.ChoiceSet",
+      "id": "app_id",
+      "label": "Application",
+      "style": "filtered",
       "isRequired": true,
-      "errorMessage": "Company name is required"
-    },
-    {
-      "type": "Input.Text",
-      "id": "role",
-      "label": "Role title",
-      "placeholder": "Solutions Engineer",
-      "isRequired": true,
-      "errorMessage": "Role title is required"
+      "errorMessage": "Select an application",
+      "placeholder": "Search your tracked applications…",
+      "choices": [],
+      "choices.data": {
+        "type": "Data.Query",
+        "dataset": "myApplications"
+      }
     },
     {
       "type": "Input.ChoiceSet",
@@ -58,23 +56,14 @@
       "id": "focus",
       "label": "Focus areas (optional)",
       "placeholder": "API design, system architecture"
-    },
-    {
-      "type": "Input.Text",
-      "id": "job_posting",
-      "label": "Job posting (paste full text)",
-      "placeholder": "Paste the full job description here…",
-      "isMultiline": true,
-      "isRequired": true,
-      "errorMessage": "Job posting is required"
     }
   ],
   "actions": [
     {
       "type": "Action.Submit",
-      "title": "Generate Prep",
+      "title": "Continue",
       "data": {
-        "action": "prep_submit"
+        "action": "prep_select_submit"
       }
     }
   ]

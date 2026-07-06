@@ -17,20 +17,18 @@
       "isSubtle": true
     },
     {
-      "type": "Input.Text",
-      "id": "company",
-      "label": "Company name",
-      "placeholder": "Acme Corp",
+      "type": "Input.ChoiceSet",
+      "id": "app_id",
+      "label": "Application",
+      "style": "filtered",
       "isRequired": true,
-      "errorMessage": "Company name is required"
-    },
-    {
-      "type": "Input.Text",
-      "id": "role",
-      "label": "Role title",
-      "placeholder": "Solutions Engineer",
-      "isRequired": true,
-      "errorMessage": "Role title is required"
+      "errorMessage": "Select an application",
+      "placeholder": "Search your tracked applications…",
+      "choices": [],
+      "choices.data": {
+        "type": "Data.Query",
+        "dataset": "myApplications"
+      }
     },
     {
       "type": "Input.Text",
@@ -58,23 +56,14 @@
       "id": "char_limit",
       "label": "Character limit (optional)",
       "placeholder": "500"
-    },
-    {
-      "type": "Input.Text",
-      "id": "job_posting",
-      "label": "Job posting (paste full text)",
-      "placeholder": "Paste the full job description here…",
-      "isMultiline": true,
-      "isRequired": true,
-      "errorMessage": "Job posting is required"
     }
   ],
   "actions": [
     {
       "type": "Action.Submit",
-      "title": "Generate Answer",
+      "title": "Continue",
       "data": {
-        "action": "aq_submit"
+        "action": "aq_select_submit"
       }
     }
   ]

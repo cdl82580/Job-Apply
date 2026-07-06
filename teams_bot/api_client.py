@@ -230,3 +230,12 @@ def get_drive_runs(user_email: str | None = None) -> list[dict]:
     r = _api("get", "/api/gdrive/runs", user_email=user_email)
     r.raise_for_status()
     return r.json()
+
+
+def get_job_posting(folder_id: str, user_email: str | None = None) -> str | None:
+    """Saved job posting text for a Drive folder, or None if none is saved yet."""
+    r = _api("get", f"/api/gdrive/runs/{folder_id}/job_posting", user_email=user_email)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    return r.json().get("job_posting")
