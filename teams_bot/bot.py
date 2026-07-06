@@ -31,10 +31,13 @@ password or Google, whichever they used to originally register.
 apply/prep/aq only operate on a tracked application — there's no free-text
 company/role entry. Each form's "Application" field is an Adaptive Card
 dynamic typeahead (dataset "myApplications", handled in _search_my_applications)
-searching the caller's own applications, with each result's company logo shown
-as the search result icon. Submitting that first step (_submit_*_select) looks
-up a saved job_description.md in the application's most recent linked Drive
-folder (_resolve_app_and_jd); if one exists, the run starts immediately,
+searching the caller's own applications. Teams' application/search response
+schema only supports {title, value} per result — no icon/image field — so the
+company logo can't appear in the dropdown itself; it shows once an item is
+picked, on whichever card the selection lands on (see _logo_column).
+Submitting that first step (_submit_*_select) looks up a saved
+job_description.md in the application's most recent linked Drive folder
+(_resolve_app_and_jd); if one exists, the run starts immediately,
 otherwise a follow-up card asks the user to paste the JD (_submit_*_final).
 """
 
@@ -187,11 +190,11 @@ class JobApplyBot(ActivityHandler):
             name = c.get("name", "?")
             domain = c.get("domain", "")
             title = f"{name} ({domain})" if domain else name
-            item = {"title": title[:75], "value": f"{name}|||{domain}"[:250]}
-            icon = _logo_url(domain)
-            if icon:
-                item["icon"] = icon
-            results.append(item)
+            # No icon here: Teams' application/search response schema only
+            # supports {title, value} per result — no image field exists in
+            # the documented contract, so a logo can't show in the dropdown
+            # itself (it does show once an item is picked — see _logo_column).
+            results.append({"title": title[:75], "value": f"{name}|||{domain}"[:250]})
         return results
 
     async def _search_my_applications(self, turn_context: TurnContext, query: str) -> list[dict]:
@@ -220,11 +223,9 @@ class JobApplyBot(ActivityHandler):
         results = []
         for a in matches[:8]:
             title = f"{a.get('company', '?')} | {a.get('role_title', '?')}"
-            item = {"title": title[:75], "value": a["id"]}
-            icon = _logo_url(a.get("domain", ""))
-            if icon:
-                item["icon"] = icon
-            results.append(item)
+            # See _search_companies — no icon field in the dynamic search
+            # response schema, so the logo can't appear in the dropdown itself.
+            results.append({"title": title[:75], "value": a["id"]})
         return results
 
     async def on_message_activity(self, turn_context: TurnContext):

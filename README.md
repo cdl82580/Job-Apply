@@ -247,14 +247,17 @@ instead of the shared primary account the Slack bot uses.
 
 **`apply`/`prep`/`aq` only run against a tracked application** — there's no
 free-text company/role entry. Each form's "Application" field is an Adaptive
-Card dynamic typeahead searching the caller's own tracked applications (with
-each result's company logo shown next to it), backed by an
-`application/search` invoke handler (`teams_bot/bot.py:_search_my_applications`)
-since the Bot Framework Python SDK doesn't dispatch that invoke name itself.
-Submitting the application picks up a saved `job_description.md` from the
-application's most recently linked Drive folder automatically if one exists;
-otherwise a follow-up card asks the user to paste the job posting once, and
-that gets used for the run.
+Card dynamic typeahead searching the caller's own tracked applications, backed
+by an `application/search` invoke handler
+(`teams_bot/bot.py:_search_my_applications`) since the Bot Framework Python SDK
+doesn't dispatch that invoke name itself. Teams' dynamic-search response
+schema only supports `{title, value}` per result (no icon/image field), so
+the company logo can't appear in the dropdown itself — it shows once an
+application is picked, on whichever card the selection lands on. Submitting
+the application picks up a saved `job_description.md` from the application's
+most recently linked Drive folder automatically if one exists; otherwise a
+follow-up card asks the user to paste the job posting once, and that gets
+used for the run.
 
 ---
 
