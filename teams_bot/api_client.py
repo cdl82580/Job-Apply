@@ -176,6 +176,56 @@ def create_application(data: dict, user_email: str | None = None) -> dict:
     return r.json()
 
 
+def update_application(app_id: str, updates: dict, user_email: str | None = None) -> dict:
+    r = _api("put", f"/api/applications/{app_id}", user_email=user_email, json=updates)
+    r.raise_for_status()
+    return r.json()
+
+
+def delete_application(app_id: str, user_email: str | None = None) -> None:
+    r = _api("delete", f"/api/applications/{app_id}", user_email=user_email)
+    r.raise_for_status()
+
+
+def add_comment(app_id: str, text: str, user_email: str | None = None) -> dict:
+    r = _api("post", f"/api/applications/{app_id}/comments", user_email=user_email, json={"text": text})
+    r.raise_for_status()
+    return r.json()
+
+
+# ── Thank-you email ──────────────────────────────────────────────────────
+
+def post_thankyou(job_posting: str, company: str, role: str, round_type: str,
+                   interviewer: str = "", topics: str = "", tone: str = "professional",
+                   app_id: str | None = None, user_email: str | None = None) -> dict:
+    payload: dict[str, Any] = {
+        "job_posting": job_posting,
+        "company": company,
+        "role": role,
+        "round_type": round_type,
+        "interviewer": interviewer or None,
+        "topics": topics or None,
+        "tone": tone,
+    }
+    if app_id:
+        payload["app_id"] = app_id
+    r = _api("post", "/api/thankyou", user_email=user_email, json=payload)
+    r.raise_for_status()
+    return r.json()
+
+
+def poll_thankyou(ty_id: str, timeout: int = 300, user_email: str | None = None) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = _api("get", f"/api/thankyou/{ty_id}/status", user_email=user_email)
+        r.raise_for_status()
+        data = r.json()
+        if data["status"] in ("done", "error"):
+            return data
+        time.sleep(5)
+    return {"status": "timeout", "error": "Timed out waiting for thank-you email to complete"}
+
+
 # ── Profile ──────────────────────────────────────────────────────────────
 
 def get_profile(user_email: str | None = None) -> dict:

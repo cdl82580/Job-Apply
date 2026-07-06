@@ -3,18 +3,23 @@ Teams bot activity handler — maps user messages and Adaptive Card submissions
 to the same FastAPI backend the Slack bot uses.
 
 Commands (type in chat):
-  apply      — generate resume + ATS resume + cover letter
-  aq         — answer an application question
-  prep       — generate interview prep doc
-  tracker    — pipeline summary
-  track list — list applications (optionally filter by status)
-  track add  — add a new application
-  track view — view application details
-  runs       — list recent Drive run folders
-  confirm    — link your Teams identity to a Job Apply account
-  whoami     — show which account you're linked as
-  unlink     — remove your Teams identity's link
-  help       — command reference
+  apply        — generate resume + ATS resume + cover letter
+  aq           — answer an application question
+  prep         — generate interview prep doc
+  thankyou     — generate a post-interview thank-you email
+  optimize     — refine an existing run's documents from a prompt
+  tracker      — pipeline summary
+  track list   — list applications (optionally filter by status)
+  track add    — add a new application
+  track view   — view application details
+  track update — edit an application's status/fields (two-step: pick app -> edit form)
+  track note   — add a comment to an application
+  track delete — delete an application (two-step confirm)
+  runs         — list recent Drive run folders
+  confirm      — link your Teams identity to a Job Apply account
+  whoami       — show which account you're linked as
+  unlink       — remove your Teams identity's link
+  help         — command reference
 
 Auth model: the bot has no notion of "logged in" beyond a per-Teams-identity
 link to a Job Apply account (see scripts/teams_links.py). The first time a
@@ -276,8 +281,16 @@ class JobApplyBot(ActivityHandler):
             await self._cmd_track_add(turn_context)
         elif text.startswith(("track view", "/track-view", "track-view")):
             await self._cmd_track_view(turn_context, user)
+        elif text.startswith(("track update", "/track-update", "track-update")):
+            await self._cmd_track_update(turn_context, user)
+        elif text.startswith(("track note", "/track-note", "track-note")):
+            await self._cmd_track_note(turn_context, user)
+        elif text.startswith(("track delete", "/track-delete", "track-delete")):
+            await self._cmd_track_delete(turn_context, user)
         elif text in ("optimize", "/optimize"):
             await self._cmd_optimize(turn_context, user)
+        elif text in ("thankyou", "/thankyou", "thank you", "thank-you"):
+            await self._cmd_thankyou(turn_context, user)
         elif text in ("runs", "/runs"):
             await self._cmd_runs(turn_context, user)
         else:
@@ -534,6 +547,14 @@ class JobApplyBot(ActivityHandler):
             MessageFactory.attachment(_card_attachment(card))
         )
 
+    async def _cmd_thankyou(self, ctx: TurnContext, user: dict):
+        if not await self._require_any_application(ctx, user):
+            return
+        card = _load_card("thankyou_form")
+        await ctx.send_activity(
+            MessageFactory.attachment(_card_attachment(card))
+        )
+
     async def _cmd_optimize(self, ctx: TurnContext, user: dict):
         try:
             apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
@@ -729,6 +750,131 @@ class JobApplyBot(ActivityHandler):
         }
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
+    async def _cmd_track_update(self, ctx: TurnContext, user: dict):
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
+            return
+
+        if not apps:
+            await ctx.send_activity(
+                MessageFactory.text("No applications found. Add one with **track add** first.")
+            )
+            return
+
+        choices = [
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
+            for a in apps[:20]
+        ]
+
+        card = {
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "body": [
+                {"type": "TextBlock", "text": "Update Application", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "Input.ChoiceSet",
+                    "id": "app_id",
+                    "label": "Select application to edit",
+                    "isRequired": True,
+                    "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Continue", "data": {"action": "track_update_select_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_track_note(self, ctx: TurnContext, user: dict):
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
+            return
+
+        if not apps:
+            await ctx.send_activity(
+                MessageFactory.text("No applications found. Add one with **track add** first.")
+            )
+            return
+
+        choices = [
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
+            for a in apps[:20]
+        ]
+
+        card = {
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "body": [
+                {"type": "TextBlock", "text": "Add Note", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "Input.ChoiceSet",
+                    "id": "app_id",
+                    "label": "Application",
+                    "isRequired": True,
+                    "choices": choices,
+                },
+                {
+                    "type": "Input.Text",
+                    "id": "note",
+                    "label": "Note",
+                    "isMultiline": True,
+                    "isRequired": True,
+                    "errorMessage": "Note is required",
+                    "placeholder": "e.g. Spoke with recruiter — next step is HM interview",
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Add Note", "data": {"action": "track_note_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_track_delete(self, ctx: TurnContext, user: dict):
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
+            return
+
+        if not apps:
+            await ctx.send_activity(MessageFactory.text("No applications found."))
+            return
+
+        choices = [
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
+            for a in apps[:20]
+        ]
+
+        card = {
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "body": [
+                {"type": "TextBlock", "text": "Delete Application", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "color": "Attention",
+                    "text": "⚠️ This will permanently delete the record and all its comments.",
+                },
+                {
+                    "type": "Input.ChoiceSet",
+                    "id": "app_id",
+                    "label": "Application to delete",
+                    "isRequired": True,
+                    "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Continue", "data": {"action": "track_delete_select_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
     async def _cmd_runs(self, ctx: TurnContext, user: dict):
         try:
             runs = await asyncio.to_thread(api_client.get_agent_runs, user_email=user["email"])
@@ -824,12 +970,16 @@ class JobApplyBot(ActivityHandler):
             "- **apply** — Generate resume + ATS resume + cover letter\n"
             "- **aq** — Answer an application question\n"
             "- **prep** — Generate interview prep doc\n"
+            "- **thankyou** — Generate a post-interview thank-you email\n"
             "- **optimize** — Refine existing run documents\n\n"
             "**\U0001f4cb Tracker Commands**\n"
             "- **tracker** — Pipeline summary\n"
             "- **track list** [status] — List applications\n"
             "- **track add** — Add a new application\n"
-            "- **track view** — View application details\n\n"
+            "- **track view** — View application details\n"
+            "- **track update** — Edit an application's status/fields\n"
+            "- **track note** — Add a comment to an application\n"
+            "- **track delete** — Delete an application (two-step confirm)\n\n"
             "**\U0001f511 Account**\n"
             "- **confirm** — Link your Teams identity to a Job Apply account "
             "(offers a sign-in link if none matches your Teams email)\n"
@@ -873,10 +1023,28 @@ class JobApplyBot(ActivityHandler):
             await self._submit_optimize(ctx, data, user)
         elif action == "track_view_submit":
             await self._submit_track_view(ctx, data, user)
+        elif action == "thankyou_select_submit":
+            await self._submit_thankyou_select(ctx, data, user)
+        elif action == "thankyou_final_submit":
+            await self._submit_thankyou_final(ctx, data, user)
+        elif action == "track_update_select_submit":
+            await self._submit_track_update_select(ctx, data, user)
+        elif action == "track_update_edit_submit":
+            await self._submit_track_update_edit(ctx, data, user)
+        elif action == "track_note_submit":
+            await self._submit_track_note(ctx, data, user)
+        elif action == "track_delete_select_submit":
+            await self._submit_track_delete_select(ctx, data, user)
+        elif action == "track_delete_confirm_submit":
+            await self._submit_track_delete_confirm(ctx, data, user)
+        elif action == "track_delete_cancel_submit":
+            await ctx.send_activity(MessageFactory.text("Cancelled — nothing was deleted."))
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
 
-    # ── Application selection + JD lookup (apply/prep/aq share this) ─────
+    # ── Application selection + JD lookup (apply/prep/aq/thankyou share this) ─
+
+
 
     async def _resolve_app_and_jd(self, app_id: str, user: dict) -> tuple[dict, str | None]:
         """Return (application record, saved job posting text or None).
@@ -1042,6 +1210,52 @@ class JobApplyBot(ActivityHandler):
             "domain": data.get("domain", ""),
             "question": data.get("question", ""), "tone": data.get("tone", "professional"),
             "char_limit": data.get("char_limit"), "job_posting": job_posting,
+        }, user)
+
+    async def _submit_thankyou_select(self, ctx: TurnContext, data: dict, user: dict):
+        app_id      = (data.get("app_id") or "").strip()
+        round_type  = (data.get("round_type") or "").strip()
+        tone        = (data.get("tone") or "professional").strip()
+        interviewer = (data.get("interviewer") or "").strip()
+        topics      = (data.get("topics") or "").strip()
+        if not app_id or not round_type:
+            await ctx.send_activity(MessageFactory.text("❌ Application and interview round are required."))
+            return
+
+        try:
+            app, job_posting = await self._resolve_app_and_jd(app_id, user)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        company = app.get("company", "?")
+        role    = app.get("role_title", "?")
+        domain  = app.get("domain", "")
+        if job_posting:
+            await self._submit_thankyou(ctx, {
+                "app_id": app_id, "company": company, "role": role, "domain": domain,
+                "round_type": round_type, "tone": tone, "interviewer": interviewer,
+                "topics": topics, "job_posting": job_posting,
+            }, user)
+            return
+
+        card = self._jd_paste_card("thankyou_final_submit", {
+            "app_id": app_id, "company": company, "role": role, "domain": domain,
+            "round_type": round_type, "tone": tone, "interviewer": interviewer, "topics": topics,
+        })
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_thankyou_final(self, ctx: TurnContext, data: dict, user: dict):
+        job_posting = (data.get("job_posting") or "").strip()
+        if not job_posting:
+            await ctx.send_activity(MessageFactory.text("❌ Job posting is required."))
+            return
+        await self._submit_thankyou(ctx, {
+            "app_id": data.get("app_id", ""), "company": data.get("company", ""),
+            "role": data.get("role", ""), "domain": data.get("domain", ""),
+            "round_type": data.get("round_type", ""), "tone": data.get("tone", "professional"),
+            "interviewer": data.get("interviewer", ""), "topics": data.get("topics", ""),
+            "job_posting": job_posting,
         }, user)
 
     # ── Long-running agent submissions (threaded) ────────────────────────
@@ -1217,6 +1431,57 @@ class JobApplyBot(ActivityHandler):
                     ],
                 }
                 self._proactive_message(adapter, conv_ref, card=card)
+            elif status["status"] == "timeout":
+                self._proactive_message(adapter, conv_ref, "⚠️ Taking longer than expected.")
+            else:
+                self._proactive_message(
+                    adapter, conv_ref, f"❌ Failed: {status.get('error', 'Unknown error')}"
+                )
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    async def _submit_thankyou(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        company = (data.get("company") or "").strip()
+        role = (data.get("role") or "").strip()
+        round_type = (data.get("round_type") or "").strip()
+        tone = (data.get("tone") or "professional").strip()
+        interviewer = (data.get("interviewer") or "").strip()
+        topics = (data.get("topics") or "").strip()
+        job_posting = (data.get("job_posting") or "").strip()
+
+        if not company or not role or not round_type or not job_posting:
+            await ctx.send_activity(
+                MessageFactory.text("❌ Company, role, interview round, and job posting are required.")
+            )
+            return
+
+        await ctx.send_activity(
+            MessageFactory.text(f"⏳ Generating thank-you email for **{role}** at **{company}** ({round_type})…")
+        )
+
+        conv_ref = TurnContext.get_conversation_reference(ctx.activity)
+        adapter = ctx.adapter
+        user_email = user["email"]
+
+        def _run():
+            try:
+                ty_data = api_client.post_thankyou(
+                    job_posting, company, role, round_type, interviewer, topics, tone,
+                    app_id=app_id or None, user_email=user_email,
+                )
+                ty_id = ty_data["ty_id"]
+                status = api_client.poll_thankyou(ty_id, user_email=user_email)
+            except Exception as exc:
+                self._proactive_message(adapter, conv_ref, f"❌ Error: {exc}")
+                return
+
+            if status["status"] == "done":
+                self._proactive_message(
+                    adapter, conv_ref,
+                    f"✅ **Thank-you email ready** for {role} @ {company} ({round_type})\n\n"
+                    f"Your email and DOCX are in Google Drive.",
+                )
             elif status["status"] == "timeout":
                 self._proactive_message(adapter, conv_ref, "⚠️ Taking longer than expected.")
             else:
@@ -1439,6 +1704,186 @@ class JobApplyBot(ActivityHandler):
             card["actions"] = [{"type": "Action.OpenUrl", "title": "Open Job Posting", "url": url}]
 
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_track_update_select(self, ctx: TurnContext, data: dict, user: dict):
+        """Step 1 of track update -> push a full edit form pre-filled with
+        the current record's values, mirroring slack_bot.py's modal-push."""
+        app_id = (data.get("app_id") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Please select an application."))
+            return
+
+        try:
+            a = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        status_choices = [{"title": s, "value": s} for s in VALID_STATUSES]
+        date_field: dict[str, Any] = {
+            "type": "Input.Date", "id": "date_applied", "label": "Date Applied (optional)",
+        }
+        if a.get("date_applied"):
+            date_field["value"] = a["date_applied"][:10]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "wrap": True, "size": "Large", "weight": "Bolder",
+                    "text": f"Editing {a.get('company', '?')} — {a.get('role_title', '?')}",
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "status", "label": "Status", "isRequired": True,
+                    "errorMessage": "Status is required",
+                    "value": a.get("status", "Researching"), "choices": status_choices,
+                },
+                date_field,
+                {
+                    "type": "Input.Text", "id": "job_source", "label": "Job Source (optional)",
+                    "value": a.get("job_source", ""), "placeholder": "LinkedIn, Indeed, Referral…",
+                },
+                {
+                    "type": "Input.Text", "id": "location", "label": "Location / Remote (optional)",
+                    "value": a.get("location", ""), "placeholder": "Remote, Boston, Hybrid…",
+                },
+                {
+                    "type": "Input.Text", "id": "salary_range", "label": "Salary Range (optional)",
+                    "value": a.get("salary_range", ""), "placeholder": "e.g. $130k – $160k",
+                },
+                {
+                    "type": "Input.Text", "id": "url", "label": "Job Posting URL (optional)",
+                    "value": a.get("url", ""), "placeholder": "https://…",
+                },
+                {
+                    "type": "Input.Toggle", "id": "dua", "title": "Reported to DUA (unemployment)",
+                    "value": "true" if a.get("dua") else "false",
+                },
+                {
+                    "type": "Input.Text", "id": "recruiter_name", "label": "Recruiter Name (optional)",
+                    "value": a.get("recruiter_name", ""), "placeholder": "Jane Smith",
+                },
+                {
+                    "type": "Input.Text", "id": "recruiter_email", "label": "Recruiter Email (optional)",
+                    "value": a.get("recruiter_email", ""), "placeholder": "jane@company.com",
+                },
+                {
+                    "type": "Input.Text", "id": "note", "label": "Add a note (optional)",
+                    "isMultiline": True, "placeholder": "e.g. Got a callback from recruiter",
+                },
+            ],
+            "actions": [
+                {
+                    "type": "Action.Submit", "title": "Save",
+                    "data": {"action": "track_update_edit_submit", "app_id": app_id},
+                },
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_track_update_edit(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Missing application reference."))
+            return
+
+        date_applied = (data.get("date_applied") or "").strip()
+        updates: dict[str, Any] = {
+            "status": data.get("status"),
+            "date_applied": f"{date_applied}T00:00:00Z" if date_applied else None,
+            "job_source": (data.get("job_source") or "").strip() or None,
+            "location": (data.get("location") or "").strip() or None,
+            "salary_range": (data.get("salary_range") or "").strip() or None,
+            "url": (data.get("url") or "").strip() or None,
+            "dua": data.get("dua") == "true",
+            "recruiter_name": (data.get("recruiter_name") or "").strip() or None,
+            "recruiter_email": (data.get("recruiter_email") or "").strip() or None,
+        }
+        # Strip Nones so we don't overwrite fields with null — keep "dua" always
+        # since False is a meaningful value, not "field wasn't provided".
+        updates = {k: v for k, v in updates.items() if v is not None or k == "dua"}
+        note = (data.get("note") or "").strip()
+
+        try:
+            record = await asyncio.to_thread(
+                api_client.update_application, app_id, updates, user_email=user["email"]
+            )
+            if note:
+                await asyncio.to_thread(api_client.add_comment, app_id, note, user_email=user["email"])
+            await ctx.send_activity(MessageFactory.text(
+                f"✅ Updated **{record.get('role_title')}** at **{record.get('company')}** "
+                f"→ **{updates.get('status', record.get('status'))}**"
+                + (f"\n> {note}" if note else "")
+            ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to update: {exc}"))
+
+    async def _submit_track_note(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        note = (data.get("note") or "").strip()
+        if not app_id or not note:
+            await ctx.send_activity(MessageFactory.text("❌ Application and note are required."))
+            return
+
+        try:
+            record = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
+            await asyncio.to_thread(api_client.add_comment, app_id, note, user_email=user["email"])
+            await ctx.send_activity(MessageFactory.text(
+                f"✅ Note added to **{record.get('role_title')}** at **{record.get('company')}**\n> {note}"
+            ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to add note: {exc}"))
+
+    async def _submit_track_delete_select(self, ctx: TurnContext, data: dict, user: dict):
+        """Step 1 of track delete -> show a confirmation card before deleting."""
+        app_id = (data.get("app_id") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Please select an application."))
+            return
+
+        try:
+            a = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        label = f"{a.get('company', '?')} — {a.get('role_title', '?')}"
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "wrap": True, "color": "Attention",
+                    "text": f"⚠️ Are you sure you want to permanently delete **{label}**?\n\nThis cannot be undone.",
+                },
+            ],
+            "actions": [
+                {
+                    "type": "Action.Submit", "title": "Delete", "style": "destructive",
+                    "data": {"action": "track_delete_confirm_submit", "app_id": app_id},
+                },
+                {"type": "Action.Submit", "title": "Cancel", "data": {"action": "track_delete_cancel_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_track_delete_confirm(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Missing application reference."))
+            return
+
+        try:
+            record = await asyncio.to_thread(api_client.get_application, app_id, user_email=user["email"])
+            await asyncio.to_thread(api_client.delete_application, app_id, user_email=user["email"])
+            await ctx.send_activity(MessageFactory.text(
+                f"🗑️ Deleted **{record.get('role_title')}** at **{record.get('company')}**."
+            ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to delete: {exc}"))
 
     # ── Proactive messaging helper ───────────────────────────────────────
 

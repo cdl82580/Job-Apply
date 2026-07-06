@@ -1,0 +1,83 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Thank-You Email",
+      "size": "Large",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Generate a post-interview thank-you email for a tracked application.",
+      "wrap": true,
+      "spacing": "None",
+      "isSubtle": true
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "app_id",
+      "label": "Application",
+      "style": "filtered",
+      "isRequired": true,
+      "errorMessage": "Select an application",
+      "placeholder": "Search your tracked applications…",
+      "choices": [],
+      "choices.data": {
+        "type": "Data.Query",
+        "dataset": "myApplications"
+      }
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "round_type",
+      "label": "Interview round",
+      "isRequired": true,
+      "errorMessage": "Interview round is required",
+      "value": "Hiring Manager",
+      "choices": [
+        { "title": "Phone Screen", "value": "Phone Screen" },
+        { "title": "Hiring Manager", "value": "Hiring Manager" },
+        { "title": "Peer", "value": "Peer" },
+        { "title": "Technical", "value": "Technical" },
+        { "title": "Executive", "value": "Executive" },
+        { "title": "Panel", "value": "Panel" }
+      ]
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "tone",
+      "label": "Tone",
+      "value": "professional",
+      "choices": [
+        { "title": "Professional", "value": "professional" },
+        { "title": "Conversational", "value": "conversational" },
+        { "title": "Concise", "value": "concise" }
+      ]
+    },
+    {
+      "type": "Input.Text",
+      "id": "interviewer",
+      "label": "Interviewer name(s) (optional)",
+      "placeholder": "Sarah Chen, VP Engineering"
+    },
+    {
+      "type": "Input.Text",
+      "id": "topics",
+      "label": "Key topics discussed (optional)",
+      "isMultiline": true,
+      "placeholder": "e.g. MCP integration roadmap, scaling connectors, team culture"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "Continue",
+      "data": {
+        "action": "thankyou_select_submit"
+      }
+    }
+  ]
+}

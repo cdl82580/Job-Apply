@@ -225,11 +225,15 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 | 🤖 Agent | `apply` | Generate resume + ATS resume + cover letter |
 | 🤖 Agent | `aq` | Answer an application question |
 | 🤖 Agent | `prep` | Generate interview prep doc |
+| 🤖 Agent | `thankyou` | Generate a post-interview thank-you email |
 | 🤖 Agent | `optimize` | Refine existing run documents |
 | 📋 Tracker | `tracker` | Pipeline summary |
 | 📋 Tracker | `track list [status]` | List applications |
 | 📋 Tracker | `track add` | Add a new application |
 | 📋 Tracker | `track view` | View application details |
+| 📋 Tracker | `track update` | Two-step: pick app → edit all fields pre-filled |
+| 📋 Tracker | `track note` | Add a comment to an application |
+| 📋 Tracker | `track delete` | Delete an application (two-step confirm) |
 | 🔑 Account | `confirm` | Link your Teams identity to a Job Apply account |
 | 🔑 Account | `whoami` | Show which account you're linked as |
 | 🔑 Account | `unlink` | Remove your Teams identity's link |
@@ -247,10 +251,10 @@ required). Every subsequent API call the bot makes on that user's behalf carries
 `X-Teams-User-Email` header so `api.py:_bot_user()` resolves that specific account
 instead of the shared primary account the Slack bot uses.
 
-**`apply`/`prep`/`aq` only run against a tracked application** — there's no
-free-text company/role entry. Each form's "Application" field is an Adaptive
-Card dynamic typeahead searching the caller's own tracked applications, backed
-by an `application/search` invoke handler
+**`apply`/`prep`/`aq`/`thankyou` only run against a tracked application** —
+there's no free-text company/role entry. Each form's "Application" field is
+an Adaptive Card dynamic typeahead searching the caller's own tracked
+applications, backed by an `application/search` invoke handler
 (`teams_bot/bot.py:_search_my_applications`) since the Bot Framework Python SDK
 doesn't dispatch that invoke name itself. Teams' dynamic-search response
 schema only supports `{title, value}` per result (no icon/image field), so
@@ -260,6 +264,14 @@ the application picks up a saved `job_description.md` from the application's
 most recently linked Drive folder automatically if one exists; otherwise a
 follow-up card asks the user to paste the job posting once, and that gets
 used for the run.
+
+**`track update`/`track note`/`track delete`** mirror the Slack modal flows:
+`track update` is two steps (pick an application, then edit a form pre-filled
+from the current record — status, date applied, job source, location, salary,
+URL, DUA flag, recruiter, plus an optional note) via `PUT /api/applications/{id}`;
+`track note` posts a comment via `POST /api/applications/{id}/comments`; `track
+delete` shows a destructive-styled confirm card before calling
+`DELETE /api/applications/{id}`.
 
 ---
 
