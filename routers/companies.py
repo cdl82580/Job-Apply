@@ -2,8 +2,11 @@
 routers/companies.py — Logo.dev company search proxy.
 
 GET /api/companies/search?q=salesforce
-Returns up to 5 matches: [{name, domain, description}]
-Logo URLs are constructed client-side from domain using the pk_ CDN token.
+Returns up to 5 matches: [{name, domain, description, logo_url}]
+logo_url is pre-built server-side with the public CDN token (same key
+api.py/notif_dispatch.py use for rendered logo <img> tags) so callers —
+including the Teams bot's typeahead search — don't need their own copy
+of the token.
 """
 
 from __future__ import annotations
@@ -15,8 +18,9 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
-_LOGODEV_KEY    = os.environ.get("LOGODEV_API_KEY", "")
-_LOGODEV_SEARCH = "https://api.logo.dev/search"
+_LOGODEV_KEY     = os.environ.get("LOGODEV_API_KEY", "")
+_LOGODEV_PUB_KEY = os.environ.get("LOGODEV_PUBLIC_KEY") or _LOGODEV_KEY
+_LOGODEV_SEARCH  = "https://api.logo.dev/search"
 
 
 @router.get("/search")
@@ -39,10 +43,16 @@ async def search_companies(q: str = Query(..., min_length=1)):
 
     results = []
     for item in raw[:5]:
+        domain = item.get("domain", "")
+        logo_url = (
+            f"https://img.logo.dev/{domain}?token={_LOGODEV_PUB_KEY}&size=64"
+            if domain and _LOGODEV_PUB_KEY else ""
+        )
         results.append({
             "name":        item.get("name", ""),
-            "domain":      item.get("domain", ""),
+            "domain":      domain,
             "description": item.get("description", ""),
+            "logo_url":    logo_url,
         })
 
     return results

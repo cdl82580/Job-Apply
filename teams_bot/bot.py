@@ -39,7 +39,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from botbuilder.core import ActivityHandler, CardFactory, MessageFactory, TurnContext
+from botbuilder.core import ActivityHandler, CardFactory, InvokeResponse, MessageFactory, TurnContext
 from botbuilder.core.teams import TeamsInfo
 from botbuilder.schema import (
     Activity,
@@ -111,6 +111,43 @@ class JobApplyBot(ActivityHandler):
                     "Type **help** to see available commands."
                 )
                 await turn_context.send_activity(MessageFactory.text(welcome))
+
+    async def on_invoke_activity(self, turn_context: TurnContext):
+        # Adaptive Card dynamic typeahead search (track_add_form's "company"
+        # field) — not covered by the base SDK's invoke dispatch, so it's
+        # intercepted here rather than via an on_teams_* override.
+        if turn_context.activity.name == "application/search":
+            return await self._handle_company_search(turn_context)
+        return await super().on_invoke_activity(turn_context)
+
+    async def _handle_company_search(self, turn_context: TurnContext):
+        value = turn_context.activity.value or {}
+        query = (value.get("queryText") or "").strip()
+
+        results = []
+        if len(query) >= 2:
+            try:
+                companies = await asyncio.to_thread(api_client.search_companies, query)
+            except Exception:
+                companies = []
+            for c in companies[:8]:
+                name = c.get("name", "?")
+                domain = c.get("domain", "")
+                title = f"{name} ({domain})" if domain else name
+                item = {"title": title[:75], "value": f"{name}|||{domain}"[:250]}
+                if c.get("logo_url"):
+                    item["icon"] = c["logo_url"]
+                results.append(item)
+
+        # Not using self._create_invoke_response() here — it runs the body through
+        # the SDK's msrest serializer, which expects a typed Model, not a plain dict.
+        return InvokeResponse(
+            status=200,
+            body={
+                "type": "application/vnd.microsoft.search.searchResponse",
+                "value": {"results": results},
+            },
+        )
 
     async def on_message_activity(self, turn_context: TurnContext):
         text = (turn_context.activity.text or "").strip().lower()
@@ -951,7 +988,15 @@ class JobApplyBot(ActivityHandler):
     # ── Instant card submissions ─────────────────────────────────────────
 
     async def _submit_track_add(self, ctx: TurnContext, data: dict, user: dict):
-        company = (data.get("company") or "").strip()
+        # Company comes from the "company" typeahead (see _handle_company_search):
+        # its value is "Name|||domain" when a search result was picked, or just
+        # freeform text if the user typed something the search never matched.
+        company_raw = (data.get("company") or "").strip()
+        if "|||" in company_raw:
+            company, domain = company_raw.split("|||", 1)
+        else:
+            company, domain = company_raw, ""
+
         role = (data.get("role") or "").strip()
         status_val = (data.get("status") or "Researching").strip()
 
@@ -964,6 +1009,8 @@ class JobApplyBot(ActivityHandler):
             "role_title": role,
             "status": status_val,
         }
+        if domain:
+            payload["domain"] = domain
         for field in ("url", "location", "salary_range", "note"):
             val = (data.get(field) or "").strip()
             if val:

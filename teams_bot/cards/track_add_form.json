@@ -10,12 +10,18 @@
       "weight": "Bolder"
     },
     {
-      "type": "Input.Text",
+      "type": "Input.ChoiceSet",
       "id": "company",
-      "label": "Company name",
-      "placeholder": "Acme Corp",
+      "label": "Company",
+      "style": "filtered",
       "isRequired": true,
-      "errorMessage": "Company name is required"
+      "errorMessage": "Select a company",
+      "placeholder": "Start typing a company name…",
+      "choices": [],
+      "choices.data": {
+        "type": "Data.Query",
+        "dataset": "companySearch"
+      }
     },
     {
       "type": "Input.Text",

@@ -144,6 +144,15 @@ def poll_aq(aq_id: str, timeout: int = 300, user_email: str | None = None) -> di
     return {"status": "timeout", "error": "Timed out waiting for answer to complete"}
 
 
+# ── Company search (track add typeahead) ─────────────────────────────────
+
+def search_companies(query: str) -> list[dict]:
+    """[{name, domain, description, logo_url}] — public endpoint, no auth needed."""
+    r = _api("get", "/api/companies/search", params={"q": query})
+    r.raise_for_status()
+    return r.json()
+
+
 # ── Tracker ──────────────────────────────────────────────────────────────
 
 def get_applications(status: str | None = None, user_email: str | None = None) -> list[dict]:
