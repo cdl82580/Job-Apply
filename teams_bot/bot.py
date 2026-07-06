@@ -35,6 +35,7 @@ import asyncio
 import json
 import os
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -298,9 +299,60 @@ class JobApplyBot(ActivityHandler):
         ))
 
     async def _cmd_whoami(self, turn_context: TurnContext, user: dict):
-        await turn_context.send_activity(
-            MessageFactory.text(f"You're linked as **{user['email']}**.")
-        )
+        try:
+            profile = await asyncio.to_thread(api_client.get_profile, user_email=user["email"])
+        except Exception as exc:
+            await turn_context.send_activity(MessageFactory.text(
+                f"You're linked as **{user['email']}**, but couldn't load full profile details: {exc}"
+            ))
+            return
+
+        link = None
+        aad_object_id = self._aad_object_id(turn_context)
+        if aad_object_id:
+            try:
+                link = await asyncio.to_thread(api_client.teams_link_status, aad_object_id)
+            except Exception:
+                link = None
+
+        email = profile.get("email", user["email"])
+        display_name = profile.get("display_name") or email.split("@")[0]
+        role = profile.get("role", "user")
+        verified = profile.get("email_verified", True)
+        has_resume = profile.get("has_resume", False)
+        resume_filename = profile.get("resume_filename")
+        has_profile_guide = bool((profile.get("profile_text") or "").strip())
+
+        resume_value = "❌ Not uploaded"
+        if has_resume:
+            resume_value = f"✅ {resume_filename}" if resume_filename else "✅ Uploaded"
+
+        facts = [
+            {"title": "Name", "value": display_name},
+            {"title": "Email", "value": email},
+            {"title": "Role", "value": role.capitalize()},
+            {"title": "Email Verified", "value": "✅ Yes" if verified else "❌ No"},
+            {"title": "Master Resume", "value": resume_value},
+            {"title": "Profile Guide", "value": "✅ Yes" if has_profile_guide else "❌ Not set"},
+        ]
+        if link and link.get("expires_at"):
+            expires_str = datetime.fromtimestamp(link["expires_at"]).strftime("%Y-%m-%d")
+            facts.append({"title": "Teams Link Expires", "value": expires_str})
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "text": f"\U0001f464 {display_name}",
+                    "size": "Large", "weight": "Bolder", "wrap": True,
+                },
+                {"type": "TextBlock", "text": "Linked Job Apply account", "isSubtle": True, "spacing": "None"},
+                {"type": "FactSet", "facts": facts, "spacing": "Medium"},
+            ],
+        }
+        await turn_context.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     async def _cmd_unlink(self, turn_context: TurnContext):
         aad_object_id = self._aad_object_id(turn_context)
