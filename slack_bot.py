@@ -131,6 +131,35 @@ def _logo_element(domain: str, alt_text: str = "", size: int = 24) -> dict | Non
     return {"type": "image", "image_url": url, "alt_text": alt_text or "logo"}
 
 
+def _completion_blocks(title: str, company: str, role: str, domain: str, detail: str) -> list[dict]:
+    """Header + logo/company-role row + detail text — the Slack analogue of
+    the Teams Adaptive Card completion cards (bot.py's _submit_apply etc.):
+    a bold title, the company (with logo when known) and role right below
+    it, then whatever detail text the specific command wants to show."""
+    subtitle_elements = []
+    logo_el = _logo_element(domain, alt_text=company)
+    if logo_el:
+        subtitle_elements.append(logo_el)
+    subtitle_elements.append({"type": "mrkdwn", "text": f"{company} — {role}"})
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{title}*"}},
+        {"type": "context", "elements": subtitle_elements},
+        {"type": "section", "text": {"type": "mrkdwn", "text": detail}},
+    ]
+
+
+def _fields_blocks(title: str, pairs: list[tuple[str, str]]) -> list[dict]:
+    """Header + a Block Kit 'fields' 2-column grid — the Slack analogue of
+    an Adaptive Card FactSet (used by /tracker, /whoami)."""
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{title}*"}},
+        {
+            "type": "section",
+            "fields": [{"type": "mrkdwn", "text": f"*{label}*\n{value}"} for label, value in pairs],
+        },
+    ]
+
+
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
 # ---------------------------------------------------------------------------
@@ -422,18 +451,18 @@ def tracker_command(ack, respond):
         if s in counts:
             counts[s] += 1
 
-    lines = []
-    for status in VALID_STATUSES:
-        n = counts[status]
-        if n:
-            lines.append(f"{STATUS_EMOJI[status]} *{status}:* {n}")
-
-    text = (
-        f":bar_chart: *Application Pipeline* ({len(apps)} total)\n"
-        + "\n".join(lines)
-        + f"\n\n<{TRACKER_URL}|Open Tracker →>"
-    )
-    respond(text)
+    pairs = [
+        (f"{STATUS_EMOJI[status]} {status}", str(n))
+        for status in VALID_STATUSES
+        if (n := counts[status])
+    ]
+    header = f":bar_chart: Application Pipeline ({len(apps)} total)"
+    blocks = _fields_blocks(header, pairs)
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": f"<{TRACKER_URL}|Open Tracker →>"}],
+    })
+    respond(blocks=blocks, text=header)
 
 
 # ---------------------------------------------------------------------------
@@ -1170,7 +1199,8 @@ def track_delete_confirm_submit(ack, body, client, view):
 # /apply — generate resume + cover letter
 # ---------------------------------------------------------------------------
 
-def _start_apply_run(channel: str, client, company: str, role: str, contact: str, job_posting: str) -> None:
+def _start_apply_run(channel: str, client, company: str, role: str, contact: str,
+                      job_posting: str, domain: str = "") -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1187,11 +1217,12 @@ def _start_apply_run(channel: str, client, company: str, role: str, contact: str
         if status["status"] == "done":
             client.chat_postMessage(
                 channel=channel,
-                text=(
-                    f":white_check_mark: *{role} @ {company}* — done!\n"
-                    f"Resume, ATS resume, and cover letter are in your Google Drive.\n"
-                    f"<{API_BASE}|Open the app> to download the files."
+                blocks=_completion_blocks(
+                    ":white_check_mark: Done!", company, role, domain,
+                    "Resume, ATS resume, and cover letter are in your Google Drive.\n"
+                    f"<{API_BASE}|Open the app> to download the files.",
                 ),
+                text=f"{role} @ {company} — done!",
             )
         elif status["status"] == "timeout":
             client.chat_postMessage(
@@ -1262,14 +1293,15 @@ def apply_select_view_submit(ack, body, client, view):
 
     company     = record.get("company", "?")
     role        = record.get("role_title", "?")
+    domain      = record.get("domain", "")
     job_posting = _get_saved_job_posting(record)
 
     if job_posting:
         ack()
-        _start_apply_run(channel, client, company, role, contact, job_posting)
+        _start_apply_run(channel, client, company, role, contact, job_posting, domain)
         return
 
-    metadata = json.dumps({"company": company, "role": role, "contact": contact})
+    metadata = json.dumps({"company": company, "role": role, "contact": contact, "domain": domain})
     ack(response_action="update", view=_jd_paste_view("apply_final_submit", metadata))
 
 
@@ -1281,7 +1313,7 @@ def apply_final_view_submit(ack, body, client, view):
     channel     = body["user"]["id"]
     _start_apply_run(
         channel, client, meta.get("company", ""), meta.get("role", ""),
-        meta.get("contact", ""), job_posting,
+        meta.get("contact", ""), job_posting, meta.get("domain", ""),
     )
 
 
@@ -1304,7 +1336,7 @@ def apply_view_submit(ack, body, client, view):
 # ---------------------------------------------------------------------------
 
 def _start_prep_run(channel: str, client, company: str, role: str, round_type: str,
-                     interviewer: str, focus: str, job_posting: str) -> None:
+                     interviewer: str, focus: str, job_posting: str, domain: str = "") -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1321,11 +1353,12 @@ def _start_prep_run(channel: str, client, company: str, role: str, round_type: s
         if status["status"] == "done":
             client.chat_postMessage(
                 channel=channel,
-                text=(
-                    f":white_check_mark: *{round_type.replace('_', ' ').title()} prep* for *{role} @ {company}* — done!\n"
-                    f"Your prep card is in Google Drive.\n"
-                    f"<{API_BASE}|Open the app> to download it."
+                blocks=_completion_blocks(
+                    f":white_check_mark: {round_type.replace('_', ' ').title()} prep ready!", company, role, domain,
+                    "Your prep card is in Google Drive.\n"
+                    f"<{API_BASE}|Open the app> to download it.",
                 ),
+                text=f"{round_type.replace('_', ' ').title()} prep for {role} @ {company} — done!",
             )
         elif status["status"] == "timeout":
             client.chat_postMessage(
@@ -1421,15 +1454,16 @@ def prep_select_view_submit(ack, body, client, view):
 
     company     = record.get("company", "?")
     role        = record.get("role_title", "?")
+    domain      = record.get("domain", "")
     job_posting = _get_saved_job_posting(record)
 
     if job_posting:
         ack()
-        _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting)
+        _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting, domain)
         return
 
     metadata = json.dumps({
-        "company": company, "role": role,
+        "company": company, "role": role, "domain": domain,
         "round_type": round_type, "interviewer": interviewer, "focus": focus,
     })
     ack(response_action="update", view=_jd_paste_view("prep_final_submit", metadata))
@@ -1444,6 +1478,7 @@ def prep_final_view_submit(ack, body, client, view):
     _start_prep_run(
         channel, client, meta.get("company", ""), meta.get("role", ""),
         meta.get("round_type", ""), meta.get("interviewer", ""), meta.get("focus", ""), job_posting,
+        meta.get("domain", ""),
     )
 
 
@@ -1470,7 +1505,7 @@ def prep_view_submit(ack, body, client, view):
 # ---------------------------------------------------------------------------
 
 def _start_aq_run(channel: str, client, company: str, role: str, question: str,
-                   tone: str, char_limit: int | None, job_posting: str) -> None:
+                   tone: str, char_limit: int | None, job_posting: str, domain: str = "") -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1496,10 +1531,11 @@ def _start_aq_run(channel: str, client, company: str, role: str, question: str,
             # The answer text isn't in /status, so we direct users to the app.
             client.chat_postMessage(
                 channel=channel,
-                text=(
-                    f":white_check_mark: *Application question answered* for *{role} @ {company}*\n"
-                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy your answer."
+                blocks=_completion_blocks(
+                    ":white_check_mark: Application Question Answered", company, role, domain,
+                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy your answer.",
                 ),
+                text=f"Application question answered for {role} @ {company}",
             )
         elif status["status"] == "timeout":
             client.chat_postMessage(
@@ -1597,15 +1633,16 @@ def aq_select_view_submit(ack, body, client, view):
 
     company     = record.get("company", "?")
     role        = record.get("role_title", "?")
+    domain      = record.get("domain", "")
     job_posting = _get_saved_job_posting(record)
 
     if job_posting:
         ack()
-        _start_aq_run(channel, client, company, role, question, tone, char_limit, job_posting)
+        _start_aq_run(channel, client, company, role, question, tone, char_limit, job_posting, domain)
         return
 
     metadata = json.dumps({
-        "company": company, "role": role, "question": question,
+        "company": company, "role": role, "domain": domain, "question": question,
         "tone": tone, "char_limit": char_limit,
     })
     ack(response_action="update", view=_jd_paste_view("aq_final_submit", metadata))
@@ -1620,6 +1657,7 @@ def aq_final_view_submit(ack, body, client, view):
     _start_aq_run(
         channel, client, meta.get("company", ""), meta.get("role", ""),
         meta.get("question", ""), meta.get("tone", "professional"), meta.get("char_limit"), job_posting,
+        meta.get("domain", ""),
     )
 
 
@@ -1761,11 +1799,12 @@ def thankyou_view_submit(ack, body, client, view):
         if status["status"] == "done":
             client.chat_postMessage(
                 channel=channel,
-                text=(
-                    f":white_check_mark: *Thank-you email ready* for *{role} @ {company}* ({round_type})\n"
-                    f"Your email and DOCX are in Google Drive.\n"
-                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy."
+                blocks=_completion_blocks(
+                    f":white_check_mark: Thank-You Email Ready ({round_type})", company, role, "",
+                    "Your email and DOCX are in Google Drive.\n"
+                    f"Open <{API_BASE}/agents.html|the app> to view, edit, and copy.",
                 ),
+                text=f"Thank-you email ready for {role} @ {company}",
             )
         elif status["status"] == "timeout":
             client.chat_postMessage(
@@ -1796,14 +1835,15 @@ def me_command(ack, respond):
         respond(f":x: Could not load account: {exc}")
         return
 
-    verified = ":white_check_mark: Verified" if u.get("email_verified", True) else ":x: Not verified"
-    respond(
-        f":bust_in_silhouette: *{u.get('display_name') or u.get('email')}*\n"
-        f"• Email: `{u.get('email')}`  ·  {verified}\n"
-        f"• Role: `{u.get('role', 'user')}`\n"
-        f"• Resume on file: {'✓' if u.get('has_resume') else '—'}  ·  "
-        f"Profile guide: {'✓' if u.get('has_profile') else '—'}"
-    )
+    header = f":bust_in_silhouette: {u.get('display_name') or u.get('email')}"
+    pairs = [
+        ("Email", u.get("email", "?")),
+        ("Role", u.get("role", "user").capitalize()),
+        ("Email Verified", "✅ Yes" if u.get("email_verified", True) else "❌ No"),
+        ("Master Resume", "✅ Uploaded" if u.get("has_resume") else "❌ Not uploaded"),
+        ("Profile Guide", "✅ Yes" if u.get("has_profile") else "❌ Not set"),
+    ]
+    respond(blocks=_fields_blocks(header, pairs), text=header)
 
 
 # ---------------------------------------------------------------------------
@@ -2270,11 +2310,12 @@ def optimize_view_submit(ack, body, client, view):
         if status["status"] == "done":
             client.chat_postMessage(
                 channel=channel,
-                text=(
-                    f":white_check_mark: *{role} @ {company}* — optimization complete!\n"
-                    f"Updated documents are in your Google Drive run folder.\n"
-                    f"<{API_BASE}|Open the app> to download the files."
+                blocks=_completion_blocks(
+                    ":white_check_mark: Optimization Complete!", company, role, record.get("domain", ""),
+                    "Updated documents are in your Google Drive run folder.\n"
+                    f"<{API_BASE}|Open the app> to download the files.",
                 ),
+                text=f"{role} @ {company} — optimization complete!",
             )
         elif status["status"] == "timeout":
             client.chat_postMessage(
@@ -2372,11 +2413,17 @@ def rescore_view_submit(ack, body, client, view):
         summary  = result.get("summary", "")
         emoji    = ":large_green_circle:" if category == "strong" else (
                    ":large_yellow_circle:" if category == "good" else ":red_circle:")
-        text = (
-            f"{emoji} *{company} · {role}* — match score: *{score}/100* ({category})"
-            + (f"\n_{summary}_" if summary else "")
+
+        blocks = _fields_blocks(
+            f"{emoji} Match Score", [("Score", f"{score}/100"), ("Category", str(category).capitalize())],
         )
-        client.chat_postMessage(channel=channel, text=text)
+        logo_el = _logo_element(record.get("domain", ""), alt_text=company)
+        subtitle = ([logo_el] if logo_el else []) + [{"type": "mrkdwn", "text": f"{company} — {role}"}]
+        blocks.insert(1, {"type": "context", "elements": subtitle})
+        if summary:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"_{summary}_"}})
+
+        client.chat_postMessage(channel=channel, blocks=blocks, text=f"{company} · {role} — score {score}/100")
 
     threading.Thread(target=_run, daemon=True).start()
 
