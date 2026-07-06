@@ -443,6 +443,8 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/teams/link-status` | bot key | Has this Teams identity (`aad_object_id`) been linked to a Job Apply account? |
 | POST | `/api/teams/account-lookup` | bot key | Does a Job Apply account exist for this email? |
 | POST | `/api/teams/link-confirm` | bot key | Link a Teams identity to the account for this email (404 if no such account) |
+| POST | `/api/teams/link-token` | bot key | Issue a short-lived token for `/teams-link.html` — lets a user with no account under their Teams email sign in (password or Google) to link an existing account under a different one |
+| POST | `/api/teams/link-claim` | cookie | Claim a `link-token` for whichever account the caller is currently signed in as (called by `/teams-link.html` after login) |
 | POST | `/api/teams/unlink` | bot key | Remove a Teams identity's link |
 | GET | `/api/agent-runs` | cookie | List structured agent run records for the current user (type, status, timing, Drive links) |
 | GET | `/api/gdrive/runs` | cookie | List Drive run folders |

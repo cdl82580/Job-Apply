@@ -22,6 +22,11 @@ linked-or-not-yet-linked user runs any command other than help/confirm/unlink,
 _resolve_user() checks the link, and if missing/expired, looks up the caller's
 email via the Teams roster API and offers to link it. Links expire after
 LINK_DAYS (scripts/teams_links.py) and must be re-confirmed.
+
+If no Job Apply account matches the Teams email, _offer_manual_link() sends a
+sign-in card (see scripts/teams_link_tokens.py + frontend/teams-link.html)
+so the user can link an existing account under a different email instead —
+password or Google, whichever they used to originally register.
 """
 
 from __future__ import annotations
@@ -211,9 +216,7 @@ class JobApplyBot(ActivityHandler):
             return None
 
         if not lookup.get("exists"):
-            await turn_context.send_activity(MessageFactory.text(
-                f"❌ I don't have a Job Apply account for **{email}**. I can't help you."
-            ))
+            await self._offer_manual_link(turn_context, aad_object_id, email)
             return None
 
         await turn_context.send_activity(MessageFactory.text(
@@ -221,6 +224,30 @@ class JobApplyBot(ActivityHandler):
             f"Reply **confirm** to let me act on your behalf."
         ))
         return None
+
+    async def _offer_manual_link(self, turn_context: TurnContext, aad_object_id: str, email: str):
+        """Teams email has no matching account — offer a sign-in link so the
+        user can associate an existing Job Apply account under a different
+        email (password or Google), instead of dead-ending here."""
+        try:
+            token = await asyncio.to_thread(api_client.teams_link_token, aad_object_id, email)
+        except Exception as exc:
+            await turn_context.send_activity(MessageFactory.text(
+                f"❌ I don't have a Job Apply account for {email}, "
+                f"and couldn't generate a sign-in link ({exc})."
+            ))
+            return
+
+        link_url = f"{api_client.Config.API_BASE}/teams-link.html?token={token}"
+        card = HeroCard(
+            text=(
+                f"I don't have a Job Apply account for {email}. If you already have an "
+                "account under a different email, sign in below to link it "
+                "(this link expires in 15 minutes)."
+            ),
+            buttons=[CardAction(type="openUrl", title="Sign in to link account", value=link_url)],
+        )
+        await turn_context.send_activity(MessageFactory.attachment(CardFactory.hero_card(card)))
 
     async def _cmd_confirm(self, turn_context: TurnContext):
         aad_object_id = self._aad_object_id(turn_context)
@@ -251,9 +278,7 @@ class JobApplyBot(ActivityHandler):
             return
 
         if not result.get("linked"):
-            await turn_context.send_activity(MessageFactory.text(
-                f"❌ I don't have a Job Apply account for **{email}**."
-            ))
+            await self._offer_manual_link(turn_context, aad_object_id, email)
             return
 
         await turn_context.send_activity(MessageFactory.text(
@@ -509,7 +534,8 @@ class JobApplyBot(ActivityHandler):
             "- **track add** — Add a new application\n"
             "- **track view** — View application details\n\n"
             "**\U0001f511 Account**\n"
-            "- **confirm** — Link your Teams identity to a Job Apply account\n"
+            "- **confirm** — Link your Teams identity to a Job Apply account "
+            "(offers a sign-in link if none matches your Teams email)\n"
             "- **whoami** — Show which account you're linked as\n"
             "- **unlink** — Remove your link\n\n"
             "**\U0001f527 Other**\n"

@@ -101,6 +101,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from scripts import storage
+from scripts import teams_link_tokens
+from scripts import teams_links
 from scripts import user_audit
 from scripts import email_verification as ev
 from scripts import calendar as cal_store
@@ -569,7 +571,7 @@ async def security_headers_middleware(request: Request, call_next):
 
 _PUBLIC_PATHS = frozenset({
     "/", "/login.html", "/register.html", "/kb.html",
-    "/forgot-password.html", "/reset-password.html",
+    "/forgot-password.html", "/reset-password.html", "/teams-link.html",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",
     "/api/auth/verify-email",
@@ -1649,6 +1651,9 @@ class EmailChangeRequest(BaseModel):
     new_email: str
     current_password: str
 
+class TeamsLinkClaimRequest(BaseModel):
+    token: str
+
 _MAX_DISPLAY_NAME_LEN = 100
 _MAX_PROFILE_TEXT_LEN = 50_000
 
@@ -2027,6 +2032,24 @@ async def me(request: Request):
         "has_profile":    bool(storage.get_profile(user_data["user_id"])),
         "model":          _get_active_model(),
     }
+
+
+@app.post("/api/teams/link-claim")
+async def teams_link_claim(body: TeamsLinkClaimRequest, request: Request):
+    """Counterpart to routers/teams.py's POST /api/teams/link-token.
+
+    Called from frontend/teams-link.html after the caller signs in (password
+    or Google) in their own browser session — links whichever account they
+    just authenticated as to the Teams identity named in the token. This is
+    the path for linking a Teams identity to an existing Job Apply account
+    that uses a different email than Teams reports for that user.
+    """
+    user = _require_user(request)
+    data = teams_link_tokens.verify_token(body.token)
+    if not data:
+        raise HTTPException(400, "This link has expired. Go back to Teams and type confirm again.")
+    teams_links.save_link(data["aad_object_id"], user["user_id"], user["email"])
+    return {"ok": True, "email": user["email"]}
 
 # ---------------------------------------------------------------------------
 # Profile endpoints

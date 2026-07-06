@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Teams Account - Job Apply</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --primary:      #1A3C5E;
+      --border:       #2B6CB0;
+      --fill:         #EEF4FB;
+      --text:         #111827;
+      --muted:        #6B7280;
+      --error:        #DC2626;
+      --bg-page:      #F9FAFB;
+      --bg-card:      #FFFFFF;
+      --card-border:  #E5E7EB;
+      --input-bg:     #FFFFFF;
+      --input-border: #D1D5DB;
+    }
+
+    [data-theme="dark"] { color-scheme: dark;
+      --primary:      #A5B4FC;
+      --border:       #6366F1;
+      --fill:         #1A1A2E;
+      --text:         #F0F0F5;
+      --muted:        #94A3B8;
+      --error:        #F87171;
+      --bg-page:      #0A0A0A;
+      --bg-card:      #111111;
+      --card-border:  #1E1E1E;
+      --input-bg:     #161616;
+      --input-border: #2B2B2B;
+    }
+
+    html { background: #F9FAFB; }
+    html[data-theme="dark"] { color-scheme: dark; background: #0A0A0A; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-page); color: var(--text);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 1rem; transition: background .2s, color .2s;
+    }
+
+    .card {
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 10px; padding: 2rem; width: 100%; max-width: 400px;
+      transition: background .2s, border-color .2s;
+    }
+
+    .logo-wrap { display: flex; align-items: center; gap: .75rem; margin-bottom: .25rem; }
+    .logo-img  { width: 36px; height: 36px; }
+    .sub  { font-size: .875rem; color: var(--muted); margin-bottom: 1.75rem; margin-top: .2rem; }
+
+    .field { margin-bottom: 1rem; }
+    label  { display: block; font-weight: 600; font-size: .825rem; margin-bottom: .3rem; }
+
+    input {
+      width: 100%; padding: .5rem .75rem;
+      border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: .9rem; font-family: inherit;
+      background: var(--input-bg); color: var(--text);
+      transition: border-color .15s, background .2s, color .2s;
+    }
+    input:focus { outline: none; border-color: var(--border); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+
+    .btn {
+      width: 100%; padding: .625rem;
+      background: var(--primary); color: white;
+      border: none; border-radius: 6px;
+      font-size: .95rem; font-weight: 600;
+      cursor: pointer; margin-top: .5rem;
+      display: flex; align-items: center; justify-content: center; gap: .5rem;
+      transition: filter .15s;
+    }
+    .btn:hover { filter: brightness(1.12); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .err {
+      background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;
+      padding: .625rem .875rem; color: var(--error); font-size: .825rem;
+      margin-bottom: 1rem; display: none;
+    }
+    [data-theme="dark"] .err { background: #2B1010; border-color: #7F1D1D; }
+    .ok {
+      background: #D1FAE5; border: 1px solid #6EE7B7; border-radius: 6px;
+      padding: .625rem .875rem; color: #065F46; font-size: .825rem;
+      margin-bottom: 1rem; display: none;
+    }
+    [data-theme="dark"] .ok { background: #0D2B1E; border-color: #065F46; }
+
+    .footer { text-align: center; margin-top: 1.25rem; font-size: .825rem; color: var(--muted); }
+    .footer a { color: var(--border); text-decoration: none; font-weight: 600; }
+
+    .divider {
+      display: flex; align-items: center; gap: .75rem;
+      margin: 1.25rem 0; color: var(--muted); font-size: .8rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--card-border);
+    }
+
+    .btn-google {
+      width: 100%; padding: .625rem;
+      background: var(--bg-card); color: var(--text);
+      border: 1px solid var(--card-border); border-radius: 6px;
+      font-size: .9rem; font-weight: 500;
+      cursor: pointer; margin-top: .5rem;
+      display: flex; align-items: center; justify-content: center; gap: .625rem;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .btn-google:hover { border-color: var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    .theme-toggle {
+      position: fixed; top: 1rem; right: 1rem;
+      background: var(--bg-card); border: 1px solid var(--card-border);
+      border-radius: 20px; padding: .3rem .65rem;
+      cursor: pointer; font-size: .8rem; color: var(--muted);
+      transition: border-color .15s, color .15s;
+    }
+    .theme-toggle:hover { border-color: var(--border); color: var(--text); }
+
+    .spin {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.4); border-top-color: white;
+      border-radius: 50%; animation: rot .7s linear infinite;
+    }
+    @keyframes rot { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle"><span id="themeIcon"></span></button>
+<div class="card">
+  <div class="logo-wrap">
+    <img class="logo-img" src="/img/logo.png" alt="Logo">
+    <div class="logo">Job Application Agent</div>
+  </div>
+  <div class="sub" id="sub">Sign in to link this Teams account to your Job Apply account.</div>
+
+  <div class="ok"  id="ok"></div>
+  <div class="err" id="err"></div>
+
+  <div id="forms">
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+      </div>
+      <button class="btn" type="submit" id="submitBtn">Sign In &amp; Link</button>
+    </form>
+
+    <div class="divider">or</div>
+    <button class="btn-google" id="googleBtn">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+      Continue with Google
+    </button>
+  </div>
+
+  <div class="footer" id="footer">
+    Don't have a Job Apply account yet? <a href="/register.html">Create one →</a>
+  </div>
+</div>
+<script>
+  const ICONS = { light: '☀', dark: '🌙' };
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('theme', t);
+    document.getElementById('themeIcon').textContent = ICONS[t];
+  }
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  document.getElementById('themeIcon').textContent =
+    ICONS[document.documentElement.getAttribute('data-theme')] || ICONS.light;
+
+  const err = document.getElementById('err');
+  const ok  = document.getElementById('ok');
+  const forms = document.getElementById('forms');
+  const footer = document.getElementById('footer');
+  const sub = document.getElementById('sub');
+
+  function showError(msg) {
+    err.textContent = msg;
+    err.style.display = 'block';
+  }
+
+  function showLinked(email) {
+    ok.textContent = `✓ Linked as ${email}. Go back to Teams and send your command again.`;
+    ok.style.display = 'block';
+    forms.style.display = 'none';
+    footer.style.display = 'none';
+    sub.textContent = '';
+  }
+
+  const token = new URLSearchParams(window.location.search).get('token') || '';
+
+  if (!token) {
+    showError('Missing or invalid link. Ask the bot for a new one by sending confirm in Teams.');
+    forms.style.display = 'none';
+    footer.style.display = 'none';
+  }
+
+  async function claimLink() {
+    try {
+      const res = await fetch('/api/teams/link-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        showError(body.detail ?? 'Could not link your account. Ask the bot for a new link.');
+        return;
+      }
+      showLinked(body.email);
+    } catch {
+      showError('Network error — please try again.');
+    }
+  }
+
+  async function init() {
+    if (!token) return;
+    // If the browser already has a session (e.g. just came back from Google),
+    // claim immediately instead of asking them to sign in again.
+    try {
+      const me = await fetch('/api/auth/me');
+      if (me.ok) {
+        sub.textContent = 'Linking your account…';
+        forms.style.display = 'none';
+        await claimLink();
+      }
+    } catch {
+      // Not logged in — fall through to showing the forms.
+    }
+  }
+  init();
+
+  document.getElementById('googleBtn').addEventListener('click', () => {
+    const returnTo = '/teams-link.html?token=' + encodeURIComponent(token);
+    window.location.href = '/api/auth/google?returnTo=' + encodeURIComponent(returnTo);
+  });
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn  = document.getElementById('submitBtn');
+    const data = Object.fromEntries(new FormData(e.target));
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Signing in…';
+    err.style.display = 'none';
+    try {
+      const res  = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        showError(body.detail ?? 'Sign in failed.');
+        btn.disabled = false;
+        btn.textContent = 'Sign In & Link';
+        return;
+      }
+      await claimLink();
+    } catch {
+      showError('Network error — please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Sign In & Link';
+    }
+  });
+</script>
+</body>
+</html>

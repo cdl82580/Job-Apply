@@ -53,6 +53,15 @@ def teams_unlink(aad_object_id: str) -> None:
     r.raise_for_status()
 
 
+def teams_link_token(aad_object_id: str, teams_email: str) -> str:
+    """Get a short-lived token for the web login-linking flow (teams-link.html)."""
+    r = _api("post", "/api/teams/link-token", json={
+        "aad_object_id": aad_object_id, "teams_email": teams_email,
+    })
+    r.raise_for_status()
+    return r.json()["token"]
+
+
 # ── Agent runs ───────────────────────────────────────────────────────────
 
 def post_run(job_posting: str, company: str, role: str, contact: str = "",

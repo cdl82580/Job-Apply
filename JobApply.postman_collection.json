@@ -1814,6 +1814,46 @@
           }
         },
         {
+          "name": "POST /api/teams/link-token",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/teams/link-token",
+            "description": "Issue a short-lived token for the web login-linking flow (frontend/teams-link.html). Used when the caller's Teams email has no matching Job Apply account, so they can sign in (password or Google) to link an existing account under a different email. Returns {token}.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bot_api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aad_object_id\": \"29:1abc-teams-member-id\",\n  \"teams_email\": \"you@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/teams/link-claim",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/teams/link-claim",
+            "description": "Cookie-authenticated (not bot key). Called by frontend/teams-link.html after the user signs in \u2014 links whichever account they just authenticated as to the Teams identity named in the token from link-token. 400 if the token is missing/expired/already used.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<token from link-token>\"\n}"
+            }
+          }
+        },
+        {
           "name": "POST /api/teams/unlink",
           "request": {
             "method": "POST",

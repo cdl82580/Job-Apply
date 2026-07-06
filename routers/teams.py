@@ -12,12 +12,18 @@ time rather than rewriting it as a package.
   POST /api/teams/link-status    — has this Teams identity been linked to a Job Apply account?
   POST /api/teams/account-lookup — does a Job Apply account exist for this email?
   POST /api/teams/link-confirm   — link a Teams identity to the account for this email
+  POST /api/teams/link-token     — issue a short-lived token for the web login-linking flow
   POST /api/teams/unlink         — remove a Teams identity's link
 
-The four /api/teams/* endpoints below are for the bot's own use (it calls
+The five /api/teams/* endpoints below are for the bot's own use (it calls
 itself over HTTP — see teams_bot/api_client.py) and are gated on the shared
 BOT_API_KEY directly, not on request.state.user: they resolve *other*
 accounts by email, which a normal logged-in session has no business doing.
+
+POST /api/teams/link-claim, the counterpart to link-token, is defined in
+api.py instead (not here) since it authenticates via the caller's own
+session cookie — it needs api.py's _require_user, and api.py already
+imports this router, so importing back would be circular.
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ from botbuilder.schema import Activity
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from scripts import storage, teams_links
+from scripts import storage, teams_link_tokens, teams_links
 from scripts.session import verify_bot_key
 
 _TEAMS_BOT_DIR = str(Path(__file__).resolve().parent.parent / "teams_bot")
@@ -69,6 +75,11 @@ class _UnlinkBody(BaseModel):
     aad_object_id: str
 
 
+class _LinkTokenBody(BaseModel):
+    aad_object_id: str
+    teams_email: str
+
+
 @router.post("/api/teams/link-status")
 async def teams_link_status(body: _LinkStatusBody, request: Request):
     _require_bot(request)
@@ -92,6 +103,17 @@ async def teams_link_confirm(body: _LinkConfirmBody, request: Request):
         raise HTTPException(404, "No Job Apply account for that email")
     teams_links.save_link(body.aad_object_id, user["user_id"], user["email"])
     return {"linked": True, "email": user["email"]}
+
+
+@router.post("/api/teams/link-token")
+async def teams_link_token(body: _LinkTokenBody, request: Request):
+    """Issue a short-lived token the bot can hand the user as a link into
+    /teams-link.html, for when their Teams email has no matching account —
+    they may still have an existing Job Apply account under a different
+    email, so this lets them sign in (password or Google) to claim it."""
+    _require_bot(request)
+    token = teams_link_tokens.create_token(body.aad_object_id, body.teams_email)
+    return {"token": token}
 
 
 @router.post("/api/teams/unlink")
