@@ -275,6 +275,55 @@ def _get_app(app_id: str) -> dict:
     return r.json()
 
 
+def _get_saved_job_posting(record: dict) -> str | None:
+    """Saved job posting text from an application's most recently linked
+    Drive folder, or None if there isn't one yet — same lookup teams_bot/
+    bot.py:_resolve_app_and_jd does. Backs the apply/prep/aq JD-paste fallback."""
+    runs = [r for r in (record.get("linked_runs") or []) if r.get("gdrive_folder_id")]
+    if not runs:
+        return None
+    runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+    folder_id = runs[0]["gdrive_folder_id"]
+    try:
+        r = _api("get", f"/api/gdrive/runs/{folder_id}/job_posting")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json().get("job_posting")
+    except Exception:
+        return None
+
+
+def _jd_paste_view(callback_id: str, private_metadata: str) -> dict:
+    """Follow-up modal asking for the JD text when none is saved yet, carrying
+    forward everything already collected in the first step via private_metadata
+    (Slack's per-modal state-passing string, read back in the *_final handler)."""
+    return {
+        "type": "modal",
+        "callback_id": callback_id,
+        "private_metadata": private_metadata,
+        "title": {"type": "plain_text", "text": "Paste Job Description"},
+        "submit": {"type": "plain_text", "text": "Generate"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "I couldn't find a saved job description for this application yet — paste it below.",
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "job_posting",
+                "label": {"type": "plain_text", "text": "Job posting"},
+                "element": {"type": "plain_text_input", "action_id": "value", "multiline": True,
+                            "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
+            },
+        ],
+    }
+
+
 def _create_app(payload: dict) -> dict:
     r = _api("post", "/api/applications", json=payload)
     r.raise_for_status()
@@ -1121,63 +1170,7 @@ def track_delete_confirm_submit(ack, body, client, view):
 # /apply — generate resume + cover letter
 # ---------------------------------------------------------------------------
 
-@app.command("/apply")
-def apply_command(ack, body, client):
-    ack()
-    client.views_open(
-        trigger_id=body["trigger_id"],
-        view={
-            "type": "modal",
-            "callback_id": "apply_submit",
-            "title": {"type": "plain_text", "text": "Generate Application"},
-            "submit": {"type": "plain_text", "text": "Generate"},
-            "close":  {"type": "plain_text", "text": "Cancel"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "company",
-                    "label": {"type": "plain_text", "text": "Company name"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "role",
-                    "label": {"type": "plain_text", "text": "Role title"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "contact",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Hiring manager name (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Jane Smith"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "job_posting",
-                    "label": {"type": "plain_text", "text": "Job posting (paste full text)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
-                },
-            ],
-        },
-    )
-
-
-@app.view("apply_submit")
-def apply_view_submit(ack, body, client, view):
-    ack()
-    vals        = view["state"]["values"]
-    company     = vals["company"]["value"]["value"].strip()
-    role        = vals["role"]["value"]["value"].strip()
-    contact     = (vals["contact"]["value"]["value"] or "").strip()
-    job_posting = vals["job_posting"]["value"]["value"].strip()
-    channel     = body["user"]["id"]
-
+def _start_apply_run(channel: str, client, company: str, role: str, contact: str, job_posting: str) -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1214,92 +1207,104 @@ def apply_view_submit(ack, body, client, view):
     threading.Thread(target=_run, daemon=True).start()
 
 
-# ---------------------------------------------------------------------------
-# /prep — generate interview prep doc
-# ---------------------------------------------------------------------------
-
-@app.command("/prep")
-def prep_command(ack, body, client):
+@app.command("/apply")
+def apply_command(ack, body, client):
     ack()
+    options = _app_options(active_only=False)
+    if not options:
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text=":x: No applications on file yet. Add one with `/track-add` first.",
+        )
+        return
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
             "type": "modal",
-            "callback_id": "prep_submit",
-            "title": {"type": "plain_text", "text": "Interview Prep"},
-            "submit": {"type": "plain_text", "text": "Generate"},
+            "callback_id": "apply_select_submit",
+            "title": {"type": "plain_text", "text": "Generate Application"},
+            "submit": {"type": "plain_text", "text": "Continue"},
             "close":  {"type": "plain_text", "text": "Cancel"},
             "blocks": [
                 {
                     "type": "input",
-                    "block_id": "company",
-                    "label": {"type": "plain_text", "text": "Company name"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
+                    "block_id": "app_block",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {"type": "static_select", "action_id": "app_select",
+                                "placeholder": {"type": "plain_text", "text": "Select application…"},
+                                "options": options},
                 },
                 {
                     "type": "input",
-                    "block_id": "role",
-                    "label": {"type": "plain_text", "text": "Role title"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "round_type",
-                    "label": {"type": "plain_text", "text": "Round type"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "Select round type"},
-                        "options": [
-                            {"text": {"type": "plain_text", "text": rt.replace("_", " ").title()},
-                             "value": rt}
-                            for rt in ROUND_TYPES
-                        ],
-                    },
-                },
-                {
-                    "type": "input",
-                    "block_id": "interviewer",
+                    "block_id": "contact",
                     "optional": True,
-                    "label": {"type": "plain_text", "text": "Interviewer name (optional)"},
+                    "label": {"type": "plain_text", "text": "Hiring manager name (optional)"},
                     "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Jane Smith, VP Engineering"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "focus",
-                    "optional": True,
-                    "label": {"type": "plain_text", "text": "Focus areas (optional)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "System design, API architecture"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "job_posting",
-                    "label": {"type": "plain_text", "text": "Job posting (paste full text)"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
+                                "placeholder": {"type": "plain_text", "text": "Jane Smith"}},
                 },
             ],
         },
     )
 
 
-@app.view("prep_submit")
-def prep_view_submit(ack, body, client, view):
+@app.view("apply_select_submit")
+def apply_select_view_submit(ack, body, client, view):
+    vals    = view["state"]["values"]
+    app_id  = vals["app_block"]["app_select"]["selected_option"]["value"]
+    contact = (vals["contact"]["value"]["value"] or "").strip()
+    channel = body["user"]["id"]
+
+    try:
+        record = _get_app(app_id)
+    except Exception as exc:
+        ack(response_action="errors", errors={"app_block": f"Could not load application: {exc}"[:150]})
+        return
+
+    company     = record.get("company", "?")
+    role        = record.get("role_title", "?")
+    job_posting = _get_saved_job_posting(record)
+
+    if job_posting:
+        ack()
+        _start_apply_run(channel, client, company, role, contact, job_posting)
+        return
+
+    metadata = json.dumps({"company": company, "role": role, "contact": contact})
+    ack(response_action="update", view=_jd_paste_view("apply_final_submit", metadata))
+
+
+@app.view("apply_final_submit")
+def apply_final_view_submit(ack, body, client, view):
+    ack()
+    meta        = json.loads(view.get("private_metadata") or "{}")
+    job_posting = view["state"]["values"]["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+    _start_apply_run(
+        channel, client, meta.get("company", ""), meta.get("role", ""),
+        meta.get("contact", ""), job_posting,
+    )
+
+
+@app.view("apply_submit")
+def apply_view_submit(ack, body, client, view):
+    # Kept for any apply modal already open from before this deploy — new
+    # /apply invocations use apply_select_submit/apply_final_submit instead.
     ack()
     vals        = view["state"]["values"]
     company     = vals["company"]["value"]["value"].strip()
     role        = vals["role"]["value"]["value"].strip()
-    round_type  = vals["round_type"]["value"]["selected_option"]["value"]
-    interviewer = (vals["interviewer"]["value"]["value"] or "").strip()
-    focus       = (vals["focus"]["value"]["value"] or "").strip()
+    contact     = (vals["contact"]["value"]["value"] or "").strip()
     job_posting = vals["job_posting"]["value"]["value"].strip()
     channel     = body["user"]["id"]
+    _start_apply_run(channel, client, company, role, contact, job_posting)
 
+
+# ---------------------------------------------------------------------------
+# /prep — generate interview prep doc
+# ---------------------------------------------------------------------------
+
+def _start_prep_run(channel: str, client, company: str, role: str, round_type: str,
+                     interviewer: str, focus: str, job_posting: str) -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1336,94 +1341,136 @@ def prep_view_submit(ack, body, client, view):
     threading.Thread(target=_run, daemon=True).start()
 
 
-# ---------------------------------------------------------------------------
-# /aq — Application Questions
-# ---------------------------------------------------------------------------
-
-@app.command("/aq")
-def aq_command(ack, body, client):
+@app.command("/prep")
+def prep_command(ack, body, client):
     ack()
+    options = _app_options(active_only=False)
+    if not options:
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text=":x: No applications on file yet. Add one with `/track-add` first.",
+        )
+        return
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
             "type": "modal",
-            "callback_id": "aq_submit",
-            "title": {"type": "plain_text", "text": "Application Question"},
-            "submit": {"type": "plain_text", "text": "Generate Answer"},
+            "callback_id": "prep_select_submit",
+            "title": {"type": "plain_text", "text": "Interview Prep"},
+            "submit": {"type": "plain_text", "text": "Continue"},
             "close":  {"type": "plain_text", "text": "Cancel"},
             "blocks": [
                 {
                     "type": "input",
-                    "block_id": "company",
-                    "label": {"type": "plain_text", "text": "Company name"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Acme Corp"}},
+                    "block_id": "app_block",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {"type": "static_select", "action_id": "app_select",
+                                "placeholder": {"type": "plain_text", "text": "Select application…"},
+                                "options": options},
                 },
                 {
                     "type": "input",
-                    "block_id": "role",
-                    "label": {"type": "plain_text", "text": "Role title"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Solutions Engineer"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "question",
-                    "label": {"type": "plain_text", "text": "Application question"},
-                    "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "Paste the question from the application form…"}},
-                },
-                {
-                    "type": "input",
-                    "block_id": "tone",
-                    "label": {"type": "plain_text", "text": "Tone"},
+                    "block_id": "round_type",
+                    "label": {"type": "plain_text", "text": "Round type"},
                     "element": {
                         "type": "static_select",
                         "action_id": "value",
-                        "initial_option": {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                        "placeholder": {"type": "plain_text", "text": "Select round type"},
                         "options": [
-                            {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
-                            {"text": {"type": "plain_text", "text": "Conversational"}, "value": "conversational"},
-                            {"text": {"type": "plain_text", "text": "Technical"}, "value": "technical"},
-                            {"text": {"type": "plain_text", "text": "Concise"}, "value": "concise"},
+                            {"text": {"type": "plain_text", "text": rt.replace("_", " ").title()},
+                             "value": rt}
+                            for rt in ROUND_TYPES
                         ],
                     },
                 },
                 {
                     "type": "input",
-                    "block_id": "char_limit",
+                    "block_id": "interviewer",
                     "optional": True,
-                    "label": {"type": "plain_text", "text": "Character limit (optional)"},
+                    "label": {"type": "plain_text", "text": "Interviewer name (optional)"},
                     "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "e.g. 500"}},
+                                "placeholder": {"type": "plain_text", "text": "Jane Smith, VP Engineering"}},
                 },
                 {
                     "type": "input",
-                    "block_id": "job_posting",
-                    "label": {"type": "plain_text", "text": "Job posting (paste full text)"},
+                    "block_id": "focus",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Focus areas (optional)"},
                     "element": {"type": "plain_text_input", "action_id": "value",
-                                "multiline": True,
-                                "placeholder": {"type": "plain_text", "text": "Paste the full job description here…"}},
+                                "placeholder": {"type": "plain_text", "text": "System design, API architecture"}},
                 },
             ],
         },
     )
 
 
-@app.view("aq_submit")
-def aq_view_submit(ack, body, client, view):
+@app.view("prep_select_submit")
+def prep_select_view_submit(ack, body, client, view):
+    vals        = view["state"]["values"]
+    app_id      = vals["app_block"]["app_select"]["selected_option"]["value"]
+    round_type  = vals["round_type"]["value"]["selected_option"]["value"]
+    interviewer = (vals["interviewer"]["value"]["value"] or "").strip()
+    focus       = (vals["focus"]["value"]["value"] or "").strip()
+    channel     = body["user"]["id"]
+
+    try:
+        record = _get_app(app_id)
+    except Exception as exc:
+        ack(response_action="errors", errors={"app_block": f"Could not load application: {exc}"[:150]})
+        return
+
+    company     = record.get("company", "?")
+    role        = record.get("role_title", "?")
+    job_posting = _get_saved_job_posting(record)
+
+    if job_posting:
+        ack()
+        _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting)
+        return
+
+    metadata = json.dumps({
+        "company": company, "role": role,
+        "round_type": round_type, "interviewer": interviewer, "focus": focus,
+    })
+    ack(response_action="update", view=_jd_paste_view("prep_final_submit", metadata))
+
+
+@app.view("prep_final_submit")
+def prep_final_view_submit(ack, body, client, view):
+    ack()
+    meta        = json.loads(view.get("private_metadata") or "{}")
+    job_posting = view["state"]["values"]["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+    _start_prep_run(
+        channel, client, meta.get("company", ""), meta.get("role", ""),
+        meta.get("round_type", ""), meta.get("interviewer", ""), meta.get("focus", ""), job_posting,
+    )
+
+
+@app.view("prep_submit")
+def prep_view_submit(ack, body, client, view):
+    # Kept for any prep modal already open from before this deploy — new
+    # /prep invocations use prep_select_submit/prep_final_submit instead.
     ack()
     vals        = view["state"]["values"]
     company     = vals["company"]["value"]["value"].strip()
     role        = vals["role"]["value"]["value"].strip()
-    question    = vals["question"]["value"]["value"].strip()
-    tone        = vals["tone"]["value"]["selected_option"]["value"]
-    char_raw    = (vals["char_limit"]["value"]["value"] or "").strip()
-    char_limit  = int(char_raw) if char_raw.isdigit() else None
+    round_type  = vals["round_type"]["value"]["selected_option"]["value"]
+    interviewer = (vals["interviewer"]["value"]["value"] or "").strip()
+    focus       = (vals["focus"]["value"]["value"] or "").strip()
     job_posting = vals["job_posting"]["value"]["value"].strip()
     channel     = body["user"]["id"]
+    _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting)
 
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# ---------------------------------------------------------------------------
+# /aq — Application Questions
+# ---------------------------------------------------------------------------
+
+def _start_aq_run(channel: str, client, company: str, role: str, question: str,
+                   tone: str, char_limit: int | None, job_posting: str) -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
@@ -1466,6 +1513,131 @@ def aq_view_submit(ack, body, client, view):
             )
 
     threading.Thread(target=_run, daemon=True).start()
+
+
+@app.command("/aq")
+def aq_command(ack, body, client):
+    ack()
+    options = _app_options(active_only=False)
+    if not options:
+        client.chat_postMessage(
+            channel=body["user"]["id"],
+            text=":x: No applications on file yet. Add one with `/track-add` first.",
+        )
+        return
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "aq_select_submit",
+            "title": {"type": "plain_text", "text": "Application Question"},
+            "submit": {"type": "plain_text", "text": "Continue"},
+            "close":  {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "app_block",
+                    "label": {"type": "plain_text", "text": "Application"},
+                    "element": {"type": "static_select", "action_id": "app_select",
+                                "placeholder": {"type": "plain_text", "text": "Select application…"},
+                                "options": options},
+                },
+                {
+                    "type": "input",
+                    "block_id": "question",
+                    "label": {"type": "plain_text", "text": "Application question"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "multiline": True,
+                                "placeholder": {"type": "plain_text", "text": "Paste the question from the application form…"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "tone",
+                    "label": {"type": "plain_text", "text": "Tone"},
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "value",
+                        "initial_option": {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "Professional"}, "value": "professional"},
+                            {"text": {"type": "plain_text", "text": "Conversational"}, "value": "conversational"},
+                            {"text": {"type": "plain_text", "text": "Technical"}, "value": "technical"},
+                            {"text": {"type": "plain_text", "text": "Concise"}, "value": "concise"},
+                        ],
+                    },
+                },
+                {
+                    "type": "input",
+                    "block_id": "char_limit",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Character limit (optional)"},
+                    "element": {"type": "plain_text_input", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "e.g. 500"}},
+                },
+            ],
+        },
+    )
+
+
+@app.view("aq_select_submit")
+def aq_select_view_submit(ack, body, client, view):
+    vals       = view["state"]["values"]
+    app_id     = vals["app_block"]["app_select"]["selected_option"]["value"]
+    question   = vals["question"]["value"]["value"].strip()
+    tone       = vals["tone"]["value"]["selected_option"]["value"]
+    char_raw   = (vals["char_limit"]["value"]["value"] or "").strip()
+    char_limit = int(char_raw) if char_raw.isdigit() else None
+    channel    = body["user"]["id"]
+
+    try:
+        record = _get_app(app_id)
+    except Exception as exc:
+        ack(response_action="errors", errors={"app_block": f"Could not load application: {exc}"[:150]})
+        return
+
+    company     = record.get("company", "?")
+    role        = record.get("role_title", "?")
+    job_posting = _get_saved_job_posting(record)
+
+    if job_posting:
+        ack()
+        _start_aq_run(channel, client, company, role, question, tone, char_limit, job_posting)
+        return
+
+    metadata = json.dumps({
+        "company": company, "role": role, "question": question,
+        "tone": tone, "char_limit": char_limit,
+    })
+    ack(response_action="update", view=_jd_paste_view("aq_final_submit", metadata))
+
+
+@app.view("aq_final_submit")
+def aq_final_view_submit(ack, body, client, view):
+    ack()
+    meta        = json.loads(view.get("private_metadata") or "{}")
+    job_posting = view["state"]["values"]["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+    _start_aq_run(
+        channel, client, meta.get("company", ""), meta.get("role", ""),
+        meta.get("question", ""), meta.get("tone", "professional"), meta.get("char_limit"), job_posting,
+    )
+
+
+@app.view("aq_submit")
+def aq_view_submit(ack, body, client, view):
+    # Kept for any aq modal already open from before this deploy — new /aq
+    # invocations use aq_select_submit/aq_final_submit instead.
+    ack()
+    vals        = view["state"]["values"]
+    company     = vals["company"]["value"]["value"].strip()
+    role        = vals["role"]["value"]["value"].strip()
+    question    = vals["question"]["value"]["value"].strip()
+    tone        = vals["tone"]["value"]["selected_option"]["value"]
+    char_raw    = (vals["char_limit"]["value"]["value"] or "").strip()
+    char_limit  = int(char_raw) if char_raw.isdigit() else None
+    job_posting = vals["job_posting"]["value"]["value"].strip()
+    channel     = body["user"]["id"]
+    _start_aq_run(channel, client, company, role, question, tone, char_limit, job_posting)
 
 
 # ---------------------------------------------------------------------------
@@ -2930,7 +3102,9 @@ def help_command(ack, respond):
             "*/thankyou* — Generate a post-interview thank-you email\n"
             "*/optimize* — Refine an existing run's documents from a prompt\n"
             "*/rescore* — Re-score resume/JD match for an application\n"
-            "*/runs* — List your recent agent run folders from Drive"
+            "*/runs* — List your recent agent run folders from Drive\n"
+            "_apply/prep/aq pick from your tracked applications — add one with_ "
+            "*/track-add* _first if you don't have any yet_"
         )}},
         {"type": "divider"},
 

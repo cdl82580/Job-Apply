@@ -184,9 +184,9 @@ job-apply/
 
 | Category | Command | Description |
 |---|---|---|
-| 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter |
-| 🤖 Agent | `/aq` | Answer an application question using your resume & JD |
-| 🤖 Agent | `/prep` | Generate interview prep document |
+| 🤖 Agent | `/apply` | Generate resume + ATS resume + cover letter (picks a tracked application) |
+| 🤖 Agent | `/aq` | Answer an application question using your resume & JD (picks a tracked application) |
+| 🤖 Agent | `/prep` | Generate interview prep document (picks a tracked application) |
 | 🤖 Agent | `/thankyou` | Generate a post-interview thank-you email |
 | 🤖 Agent | `/optimize` | Refine an existing run's documents from a prompt (picks most recent Drive folder) |
 | 🤖 Agent | `/rescore` | Re-score resume/JD match for an application |
@@ -211,6 +211,8 @@ job-apply/
 | 🛠️ System | `/help` | Full command reference |
 
 The bot also publishes a dynamic **App Home tab** showing live pipeline stats, upcoming calendar events, and a quick command reference — opens when you click the app's Home tab in Slack.
+
+**`/apply`/`/prep`/`/aq` only run against a tracked application** — same constraint as the Teams bot. Each modal's "Application" field is a `static_select` populated from `/api/applications` instead of free-text company/role. Submitting looks up a saved job posting from the application's most recently linked Drive folder (`_get_saved_job_posting`); if one exists, the run starts immediately, otherwise Slack updates the same modal in place (`response_action: "update"`, with the already-collected fields carried forward via `private_metadata`) to ask for the JD once.
 
 **Resume upload via DM:** Drop a `.docx` file into a DM with the bot to update your master resume. The bot validates the file is a valid ZIP archive and runs it through `pandoc` to verify it can extract usable text (≥200 characters) — the same path the agents use at runtime. If validation fails, you'll get a warning with instructions to re-export.
 
