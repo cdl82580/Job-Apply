@@ -70,6 +70,18 @@ STATUS_EMOJI = {
     "Not Applying":  "\U0001f6ab",
 }
 
+# Adaptive Card TextBlock/FactSet color names (Good/Warning/Attention/Accent/Default).
+STATUS_COLOR = {
+    "Interviewing":  "Accent",
+    "Phone Screen":  "Accent",
+    "Applied":       "Good",
+    "Offer":         "Good",
+    "Researching":   "Default",
+    "On Hold":       "Warning",
+    "Rejected":      "Attention",
+    "Not Applying":  "Attention",
+}
+
 # Commands that must work even without a linked account.
 _NO_AUTH_COMMANDS = ("help", "/help", "confirm", "/confirm", "unlink", "/unlink")
 
@@ -833,30 +845,83 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text(f"❌ Error: {exc}"))
             return
 
-        emoji = STATUS_EMOJI.get(a.get("status", ""), "")
-        lines = [
-            f"**{a.get('company', '?')}** — {a.get('role_title', '?')}",
-            f"Status: {emoji} {a.get('status', '?')}",
-        ]
+        status = a.get("status", "?")
+        emoji = STATUS_EMOJI.get(status, "")
+        color = STATUS_COLOR.get(status, "Default")
+
+        facts = []
         for field, label in [
             ("location", "Location"),
             ("salary_range", "Salary"),
-            ("url", "URL"),
             ("date_applied", "Applied"),
             ("source", "Source"),
             ("recruiter_name", "Recruiter"),
         ]:
             val = a.get(field)
             if val:
-                lines.append(f"{label}: {val}")
+                facts.append({"title": label, "value": str(val)})
+
+        body: list[dict[str, Any]] = [
+            {
+                "type": "ColumnSet",
+                "columns": [
+                    {
+                        "type": "Column",
+                        "width": "stretch",
+                        "items": [
+                            {
+                                "type": "TextBlock", "text": a.get("company", "?"),
+                                "size": "Large", "weight": "Bolder", "wrap": True,
+                            },
+                            {
+                                "type": "TextBlock", "text": a.get("role_title", "?"),
+                                "size": "Medium", "isSubtle": True, "wrap": True, "spacing": "None",
+                            },
+                        ],
+                    },
+                    {
+                        "type": "Column",
+                        "width": "auto",
+                        "verticalContentAlignment": "Center",
+                        "items": [
+                            {
+                                "type": "TextBlock", "text": f"{emoji} {status}".strip(),
+                                "weight": "Bolder", "color": color, "wrap": True,
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]
+        if facts:
+            body.append({"type": "FactSet", "facts": facts, "spacing": "Medium"})
 
         comments = a.get("comments", [])
         if comments:
-            lines.append("\n**Notes:**")
-            for c in comments[-5:]:
-                lines.append(f"- {c.get('text', '')}")
+            body.append({
+                "type": "Container",
+                "spacing": "Medium",
+                "separator": True,
+                "items": [
+                    {"type": "TextBlock", "text": "Notes", "weight": "Bolder"},
+                    *[
+                        {"type": "TextBlock", "text": f"• {c.get('text', '')}", "wrap": True}
+                        for c in comments[-5:]
+                    ],
+                ],
+            })
 
-        await ctx.send_activity(MessageFactory.text("\n".join(lines)))
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": body,
+        }
+        url = a.get("url")
+        if url:
+            card["actions"] = [{"type": "Action.OpenUrl", "title": "Open Job Posting", "url": url}]
+
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     # ── Proactive messaging helper ───────────────────────────────────────
 
