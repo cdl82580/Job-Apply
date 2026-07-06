@@ -117,6 +117,18 @@ def _logo_url(domain: str, size: int = 18) -> str:
     )
 
 
+def _logo_column(domain: str, size: int = 32) -> dict | None:
+    """An auto-width Adaptive Card Column holding just the company logo, for
+    prepending to a ColumnSet row — None (add nothing) if there's no domain."""
+    icon = _logo_url(domain, size=size)
+    if not icon:
+        return None
+    return {
+        "type": "Column", "width": "auto", "verticalContentAlignment": "Center",
+        "items": [{"type": "Image", "url": icon, "width": f"{size}px", "height": f"{size}px"}],
+    }
+
+
 class JobApplyBot(ActivityHandler):
     """Microsoft Teams bot for the Job Apply agent platform."""
 
@@ -630,31 +642,34 @@ class JobApplyBot(ActivityHandler):
         rows = []
         for i, a in enumerate(shown):
             status = a.get("status", "?")
+            columns = []
+            logo_col = _logo_column(a.get("domain", ""), size=28)
+            if logo_col:
+                columns.append(logo_col)
+            columns.append({
+                "type": "Column", "width": "stretch",
+                "items": [
+                    {"type": "TextBlock", "text": a.get("company", "?"), "weight": "Bolder", "wrap": True},
+                    {
+                        "type": "TextBlock", "text": a.get("role_title", "?"),
+                        "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
+                    },
+                ],
+            })
+            columns.append({
+                "type": "Column", "width": "auto", "verticalContentAlignment": "Center",
+                "items": [
+                    {
+                        "type": "TextBlock", "text": f"{STATUS_EMOJI.get(status, '')} {status}".strip(),
+                        "color": STATUS_COLOR.get(status, "Default"), "wrap": True, "size": "Small",
+                    },
+                ],
+            })
             rows.append({
                 "type": "ColumnSet",
                 "spacing": "Medium" if i else "Default",
                 "separator": i > 0,
-                "columns": [
-                    {
-                        "type": "Column", "width": "stretch",
-                        "items": [
-                            {"type": "TextBlock", "text": a.get("company", "?"), "weight": "Bolder", "wrap": True},
-                            {
-                                "type": "TextBlock", "text": a.get("role_title", "?"),
-                                "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
-                            },
-                        ],
-                    },
-                    {
-                        "type": "Column", "width": "auto", "verticalContentAlignment": "Center",
-                        "items": [
-                            {
-                                "type": "TextBlock", "text": f"{STATUS_EMOJI.get(status, '')} {status}".strip(),
-                                "color": STATUS_COLOR.get(status, "Default"), "wrap": True, "size": "Small",
-                            },
-                        ],
-                    },
-                ],
+                "columns": columns,
             })
 
         title = f"\U0001f4cb Applications{' — ' + resolved if resolved else ''}"
@@ -724,6 +739,14 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text("No agent runs found."))
             return
 
+        # Agent run records don't carry domain themselves — one extra call to
+        # index the user's applications by id, so each run row can show a logo.
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception:
+            apps = []
+        domain_by_app_id = {a["id"]: a.get("domain", "") for a in apps}
+
         TYPE_LABELS = {
             "resume": "\U0001f4c4 Resume",
             "interview_prep": "\U0001f393 Prep",
@@ -749,10 +772,12 @@ class JobApplyBot(ActivityHandler):
             label = f"{company} — {role}" if company else r.get("id", "?")[:8]
             drive_url = r.get("gdrive_folder_url", "")
 
-            row = {
-                "type": "Container",
-                "spacing": "Medium" if i else "Default",
-                "separator": i > 0,
+            columns = []
+            logo_col = _logo_column(domain_by_app_id.get(r.get("app_id", ""), ""), size=28)
+            if logo_col:
+                columns.append(logo_col)
+            columns.append({
+                "type": "Column", "width": "stretch",
                 "items": [
                     {"type": "TextBlock", "text": f"{status_badge} {type_label}", "weight": "Bolder", "wrap": True},
                     {
@@ -760,6 +785,12 @@ class JobApplyBot(ActivityHandler):
                         "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
                     },
                 ],
+            })
+            row = {
+                "type": "ColumnSet",
+                "spacing": "Medium" if i else "Default",
+                "separator": i > 0,
+                "columns": columns,
             }
             if drive_url:
                 row["selectAction"] = {"type": "Action.OpenUrl", "url": drive_url}
@@ -986,15 +1017,16 @@ class JobApplyBot(ActivityHandler):
 
         company = app.get("company", "?")
         role = app.get("role_title", "?")
+        domain = app.get("domain", "")
         if job_posting:
             await self._submit_aq(ctx, {
-                "company": company, "role": role, "question": question,
+                "company": company, "role": role, "domain": domain, "question": question,
                 "tone": tone, "char_limit": char_limit, "job_posting": job_posting,
             }, user)
             return
 
         card = self._jd_paste_card("aq_final_submit", {
-            "app_id": app_id, "company": company, "role": role,
+            "app_id": app_id, "company": company, "role": role, "domain": domain,
             "question": question, "tone": tone, "char_limit": char_limit,
         })
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
@@ -1006,6 +1038,7 @@ class JobApplyBot(ActivityHandler):
             return
         await self._submit_aq(ctx, {
             "company": data.get("company", ""), "role": data.get("role", ""),
+            "domain": data.get("domain", ""),
             "question": data.get("question", ""), "tone": data.get("tone", "professional"),
             "char_limit": data.get("char_limit"), "job_posting": job_posting,
         }, user)
@@ -1109,6 +1142,7 @@ class JobApplyBot(ActivityHandler):
     async def _submit_aq(self, ctx: TurnContext, data: dict, user: dict):
         company = (data.get("company") or "").strip()
         role = (data.get("role") or "").strip()
+        domain = (data.get("domain") or "").strip()
         question = (data.get("question") or "").strip()
         tone = (data.get("tone") or "professional").strip()
         char_limit_raw = data.get("char_limit")
@@ -1143,16 +1177,28 @@ class JobApplyBot(ActivityHandler):
 
             if status["status"] == "done":
                 answer = status.get("answer", "(no answer returned)")
+                subtitle_text = {
+                    "type": "TextBlock", "text": f"{company} — {role}",
+                    "isSubtle": True, "wrap": True, "spacing": "None",
+                }
+                logo_col = _logo_column(domain, size=28)
+                subtitle: dict[str, Any] = (
+                    {
+                        "type": "ColumnSet", "spacing": "None",
+                        "columns": [logo_col, {
+                            "type": "Column", "width": "stretch",
+                            "verticalContentAlignment": "Center", "items": [subtitle_text],
+                        }],
+                    }
+                    if logo_col else subtitle_text
+                )
                 card = {
                     "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                     "type": "AdaptiveCard",
                     "version": "1.5",
                     "body": [
                         {"type": "TextBlock", "text": "✅ Answer Ready", "size": "Large", "weight": "Bolder"},
-                        {
-                            "type": "TextBlock", "text": f"{company} — {role}",
-                            "isSubtle": True, "wrap": True, "spacing": "None",
-                        },
+                        subtitle,
                         {
                             "type": "Container", "spacing": "Medium", "separator": True,
                             "items": [
@@ -1325,24 +1371,30 @@ class JobApplyBot(ActivityHandler):
             if val:
                 facts.append({"title": label, "value": str(val)})
 
+        header_columns = []
+        logo_col = _logo_column(a.get("domain", ""), size=40)
+        if logo_col:
+            header_columns.append(logo_col)
+        header_columns.append({
+            "type": "Column",
+            "width": "stretch",
+            "items": [
+                {
+                    "type": "TextBlock", "text": a.get("company", "?"),
+                    "size": "Large", "weight": "Bolder", "wrap": True,
+                },
+                {
+                    "type": "TextBlock", "text": a.get("role_title", "?"),
+                    "size": "Medium", "isSubtle": True, "wrap": True, "spacing": "None",
+                },
+            ],
+        })
+
         body: list[dict[str, Any]] = [
             {
                 "type": "ColumnSet",
                 "columns": [
-                    {
-                        "type": "Column",
-                        "width": "stretch",
-                        "items": [
-                            {
-                                "type": "TextBlock", "text": a.get("company", "?"),
-                                "size": "Large", "weight": "Bolder", "wrap": True,
-                            },
-                            {
-                                "type": "TextBlock", "text": a.get("role_title", "?"),
-                                "size": "Medium", "isSubtle": True, "wrap": True, "spacing": "None",
-                            },
-                        ],
-                    },
+                    *header_columns,
                     {
                         "type": "Column",
                         "width": "auto",
