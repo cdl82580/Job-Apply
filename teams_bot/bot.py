@@ -105,6 +105,18 @@ def _card_attachment(card_json: dict) -> Attachment:
     return CardFactory.adaptive_card(card_json)
 
 
+def _logo_url(domain: str, size: int = 18) -> str:
+    """Direct Logo.dev CDN URL for a search-result icon — built straight from
+    domain rather than a server-computed logo_url field, since neither
+    frontend/*.html nor this bot need anything beyond the pk_ public key."""
+    if not domain:
+        return ""
+    return (
+        f"https://img.logo.dev/{domain}?token={api_client.Config.LOGODEV_PUBLIC_KEY}"
+        f"&size={size}&format=webp&retina=true"
+    )
+
+
 class JobApplyBot(ActivityHandler):
     """Microsoft Teams bot for the Job Apply agent platform."""
 
@@ -164,8 +176,9 @@ class JobApplyBot(ActivityHandler):
             domain = c.get("domain", "")
             title = f"{name} ({domain})" if domain else name
             item = {"title": title[:75], "value": f"{name}|||{domain}"[:250]}
-            if c.get("logo_url"):
-                item["icon"] = c["logo_url"]
+            icon = _logo_url(domain)
+            if icon:
+                item["icon"] = icon
             results.append(item)
         return results
 
@@ -196,8 +209,9 @@ class JobApplyBot(ActivityHandler):
         for a in matches[:8]:
             title = f"{a.get('company', '?')} | {a.get('role_title', '?')}"
             item = {"title": title[:75], "value": a["id"]}
-            if a.get("logo_url"):
-                item["icon"] = a["logo_url"]
+            icon = _logo_url(a.get("domain", ""))
+            if icon:
+                item["icon"] = icon
             results.append(item)
         return results
 

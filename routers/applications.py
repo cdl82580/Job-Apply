@@ -38,22 +38,6 @@ router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 FLY_MACHINE_ID = os.environ.get("FLY_MACHINE_ID", "")
 
-# Same public CDN key api.py's _app_logo_html / routers/companies.py use — kept
-# as a separate read here rather than imported, to avoid a circular import with api.py.
-_LOGODEV_PUB_KEY = os.environ.get("LOGODEV_PUBLIC_KEY") or os.environ.get("LOGODEV_API_KEY", "")
-
-
-def _with_logo_url(item: dict) -> dict:
-    """Add a ready-to-use logo_url, preferring an explicit company_logo_url,
-    else deriving one from domain — so callers (e.g. the Teams bot's
-    application typeahead) don't need their own copy of the Logo.dev token."""
-    logo_url = item.get("company_logo_url") or ""
-    if not logo_url:
-        domain = item.get("domain", "")
-        if domain and _LOGODEV_PUB_KEY:
-            logo_url = f"https://img.logo.dev/{domain}?token={_LOGODEV_PUB_KEY}&size=64"
-    return {**item, "logo_url": logo_url}
-
 VALID_STATUSES = {
     "Not Applying", "Researching", "Applied", "Phone Screen",
     "Interviewing", "On Hold", "Offer", "Rejected", "No Response",
@@ -417,11 +401,9 @@ async def list_applications(
     per_page: int = Query(0, ge=0),
 ):
     user_id = request.state.user["user_id"]
-    result = app_store.list_applications(
+    return app_store.list_applications(
         user_id, status=status, priority=priority, page=page, per_page=per_page
     )
-    result["items"] = [_with_logo_url(item) for item in result["items"]]
-    return result
 
 
 @router.post("", status_code=201)
