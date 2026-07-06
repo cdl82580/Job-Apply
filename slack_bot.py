@@ -109,6 +109,25 @@ STATUS_EMOJI = {
 
 TRACKER_URL = f"{API_BASE}/tracking.html"
 
+# Publishable Logo.dev CDN key — same one frontend/*.html hardcode client-side
+# and teams_bot/bot.py uses for its response-card company logos.
+LOGODEV_PUBLIC_KEY = os.environ.get("LOGODEV_PUBLIC_KEY", "pk_U3oIYbhyTvinmftvOvCTJg")
+
+
+def _logo_url(domain: str, size: int = 64) -> str:
+    if not domain:
+        return ""
+    return f"https://img.logo.dev/{domain}?token={LOGODEV_PUBLIC_KEY}&size={size}&format=webp&retina=true"
+
+
+def _logo_accessory(domain: str, alt_text: str = "", size: int = 64) -> dict | None:
+    """Block Kit section 'accessory' image, or None if there's no domain on file."""
+    url = _logo_url(domain, size=size)
+    if not url:
+        return None
+    return {"type": "image", "image_url": url, "alt_text": alt_text or "logo"}
+
+
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
 # ---------------------------------------------------------------------------
@@ -408,10 +427,11 @@ def track_list_command(ack, respond, body):
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
 
     for a in shown:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": _app_line(a)},
-        })
+        block = {"type": "section", "text": {"type": "mrkdwn", "text": _app_line(a)}}
+        accessory = _logo_accessory(a.get("domain", ""), alt_text=a.get("company", ""))
+        if accessory:
+            block["accessory"] = accessory
+        blocks.append(block)
 
     if len(apps) > 15:
         blocks.append({
@@ -1630,19 +1650,31 @@ def runs_command(ack, respond):
         return
 
     shown = runs[:10]
-    lines = []
-    for run in shown:
-        name  = run.get("name", "")
-        idx   = name.find("_")
-        label = f"{name[:idx]} · {name[idx+1:].replace('_',' ')}" if idx > 0 else name
-        link  = run.get("web_view_link", "")
-        badge = " ↩" if run.get("source") == "legacy" else ""
-        lines.append(f"• {'<' + link + '|' + label + '>' if link else label}{badge}")
-
     header = f":file_folder: *Recent Agent Runs* ({len(runs)} total)"
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
+
+    for run in shown:
+        name    = run.get("name", "")
+        idx     = name.find("_")
+        company = name[:idx] if idx > 0 else name
+        label   = f"{company} · {name[idx+1:].replace('_',' ')}" if idx > 0 else name
+        link    = run.get("web_view_link", "")
+        badge   = " ↩" if run.get("source") == "legacy" else ""
+        text    = f"• {'<' + link + '|' + label + '>' if link else label}{badge}"
+        block = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+        accessory = _logo_accessory(run.get("domain", ""), alt_text=company)
+        if accessory:
+            block["accessory"] = accessory
+        blocks.append(block)
+
     if len(runs) > 10:
-        lines.append(f"_…and {len(runs) - 10} more — <{API_BASE}|open the app> to see all._")
-    respond(header + "\n" + "\n".join(lines))
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn",
+                          "text": f"_…and {len(runs) - 10} more — <{API_BASE}|open the app> to see all._"}],
+        })
+
+    respond(blocks=blocks, text=header)
 
 
 # ---------------------------------------------------------------------------
@@ -1668,19 +1700,24 @@ def company_command(ack, respond, body):
         respond(f":mag: No results found for *{query}*.")
         return
 
-    lines = []
+    header = f":mag: *Company search: {query}*"
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
     for c in results[:5]:
         name   = c.get("name", "?")
         domain = c.get("domain", "")
         desc   = c.get("description", "")
-        line   = f"• *{name}*"
+        line   = f"*{name}*"
         if domain:
             line += f"  `{domain}`"
         if desc:
-            line += f"\n  _{desc}_"
-        lines.append(line)
+            line += f"\n_{desc}_"
+        block = {"type": "section", "text": {"type": "mrkdwn", "text": line}}
+        accessory = _logo_accessory(domain, alt_text=name)
+        if accessory:
+            block["accessory"] = accessory
+        blocks.append(block)
 
-    respond(f":mag: *Company search: {query}*\n\n" + "\n\n".join(lines))
+    respond(blocks=blocks, text=header)
 
 
 # ---------------------------------------------------------------------------
@@ -1732,10 +1769,15 @@ def track_view_view_submit(ack, body, client, view):
     channel = body["user"]["id"]
     try:
         a = _get_app(app_id)
-        lines = [
-            f":briefcase: *{a.get('company')} — {a.get('role_title')}*",
-            f"• Status: `{a.get('status')}`",
-        ]
+        header_block = {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f":briefcase: *{a.get('company')} — {a.get('role_title')}*"},
+        }
+        accessory = _logo_accessory(a.get("domain", ""), alt_text=a.get("company", ""))
+        if accessory:
+            header_block["accessory"] = accessory
+
+        lines = [f"• Status: `{a.get('status')}`"]
         if a.get("date_applied"):
             lines.append(f"• Applied: {a['date_applied'][:10]}")
         if a.get("location"):
@@ -1754,7 +1796,10 @@ def track_view_view_submit(ack, body, client, view):
             lines.append(f"\n:speech_balloon: *Notes ({len(comments)}):*")
             for c in comments[-3:]:
                 lines.append(f"  › {c['text'][:120]}")
-        client.chat_postMessage(channel=channel, text="\n".join(lines))
+
+        blocks = [header_block, {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}]
+        fallback = f"{a.get('company')} — {a.get('role_title')}\n" + "\n".join(lines)
+        client.chat_postMessage(channel=channel, blocks=blocks, text=fallback)
     except Exception as exc:
         client.chat_postMessage(channel=channel, text=f":x: Could not load application: {exc}")
 
