@@ -114,14 +114,17 @@ TRACKER_URL = f"{API_BASE}/tracking.html"
 LOGODEV_PUBLIC_KEY = os.environ.get("LOGODEV_PUBLIC_KEY", "pk_U3oIYbhyTvinmftvOvCTJg")
 
 
-def _logo_url(domain: str, size: int = 64) -> str:
+def _logo_url(domain: str, size: int = 24) -> str:
     if not domain:
         return ""
     return f"https://img.logo.dev/{domain}?token={LOGODEV_PUBLIC_KEY}&size={size}&format=webp&retina=true"
 
 
-def _logo_accessory(domain: str, alt_text: str = "", size: int = 64) -> dict | None:
-    """Block Kit section 'accessory' image, or None if there's no domain on file."""
+def _logo_element(domain: str, alt_text: str = "", size: int = 24) -> dict | None:
+    """Slack "image" element sized for a context block, where Slack renders
+    it small and inline next to text — a section block's accessory image
+    renders as a much bigger right-aligned thumbnail instead, which is why
+    this isn't used there. None if there's no domain on file."""
     url = _logo_url(domain, size=size)
     if not url:
         return None
@@ -427,11 +430,12 @@ def track_list_command(ack, respond, body):
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
 
     for a in shown:
-        block = {"type": "section", "text": {"type": "mrkdwn", "text": _app_line(a)}}
-        accessory = _logo_accessory(a.get("domain", ""), alt_text=a.get("company", ""))
-        if accessory:
-            block["accessory"] = accessory
-        blocks.append(block)
+        elements = []
+        logo_el = _logo_element(a.get("domain", ""), alt_text=a.get("company", ""))
+        if logo_el:
+            elements.append(logo_el)
+        elements.append({"type": "mrkdwn", "text": _app_line(a)})
+        blocks.append({"type": "context", "elements": elements})
 
     if len(apps) > 15:
         blocks.append({
@@ -1661,11 +1665,12 @@ def runs_command(ack, respond):
         link    = run.get("web_view_link", "")
         badge   = " ↩" if run.get("source") == "legacy" else ""
         text    = f"• {'<' + link + '|' + label + '>' if link else label}{badge}"
-        block = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
-        accessory = _logo_accessory(run.get("domain", ""), alt_text=company)
-        if accessory:
-            block["accessory"] = accessory
-        blocks.append(block)
+        elements = []
+        logo_el = _logo_element(run.get("domain", ""), alt_text=company)
+        if logo_el:
+            elements.append(logo_el)
+        elements.append({"type": "mrkdwn", "text": text})
+        blocks.append({"type": "context", "elements": elements})
 
     if len(runs) > 10:
         blocks.append({
@@ -1711,11 +1716,12 @@ def company_command(ack, respond, body):
             line += f"  `{domain}`"
         if desc:
             line += f"\n_{desc}_"
-        block = {"type": "section", "text": {"type": "mrkdwn", "text": line}}
-        accessory = _logo_accessory(domain, alt_text=name)
-        if accessory:
-            block["accessory"] = accessory
-        blocks.append(block)
+        elements = []
+        logo_el = _logo_element(domain, alt_text=name)
+        if logo_el:
+            elements.append(logo_el)
+        elements.append({"type": "mrkdwn", "text": line})
+        blocks.append({"type": "context", "elements": elements})
 
     respond(blocks=blocks, text=header)
 
@@ -1769,13 +1775,14 @@ def track_view_view_submit(ack, body, client, view):
     channel = body["user"]["id"]
     try:
         a = _get_app(app_id)
-        header_block = {
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f":briefcase: *{a.get('company')} — {a.get('role_title')}*"},
-        }
-        accessory = _logo_accessory(a.get("domain", ""), alt_text=a.get("company", ""))
-        if accessory:
-            header_block["accessory"] = accessory
+        header_elements = []
+        logo_el = _logo_element(a.get("domain", ""), alt_text=a.get("company", ""))
+        if logo_el:
+            header_elements.append(logo_el)
+        header_elements.append({
+            "type": "mrkdwn", "text": f":briefcase: *{a.get('company')} — {a.get('role_title')}*",
+        })
+        header_block = {"type": "context", "elements": header_elements}
 
         lines = [f"• Status: `{a.get('status')}`"]
         if a.get("date_applied"):
