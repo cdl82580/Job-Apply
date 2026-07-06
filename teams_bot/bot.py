@@ -347,7 +347,7 @@ class JobApplyBot(ActivityHandler):
             return
 
         choices = [
-            {"title": f"{a.get('company', '?')} — {a.get('role', '?')}", "value": a["id"]}
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
             for a in active[:20]
         ]
 
@@ -430,7 +430,7 @@ class JobApplyBot(ActivityHandler):
         for a in shown:
             emoji = STATUS_EMOJI.get(a.get("status", ""), "")
             company = a.get("company", "?")
-            role = a.get("role", "?")
+            role = a.get("role_title", "?")
             status = a.get("status", "?")
             lines.append(f"{emoji} **{company}** — {role} ({status})")
 
@@ -451,7 +451,7 @@ class JobApplyBot(ActivityHandler):
             return
 
         choices = [
-            {"title": f"{a.get('company', '?')} — {a.get('role', '?')}", "value": a["id"]}
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
             for a in apps[:20]
         ]
 
@@ -801,7 +801,7 @@ class JobApplyBot(ActivityHandler):
 
         payload: dict[str, Any] = {
             "company": company,
-            "role": role,
+            "role_title": role,
             "status": status_val,
         }
         for field in ("url", "location", "salary_range", "note"):
@@ -835,7 +835,7 @@ class JobApplyBot(ActivityHandler):
 
         emoji = STATUS_EMOJI.get(a.get("status", ""), "")
         lines = [
-            f"**{a.get('company', '?')}** — {a.get('role', '?')}",
+            f"**{a.get('company', '?')}** — {a.get('role_title', '?')}",
             f"Status: {emoji} {a.get('status', '?')}",
         ]
         for field, label in [
