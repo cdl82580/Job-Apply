@@ -37,13 +37,10 @@
             { "title": "prep", "description": "Generate interview prep doc" },
             { "title": "optimize", "description": "Refine existing run documents" },
             { "title": "tracker", "description": "Pipeline summary" },
-            { "title": "track list", "description": "List applications" },
-            { "title": "track add", "description": "Add a new application" },
-            { "title": "track view", "description": "View application details" },
+            { "title": "track", "description": "Manage applications (list, add, view)" },
             { "title": "confirm", "description": "Link your Teams identity to a Job Apply account" },
             { "title": "whoami", "description": "Show which account you're linked as" },
             { "title": "unlink", "description": "Remove your Teams identity's link" },
-            { "title": "runs", "description": "List recent Drive run folders" },
             { "title": "help", "description": "Command reference" }
           ]
         }
