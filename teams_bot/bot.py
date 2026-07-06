@@ -394,17 +394,29 @@ class JobApplyBot(ActivityHandler):
             if s in counts:
                 counts[s] += 1
 
-        lines = []
-        for status in VALID_STATUSES:
-            n = counts[status]
-            if n:
-                lines.append(f"{STATUS_EMOJI[status]} **{status}:** {n}")
+        facts = [
+            {"title": f"{STATUS_EMOJI[status]} {status}", "value": str(n)}
+            for status in VALID_STATUSES
+            if (n := counts[status])
+        ]
 
-        text = (
-            f"\U0001f4ca **Application Pipeline** ({len(apps)} total)\n\n"
-            + "\n".join(lines)
-        )
-        await ctx.send_activity(MessageFactory.text(text))
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "text": "\U0001f4ca Application Pipeline",
+                    "size": "Large", "weight": "Bolder",
+                },
+                {
+                    "type": "TextBlock", "text": f"{len(apps)} total",
+                    "isSubtle": True, "spacing": "None",
+                },
+                {"type": "FactSet", "facts": facts, "spacing": "Medium"},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     async def _cmd_track_list(self, ctx: TurnContext, status_filter: str, user: dict):
         resolved: str | None = None
@@ -438,18 +450,55 @@ class JobApplyBot(ActivityHandler):
         apps = sorted(apps, key=lambda a: (order.get(a.get("status", ""), 99), a.get("company", "")))
         shown = apps[:15]
 
-        lines = [f"\U0001f4cb **Applications{' — ' + resolved if resolved else ''}** ({len(apps)} total)\n"]
-        for a in shown:
-            emoji = STATUS_EMOJI.get(a.get("status", ""), "")
-            company = a.get("company", "?")
-            role = a.get("role_title", "?")
+        rows = []
+        for i, a in enumerate(shown):
             status = a.get("status", "?")
-            lines.append(f"{emoji} **{company}** — {role} ({status})")
+            rows.append({
+                "type": "ColumnSet",
+                "spacing": "Medium" if i else "Default",
+                "separator": i > 0,
+                "columns": [
+                    {
+                        "type": "Column", "width": "stretch",
+                        "items": [
+                            {"type": "TextBlock", "text": a.get("company", "?"), "weight": "Bolder", "wrap": True},
+                            {
+                                "type": "TextBlock", "text": a.get("role_title", "?"),
+                                "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
+                            },
+                        ],
+                    },
+                    {
+                        "type": "Column", "width": "auto", "verticalContentAlignment": "Center",
+                        "items": [
+                            {
+                                "type": "TextBlock", "text": f"{STATUS_EMOJI.get(status, '')} {status}".strip(),
+                                "color": STATUS_COLOR.get(status, "Default"), "wrap": True, "size": "Small",
+                            },
+                        ],
+                    },
+                ],
+            })
 
+        title = f"\U0001f4cb Applications{' — ' + resolved if resolved else ''}"
+        body: list[dict[str, Any]] = [
+            {"type": "TextBlock", "text": title, "size": "Large", "weight": "Bolder"},
+            {"type": "TextBlock", "text": f"{len(apps)} total", "isSubtle": True, "spacing": "None"},
+            *rows,
+        ]
         if len(apps) > 15:
-            lines.append(f"\n_…and {len(apps) - 15} more._")
+            body.append({
+                "type": "TextBlock", "text": f"…and {len(apps) - 15} more.",
+                "isSubtle": True, "spacing": "Medium",
+            })
 
-        await ctx.send_activity(MessageFactory.text("\n".join(lines)))
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": body,
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     async def _cmd_track_view(self, ctx: TurnContext, user: dict):
         try:
@@ -514,23 +563,49 @@ class JobApplyBot(ActivityHandler):
         }
 
         shown = runs[:15]
-        lines = [f"\U0001f4c2 **Recent Agent Runs** ({len(runs)} total)\n"]
-        for r in shown:
+        rows = []
+        for i, r in enumerate(shown):
             type_label = TYPE_LABELS.get(r.get("type", ""), r.get("type", "?"))
             status_badge = STATUS_BADGES.get(r.get("status", ""), "")
             company = r.get("company", "")
             role = r.get("role", "")
             label = f"{company} — {role}" if company else r.get("id", "?")[:8]
             drive_url = r.get("gdrive_folder_url", "")
+
+            row = {
+                "type": "Container",
+                "spacing": "Medium" if i else "Default",
+                "separator": i > 0,
+                "items": [
+                    {"type": "TextBlock", "text": f"{status_badge} {type_label}", "weight": "Bolder", "wrap": True},
+                    {
+                        "type": "TextBlock", "text": label,
+                        "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
+                    },
+                ],
+            }
             if drive_url:
-                lines.append(f"- {status_badge} {type_label}: [{label}]({drive_url})")
-            else:
-                lines.append(f"- {status_badge} {type_label}: {label}")
+                row["selectAction"] = {"type": "Action.OpenUrl", "url": drive_url}
+            rows.append(row)
 
+        body: list[dict[str, Any]] = [
+            {"type": "TextBlock", "text": "\U0001f4c2 Recent Agent Runs", "size": "Large", "weight": "Bolder"},
+            {"type": "TextBlock", "text": f"{len(runs)} total", "isSubtle": True, "spacing": "None"},
+            *rows,
+        ]
         if len(runs) > 15:
-            lines.append(f"\n_…and {len(runs) - 15} more._")
+            body.append({
+                "type": "TextBlock", "text": f"…and {len(runs) - 15} more.",
+                "isSubtle": True, "spacing": "Medium",
+            })
 
-        await ctx.send_activity(MessageFactory.text("\n".join(lines)))
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": body,
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     async def _cmd_help(self, ctx: TurnContext):
         text = (
@@ -710,12 +785,33 @@ class JobApplyBot(ActivityHandler):
 
             if status["status"] == "done":
                 answer = status.get("answer", "(no answer returned)")
-                self._proactive_message(
-                    adapter, conv_ref,
-                    f"✅ **Answer ready** ({company} — {role})\n\n"
-                    f"**Q:** {question}\n\n"
-                    f"**A:** {answer}",
-                )
+                card = {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.5",
+                    "body": [
+                        {"type": "TextBlock", "text": "✅ Answer Ready", "size": "Large", "weight": "Bolder"},
+                        {
+                            "type": "TextBlock", "text": f"{company} — {role}",
+                            "isSubtle": True, "wrap": True, "spacing": "None",
+                        },
+                        {
+                            "type": "Container", "spacing": "Medium", "separator": True,
+                            "items": [
+                                {"type": "TextBlock", "text": "Question", "weight": "Bolder", "size": "Small"},
+                                {"type": "TextBlock", "text": question, "wrap": True},
+                            ],
+                        },
+                        {
+                            "type": "Container", "spacing": "Medium", "separator": True,
+                            "items": [
+                                {"type": "TextBlock", "text": "Answer", "weight": "Bolder", "size": "Small"},
+                                {"type": "TextBlock", "text": answer, "wrap": True},
+                            ],
+                        },
+                    ],
+                }
+                self._proactive_message(adapter, conv_ref, card=card)
             elif status["status"] == "timeout":
                 self._proactive_message(adapter, conv_ref, "⚠️ Taking longer than expected.")
             else:
@@ -926,11 +1022,14 @@ class JobApplyBot(ActivityHandler):
     # ── Proactive messaging helper ───────────────────────────────────────
 
     @staticmethod
-    def _proactive_message(adapter, conv_ref: ConversationReference, text: str):
+    def _proactive_message(adapter, conv_ref: ConversationReference, text: str = "", card: dict | None = None):
         import asyncio
 
         async def _send(tc: TurnContext):
-            await tc.send_activity(MessageFactory.text(text))
+            if card:
+                await tc.send_activity(MessageFactory.attachment(_card_attachment(card)))
+            else:
+                await tc.send_activity(MessageFactory.text(text))
 
         loop = asyncio.new_event_loop()
         try:
