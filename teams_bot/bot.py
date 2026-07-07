@@ -2369,9 +2369,19 @@ class JobApplyBot(ActivityHandler):
             "version": "1.5",
             "body": body,
         }
+        actions = []
         url = a.get("url")
         if url:
-            card["actions"] = [{"type": "Action.OpenUrl", "title": "Open Job Posting", "url": url}]
+            actions.append({"type": "Action.OpenUrl", "title": "Open Job Posting", "url": url})
+        drive_runs = [r for r in (a.get("linked_runs") or []) if r.get("folder_url")]
+        if drive_runs:
+            drive_runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+            actions.append({
+                "type": "Action.OpenUrl", "title": "Open Drive Folder",
+                "url": drive_runs[0]["folder_url"],
+            })
+        if actions:
+            card["actions"] = actions
 
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 

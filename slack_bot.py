@@ -2010,6 +2010,10 @@ def track_view_view_submit(ack, body, client, view):
             lines.append(f"• Recruiter: {rec}")
         if a.get("url"):
             lines.append(f"• <{a['url']}|Job Posting ↗>")
+        drive_runs = [r for r in (a.get("linked_runs") or []) if r.get("folder_url")]
+        if drive_runs:
+            drive_runs.sort(key=lambda r: r.get("linked_at", ""), reverse=True)
+            lines.append(f"• <{drive_runs[0]['folder_url']}|Drive Folder ↗>")
         comments = a.get("comments", [])
         if comments:
             lines.append(f"\n:speech_balloon: *Notes ({len(comments)}):*")
