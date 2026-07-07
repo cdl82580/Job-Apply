@@ -4061,7 +4061,7 @@ function renderKBCategories() {
   }
   tbody.innerHTML = _kbCategories.map(c => `
     <tr>
-      <td style="font-size:1.2rem;text-align:center">${c.icon || ''}</td>
+      <td style="text-align:center">${c.iconImg ? `<img src="${esc(c.iconImg)}" alt="" style="width:1.2rem;height:1.2rem;object-fit:contain;vertical-align:middle">` : `<span style="font-size:1.2rem">${c.icon || ''}</span>`}</td>
       <td><strong>${esc(c.label)}</strong><br><span style="font-size:.75rem;color:var(--muted)">${esc(c.id)}</span></td>
       <td style="font-size:.8rem;color:var(--muted)">${esc(c.desc || '')}</td>
       <td style="text-align:center">${c.adminOnly ? '✓' : ''}</td>
