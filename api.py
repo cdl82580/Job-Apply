@@ -572,6 +572,7 @@ async def security_headers_middleware(request: Request, call_next):
 _PUBLIC_PATHS = frozenset({
     "/", "/login.html", "/register.html", "/kb.html",
     "/forgot-password.html", "/reset-password.html", "/teams-link.html",
+    "/privacy", "/terms",
     "/api/auth/login", "/api/auth/register",
     "/api/auth/google", "/api/auth/google/callback",
     "/api/auth/verify-email",
@@ -1732,6 +1733,21 @@ class OptimizeRequest(BaseModel):
     optimize_resume: bool = True
     optimize_cover_letter: bool = True
     model: str | None = None
+
+# ---------------------------------------------------------------------------
+# Static legal pages (referenced by the Teams app manifest — must be publicly
+# reachable without auth for Teams' consent flow, hence exact-path routes
+# rather than relying on the "/" static mount + auth_middleware redirect)
+# ---------------------------------------------------------------------------
+
+@app.get("/privacy")
+async def privacy_page():
+    return FileResponse("frontend/privacy.html")
+
+
+@app.get("/terms")
+async def terms_page():
+    return FileResponse("frontend/terms.html")
 
 # ---------------------------------------------------------------------------
 # Health
