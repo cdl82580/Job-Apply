@@ -172,6 +172,7 @@
 
     .cat-header { margin-bottom: 1.5rem; }
     .cat-title { font-size: 1.35rem; font-weight: 700; color: var(--primary); margin: 0 0 .3rem; }
+    .cat-title-icon-img { width: 1.35rem; height: 1.35rem; object-fit: contain; vertical-align: -3px; margin-right: .3rem; }
     .cat-desc { color: var(--muted); font-size: .9rem; margin: 0; }
 
     .article-grid {
@@ -284,6 +285,7 @@
     }
     .cat-card:hover { border-color: var(--border); box-shadow: 0 2px 10px color-mix(in srgb, var(--border) 15%, transparent); }
     .cat-card-icon { font-size: 1.5rem; margin-bottom: .5rem; }
+    .cat-card-icon-img { width: 1.5rem; height: 1.5rem; object-fit: contain; display: block; }
     .cat-card-title { font-size: .92rem; font-weight: 700; color: var(--primary); margin: 0 0 .25rem; }
     .cat-card-count { font-size: .75rem; color: var(--muted); }
 
@@ -403,13 +405,45 @@ const KB = {
     { id: 'cover-letter',     label: 'Cover Letter',          icon: '✉️',  desc: 'Structure, tone rules, opening hooks, and evidence paragraph strategy.' },
     { id: 'ats',              label: 'ATS Optimization',      icon: '🤖', desc: 'How the ATS resume is built and what makes it parser-friendly.' },
     { id: 'workflow',         label: 'Workflow & Web App',    icon: '⚙️',  desc: 'Using the web interface, running the agent, and the interview prep workflow.' },
-    { id: 'slack',            label: 'Slack Integration',     icon: '💬', desc: 'Slash commands for running the agent, tracking applications, and calendar management.' },
+    { id: 'slack',            label: 'Slack Integration',     icon: '💬', iconImg: '/img/slack-icon.svg', desc: 'Slash commands for running the agent, tracking applications, and calendar management.' },
+    { id: 'teams',            label: 'Teams Integration',     icon: '👥', iconImg: '/img/teams-icon.svg', desc: 'Chat commands for running the agent, tracking applications, and calendar management from Microsoft Teams.' },
     { id: 'admin',            label: 'Admin',                 icon: '🔐', desc: 'Webhooks, system architecture, Drive integration, XML editing, and troubleshooting.', adminOnly: true },
   ],
 
   articles: [
 
     /* ── Getting Started ─────────────────────────────────────── */
+    {
+      id: 'gs-agents-overview',
+      category: 'getting-started',
+      title: 'All the Agents',
+      snippet: 'Every agent this platform offers, side by side — what each produces and how to trigger it from the web app, Slack, or Teams.',
+      readTime: '3 min',
+      body: `
+<h2>Six Agents, One Job Search</h2>
+<p>Everything in Job Apply that calls Claude to produce something is one of six agents. Each needs a job description resolvable from a tracked application (a saved <code>job_description.md</code> in its Drive folder, or its posting URL) — except the first <strong>Resume + ATS + Cover Letter</strong> run for an application, which also accepts a pasted job posting directly.</p>
+
+<table>
+  <tr><th>Agent</th><th>What it produces</th><th>Web (Agent tab)</th><th>Slack</th><th>Teams</th></tr>
+  <tr><td><strong>Resume + ATS + Cover Letter</strong></td><td>Tailored resume DOCX, ATS-safe resume DOCX, cover letter DOCX</td><td>Generate</td><td><code>/apply</code></td><td><code>apply</code></td></tr>
+  <tr><td><strong>Application Questions</strong></td><td>Answer to a freeform application question, with clarification follow-ups</td><td>Application Questions</td><td><code>/aq</code></td><td><code>aq</code></td></tr>
+  <tr><td><strong>Interview Prep</strong></td><td>2-page interview prep reference DOCX</td><td>Interview Prep</td><td><code>/prep</code></td><td><code>prep</code></td></tr>
+  <tr><td><strong>Thank You Email</strong></td><td>Post-interview thank-you email + DOCX</td><td>Thank You Email</td><td><code>/thankyou</code></td><td><code>thankyou</code></td></tr>
+  <tr><td><strong>Optimize</strong></td><td>In-place revision of an existing run's resume/cover letter from a freeform instruction</td><td>Optimize</td><td><code>/optimize</code></td><td><code>optimize</code></td></tr>
+  <tr><td><strong>Rescore</strong> (Match Scoring)</td><td>Resume↔JD fit score (0–100), category, and per-dimension breakdown</td><td>Tracker row → Score/Rescore button</td><td><code>/rescore</code></td><td><code>rescore</code></td></tr>
+</table>
+
+<h2>Where Each One Lives</h2>
+<ul>
+  <li><strong>Resume + ATS + Cover Letter</strong> is also available from the CLI (<code>python3 apply.py --job jobs/job.txt --company … --role …</code>) — see <a href="#" onclick="showArticle('gs-first-run')">Running Your First Application</a></li>
+  <li><strong>Rescore</strong> lives on the Application Tracker, not the Agent tab — it's a property of a tracked application, not a standalone document generator</li>
+  <li>Every other agent is a tab in the <strong>Agent</strong> section of the web app, and a matching command in both the Slack and Teams bots</li>
+</ul>
+
+<h2>Digging Deeper</h2>
+<p>See <a href="#" onclick="showArticle('gs-overview')">How the Agent Works</a> for the resume/ATS/cover-letter 8-step workflow, <a href="#" onclick="showArticle('wf-web-app')">Using the Web App</a> for how prep/AQ/thank-you/optimize work in the browser, and the <strong>Slack Integration</strong> / <strong>Teams Integration</strong> categories for exact chat-command syntax.</p>
+      `
+    },
     {
       id: 'gs-overview',
       category: 'getting-started',
@@ -1148,6 +1182,49 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       `
     },
     {
+      id: 'wf-calendar',
+      category: 'workflow',
+      title: 'Calendar',
+      snippet: 'Event types, reminder channels and offsets, event/reminder caps, and linking events to tracker applications and agent runs.',
+      readTime: '3 min',
+      body: `
+<h2>What It's For</h2>
+<p>The Calendar (<code>/calendar.html</code>) tracks interviews, deadlines, and other job-search events, with optional reminders delivered by email and/or Slack DM. It's plain CRUD — no Claude call involved — and is also reachable from Slack's <code>/cal-*</code> commands and Teams' <code>cal *</code> commands against the same <code>/api/calendar</code> endpoints.</p>
+
+<h2>Views</h2>
+<p>Month and Week toggle at the top of the page. Events render as color-coded chips by type; clicking a chip opens its detail view.</p>
+
+<h2>Event Types</h2>
+<table>
+  <tr><th>Type</th><th>Label</th></tr>
+  <tr><td><code>interview</code></td><td>Interview</td></tr>
+  <tr><td><code>phone_screen</code></td><td>Phone Screen</td></tr>
+  <tr><td><code>deadline</code></td><td>Deadline</td></tr>
+  <tr><td><code>follow_up</code></td><td>Follow-Up</td></tr>
+  <tr><td><code>offer_deadline</code></td><td>Offer Deadline</td></tr>
+  <tr><td><code>prep</code></td><td>Prep Session</td></tr>
+  <tr><td><code>custom</code></td><td>Custom</td></tr>
+</table>
+
+<h2>Event Fields</h2>
+<p>Title (required), type, datetime + IANA timezone, duration (0–1,440 minutes), notes (up to 5,000 characters), an optional linked tracker application, up to 20 linked agent run IDs, and up to 10 reminders.</p>
+
+<h2>Reminders</h2>
+<p>Each reminder is an <code>{offset_minutes, channels}</code> pair — <code>offset_minutes</code> is how long before the event to fire (0 to 1 year out), <code>channels</code> is any combination of <code>email</code> and <code>slack</code>. A background scheduler in <code>api.py</code> polls every 60 seconds for due reminders across all users and fires each exactly once:</p>
+<ul>
+  <li><strong>Email</strong> — sent via Resend to the app's configured user email</li>
+  <li><strong>Slack</strong> — DM'd to <code>SLACK_NOTIFY_USER_ID</code> if configured, via <code>conversations.open</code> + <code>chat.postMessage</code></li>
+</ul>
+<p>Reminders fire from this scheduler thread, not the bot process, so they still go out even if the Slack bot machine is idle. Teams has no equivalent chat-delivery channel wired up server-side — Teams' <code>cal add</code> only offers an email toggle.</p>
+
+<h2>Linking to Tracker &amp; Runs</h2>
+<p>Setting <code>app_id</code> links an event to a tracked application — it shows up on that application's detail view (and in Slack/Teams <code>track view</code>). <code>run_ids</code> links one or more agent runs to the event for quick reference (e.g. "the prep doc for this interview").</p>
+
+<h2>Limits</h2>
+<p>1,000 events per user, 10 reminders per event, 20 linked run IDs per event, 200-character titles, 5,000-character notes.</p>
+      `
+    },
+    {
       id: 'wf-drive',
       category: 'admin',
       title: 'Google Drive Integration',
@@ -1192,8 +1269,8 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>Deployment</h2>
 <p>The app runs on <a href="https://fly.io" target="_blank">Fly.io</a> with two machines:</p>
 <ul>
-  <li><strong>web</strong> — serves the frontend and FastAPI API (<code>api.py</code>), handles SSE streaming</li>
-  <li><strong>bot</strong> — runs background tasks (Slack bot, async processing)</li>
+  <li><strong>web</strong> — serves the frontend and FastAPI API (<code>api.py</code>), handles SSE streaming; the Microsoft Teams bot is also mounted directly onto this process via <code>routers/teams.py</code> (<code>POST /api/messages</code>) — it is not a separate machine</li>
+  <li><strong>bot</strong> — runs the Slack bot (<code>slack_bot.py</code>, Socket Mode) and background async processing</li>
 </ul>
 <p>Both machines are scaled to 1. The web machine must stay at 1 because SSE state is in-memory — scaling to 2 without a shared event bus would lose events for requests routed to the wrong machine.</p>
 
@@ -1221,7 +1298,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <p>Plain HTML/CSS/JS — no framework. Each page is a self-contained file in <code>frontend/</code>. Pages share a common header pattern and CSS token system (<code>--primary</code>, <code>--bg-card</code>, etc.).</p>
 
 <h2>Auth Model</h2>
-<p>Stateless HMAC-signed <code>HttpOnly</code> session cookie (30-day TTL). Login and register set the cookie automatically. Google OAuth is also supported. Admins may also authenticate via <code>Authorization: Bearer {BOT_API_KEY}</code> header (used by the Slack bot).</p>
+<p>Stateless HMAC-signed <code>HttpOnly</code> session cookie (30-day TTL). Login and register set the cookie automatically. Google OAuth is also supported. Admins may also authenticate via <code>Authorization: Bearer {BOT_API_KEY}</code> header (used by both the Slack and Teams bots). The Teams bot additionally sends an <code>X-Teams-User-Email</code> header so the API resolves the specific linked account for that Teams user, rather than the shared primary account the Slack bot always uses.</p>
 
 <h2>Email Notifications</h2>
 <p>A background scan runs every hour to send nudge and follow-up reminder emails for applications in the <em>Researching</em> and <em>Applied</em> statuses. Emails contain signed one-time action links — clicking a link directly updates the application status or snoozes further reminders, no login required.</p>
@@ -1526,7 +1603,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <p>Opens a modal to update an existing application's status, stage, or notes. Select the application from a dropdown (searches by company name), make changes, and submit.</p>
 
 <h2>/track-view</h2>
-<p>Opens a read-only detail modal for a selected application — full field set, comments timeline, and linked run folders.</p>
+<p>Opens a read-only detail modal for a selected application — full field set, comments timeline, linked run folders, and a link to its Google Drive output folder (most recently linked run) if one exists.</p>
 
 <h2>/track-note</h2>
 <p>Adds a freetext comment to an application record — useful for logging interview notes, recruiter calls, or follow-up reminders directly from Slack.</p>
@@ -1546,7 +1623,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
       readTime: '4 min',
       body: `
 <h2>/cal-today</h2>
-<p>Lists all calendar events scheduled for today — title, time, timezone, and type (interview, phone screen, offer call, etc.). Returns a message if nothing is scheduled.</p>
+<p>Lists all calendar events scheduled for today — title, time, timezone, and type. Returns a message if nothing is scheduled.</p>
 
 <h2>/cal-week</h2>
 <p>Lists all events in the next 7 days, grouped by date. Good for a weekly prep scan before Monday morning.</p>
@@ -1554,13 +1631,14 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <h2>/cal-add</h2>
 <p>Opens a modal to create a new calendar event. Fields include:</p>
 <ul>
-  <li>Event title and type (Interview, Phone Screen, Offer Call, etc.)</li>
+  <li>Event title and type (Interview, Phone Screen, Deadline, Follow-Up, Offer Deadline, Prep Session, Custom)</li>
   <li>Date and time</li>
   <li>Timezone</li>
   <li>Notes / preparation notes</li>
   <li>Reminder channels — Email, Slack DM, or both</li>
-  <li>Reminder timing — 1 hour, 3 hours, or 1 day before</li>
+  <li>Reminder timing — any lead time up to 1 year before, up to 10 reminders per event</li>
 </ul>
+<p>See the <a href="#" onclick="showArticle('wf-calendar')">Calendar</a> article for the full list of event types and how reminders and application/run linking work.</p>
 
 <h2>/cal-view</h2>
 <p>Opens a read-only detail modal for a selected event. Shows all fields including reminder configuration and any notes added at creation.</p>
@@ -1596,6 +1674,7 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
   <tr><td><code>/profile-guide</code></td><td>Edit your profile &amp; voice guide (the <code>profile.md</code> content) via a large text modal</td></tr>
   <tr><td><code>/notifications</code></td><td>View and toggle email notification preferences — researching nudge, follow-up reminder, gone silent, status changed, new application, daily digest, weekly digest</td></tr>
 </table>
+<p>See the <a href="#" onclick="showArticle('wf-email-notifications')">Notifications</a> article for exact thresholds, delivery timing, and the one-click action links included in each email.</p>
 
 <p>To change your display name, email, or password, use the <a href="/profile.html">Profile page</a> in the web app.</p>
 
@@ -1604,6 +1683,154 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 
 <h2>/help</h2>
 <p>Posts the full command reference — every slash command, what it does, and example usage — as a formatted Slack message. Good starting point if you're new to the bot or can't remember a command name.</p>
+      `
+    },
+
+    /* ── Teams Integration ────────────────────────────────────── */
+    {
+      id: 'teams-overview',
+      category: 'admin',
+      title: 'Teams Bot Overview',
+      snippet: 'What the Teams bot does, how it links your identity, and how it differs from the Slack bot.',
+      readTime: '3 min',
+      body: `
+<h2>What the Bot Does</h2>
+<p>The Microsoft Teams bot (<code>teams_bot/</code>) brings the same commands as the Slack bot — running jobs, tracking applications, managing the calendar, and updating your profile — into a Teams chat, built on the Bot Framework SDK for Python.</p>
+
+<h2>Architecture</h2>
+<p>Unlike the Slack bot, the Teams bot is <strong>mounted directly onto the main FastAPI app</strong> (the <code>web</code> Fly machine) via <code>routers/teams.py</code>, which exposes <code>POST /api/messages</code> as a normal FastAPI route. It is not a separate Fly machine — it rides on the app's existing domain and TLS cert.</p>
+
+<h2>Identity Linking</h2>
+<p>The Slack bot always acts as the single primary account. The Teams bot instead resolves <em>which</em> Job Apply account each Teams user is acting on behalf of:</p>
+<ul>
+  <li>The first time you run any command other than <code>help</code>/<code>confirm</code>/<code>unlink</code>, the bot looks up your Teams identity against a linked account</li>
+  <li>If unlinked, it checks whether a Job Apply account exists for your Teams email and asks you to reply <code>confirm</code></li>
+  <li>Once confirmed, the link is valid for 30 days, after which re-confirmation is required</li>
+  <li><code>whoami</code> shows which account you're currently linked as; <code>unlink</code> removes the link</li>
+</ul>
+
+<h2>Public Pages</h2>
+<p>The Teams app manifest's privacy policy and terms-of-use links point at <code>/privacy</code> and <code>/terms</code> — these are served unauthenticated (no login redirect) because Teams' permission-consent dialog fetches them directly.</p>
+
+<h2>File Uploads</h2>
+<p>Attach a <code>.docx</code> directly to the chat to replace your master resume (equivalent to Slack's DM-a-file flow) — no slash-command argument needed.</p>
+      `
+    },
+    {
+      id: 'teams-job-commands',
+      category: 'teams',
+      title: 'Job & Run Commands',
+      snippet: 'apply, aq, prep, thankyou, optimize, rescore, runs — running document generation and checking status from Teams.',
+      readTime: '4 min',
+      body: `
+<h2>apply</h2>
+<p>Generates a tailored resume, ATS resume, and cover letter. Submitting the Adaptive Card form picks up a saved job description from the selected application's most recently linked Drive folder automatically if one exists; otherwise a follow-up card asks you to paste the job posting once.</p>
+
+<h2>aq</h2>
+<p>Answers a freeform application question using your resume, JD, and profile. The bot may ask clarifying questions before generating a final answer.</p>
+
+<h2>prep</h2>
+<p>Generates interview prep materials for a role, same application-picker pattern as <code>apply</code>.</p>
+
+<h2>thankyou</h2>
+<p>Generates a post-interview thank-you email — round type, tone, optional interviewer name and key topics discussed. Outputs an editable email plus a DOCX uploaded to Drive.</p>
+
+<h2>optimize</h2>
+<p>Refines the documents from an existing agent run based on a freeform instruction. Automatically uses the most recent linked Drive run folder for the selected application.</p>
+
+<h2>rescore</h2>
+<p>Re-scores how well your resume matches a specific application's job posting — returns the score (0–100), category, and a one-line summary.</p>
+
+<h2>runs</h2>
+<p>Lists your most recent Drive run folders — company, role, date, and a link to the folder.</p>
+
+<h2>Application Picker</h2>
+<p><code>apply</code>/<code>prep</code>/<code>aq</code>/<code>thankyou</code> only run against a tracked application — there's no free-text company/role entry. Each form's "Application" field is a dynamic typeahead searching your own tracked applications.</p>
+      `
+    },
+    {
+      id: 'teams-tracker-commands',
+      category: 'teams',
+      title: 'Application Tracker Commands',
+      snippet: 'tracker, track list, track add, track view, track update, track note, track delete — full tracker CRUD from Teams.',
+      readTime: '4 min',
+      body: `
+<h2>tracker</h2>
+<p>Shows a pipeline summary — counts of applications grouped by status.</p>
+
+<h2>track list [status]</h2>
+<p>Lists applications, optionally filtered by status.</p>
+
+<h2>track add</h2>
+<p>Opens an Adaptive Card form to add a new application record, with company search.</p>
+
+<h2>track view</h2>
+<p>Shows full application details, including a link to its linked Google Drive output folder (most recently linked run) if one exists, alongside the job posting link.</p>
+
+<h2>track update</h2>
+<p>Two-step: pick an application, then edit a form pre-filled from the current record — status, date applied, job source, location, salary, URL, DUA flag, and recruiter. Setting status to Applied auto-sets the date applied.</p>
+
+<h2>track note</h2>
+<p>Adds a comment to an application record.</p>
+
+<h2>track delete</h2>
+<p>Deletes an application after a destructive-styled confirm card.</p>
+      `
+    },
+    {
+      id: 'teams-calendar-commands',
+      category: 'teams',
+      title: 'Calendar Commands',
+      snippet: 'cal today, cal week, cal add, cal view, cal delete — managing interview calendar events from Teams.',
+      readTime: '3 min',
+      body: `
+<h2>cal today / cal week</h2>
+<p>Lists events scheduled for today, or the next 7 days.</p>
+
+<h2>cal add</h2>
+<p>Opens a form to create a calendar event — title, type, date, time, timezone, notes, and an optional email reminder. Local date/time and timezone are converted to UTC before being sent to the API.</p>
+
+<h2>cal view</h2>
+<p>Shows full details of a selected event.</p>
+
+<h2>cal delete</h2>
+<p>Select an event, confirm, then delete.</p>
+
+<h2>Email Reminders Only</h2>
+<p>Teams' <code>cal add</code> simplifies Slack's reminder-channel choice down to a single "Email reminder" toggle — there's no Teams-side reminder delivery channel implemented server-side to pair with a chat notification.</p>
+<p>See the <a href="#" onclick="showArticle('wf-calendar')">Calendar</a> article for the full list of event types and how reminders and application/run linking work.</p>
+      `
+    },
+    {
+      id: 'teams-account-commands',
+      category: 'teams',
+      title: 'Account & Profile Commands',
+      snippet: 'confirm, whoami, unlink, company, profile resume, profile guide, notifications, help — account linking and utilities from Teams.',
+      readTime: '3 min',
+      body: `
+<h2>confirm</h2>
+<p>Links your Teams identity to a Job Apply account with a matching email. Required before any other command works.</p>
+
+<h2>whoami</h2>
+<p>Shows which Job Apply account your Teams identity is currently linked as.</p>
+
+<h2>unlink</h2>
+<p>Removes your Teams identity's link — you'll need to <code>confirm</code> again before running other commands.</p>
+
+<h2>company [name]</h2>
+<p>Searches for company information via Logo.dev.</p>
+
+<h2>profile resume</h2>
+<p>Attach a <code>.docx</code> file directly to the chat to replace your master resume — no slash-command argument needed.</p>
+
+<h2>profile guide</h2>
+<p>Edit your profile &amp; voice guide (the <code>profile.md</code> content).</p>
+
+<h2>notifications</h2>
+<p>View and toggle email notification preferences — researching nudge, follow-up reminder, gone silent, status changed, new application, daily digest, weekly digest. See the <a href="#" onclick="showArticle('wf-email-notifications')">Notifications</a> article for exact thresholds and delivery timing.</p>
+
+<h2>help</h2>
+<p>Posts the full command reference.</p>
       `
     },
 
@@ -1765,19 +1992,29 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
     {
       id: 'wf-email-notifications',
       category: 'workflow',
-      title: 'Email Notifications — Nudges & Follow-Up Reminders',
-      snippet: 'Automated email nudges for Researching and Applied applications, with one-click action links.',
-      readTime: '2 min',
+      title: 'Notifications',
+      snippet: 'All 7 email notification types — time-elapsed nudges, event-triggered confirmations, and digests — plus one-click action links and how to configure them.',
+      readTime: '4 min',
       body: `
-<h2>What Gets Sent</h2>
-<p>A background scan runs every hour and sends two types of reminder emails:</p>
-<ul>
-  <li><strong>Researching nudge</strong> — for applications stuck in <em>Researching</em> status for too long, prompting you to either apply or drop them</li>
-  <li><strong>Follow-up reminder</strong> — for applications in <em>Applied</em> status after a set number of days, reminding you to follow up or update the status</li>
-</ul>
+<h2>Seven Types, Three Groups</h2>
+<p>Notification preferences live per-user (<code>PUT /api/profile</code> with a <code>notification_prefs</code> map) and default to <strong>on</strong>. All are email-only via Resend — there's no per-type Slack/Teams channel choice (that's a <a href="#" onclick="showArticle('wf-calendar')">Calendar</a> reminder feature, not this system).</p>
 
-<h2>One-Click Action Links</h2>
-<p>Every notification email contains signed action links — clicking them executes the action immediately, no login required:</p>
+<table>
+  <tr><th>Group</th><th>Type</th><th>Trigger</th></tr>
+  <tr><td rowspan="3">Time-Elapsed</td><td><code>researching_nudge</code></td><td>2 days in <em>Researching</em> status (tier 1), again at 7 days (tier 2)</td></tr>
+  <tr><td><code>follow_up_reminder</code></td><td>7 days since <em>Applied</em> with no progress (tier 1), again at 14 days (tier 2)</td></tr>
+  <tr><td><code>gone_silent</code></td><td>21 days with no status change while in an active status (Applied, Phone Screen, Interviewing, On Hold, Offer)</td></tr>
+  <tr><td rowspan="2">Event-Triggered</td><td><code>status_changed</code></td><td>Fires immediately whenever an application's status is updated (<code>PUT /api/applications/{id}</code>)</td></tr>
+  <tr><td><code>new_application</code></td><td>Fires immediately when a new application is created, or a tailoring run completes and links to a Drive folder</td></tr>
+  <tr><td rowspan="2">Digests</td><td><code>daily_digest</code></td><td>Every day at 8am UTC — active applications and follow-ups due that day</td></tr>
+  <tr><td><code>weekly_digest</code></td><td>Sundays at 6pm UTC — full pipeline funnel breakdown and silent applications</td></tr>
+</table>
+
+<h2>Delivery Mechanics</h2>
+<p>Time-elapsed and digest types are driven by a background scan that runs every hour, checking each type's own threshold/schedule; event-triggered types fire inline from <code>scripts/notif_dispatch.py</code> the moment the triggering API call completes — no polling delay.</p>
+
+<h2>One-Click Action Links (Time-Elapsed Only)</h2>
+<p>Researching nudge, follow-up reminder, and gone-silent emails contain signed action links — clicking them executes the action immediately, no login required:</p>
 <ul>
   <li><strong>Applied today</strong> — sets status to Applied with today's date</li>
   <li><strong>Not applying</strong> — sets status to Withdrawn</li>
@@ -1788,7 +2025,16 @@ P1: "When [Company] talks about 90-day implementation cycles, I recognize that a
 <p>Links are valid for 7 days and are single-use. For "Applied" actions, if the date isn't already set in the link payload, you're redirected to a small form to pick the date.</p>
 
 <h2>Notification State</h2>
-<p>Each application tracks notification state — which nudge tier was last sent and when — to avoid repeat sends. Snooze suppresses all notifications for an application until the snooze period expires.</p>
+<p>Each application tracks notification state — which nudge tier was last sent and when — to avoid repeat sends. Snooze suppresses all time-elapsed notifications for an application until the snooze period expires.</p>
+
+<h2>Configuring Preferences</h2>
+<p>Toggle any of the 7 types from the <strong>Email Notifications</strong> card on the <a href="/profile.html">Profile page</a>, or via <code>/notifications</code> in Slack and <code>notifications</code> in Teams (same <code>notification_prefs</code> map underneath).</p>
+
+<h2>Not to Be Confused With</h2>
+<ul>
+  <li><a href="#" onclick="showArticle('wf-calendar')">Calendar reminders</a> — per-event email/Slack DM reminders you configure per calendar event, a separate system</li>
+  <li><a href="#" onclick="showArticle('wh-overview')">Webhooks</a> — admin-configured outbound event streaming to Slack, Teams, Grafana Loki, or a custom endpoint; fires on every audit action, not tied to a specific user's inbox</li>
+</ul>
       `
     },
     {
@@ -1971,10 +2217,13 @@ function buildHomeCards() {
   const el = document.getElementById('catCards');
   KB.categories.filter(cat => !cat.adminOnly || _isAdmin).forEach(cat => {
     const count = KB.articles.filter(a => a.category === cat.id).length;
+    const iconHtml = cat.iconImg
+      ? `<img src="${cat.iconImg}" class="cat-card-icon-img" alt="">`
+      : cat.icon;
     const card = document.createElement('div');
     card.className = 'cat-card';
     card.innerHTML = `
-      <div class="cat-card-icon">${cat.icon}</div>
+      <div class="cat-card-icon">${iconHtml}</div>
       <div class="cat-card-title">${cat.label}</div>
       <div class="cat-card-count">${count} article${count !== 1 ? 's' : ''}</div>
     `;
@@ -1998,7 +2247,10 @@ function showCategory(catId) {
   if (!cat || (cat.adminOnly && !_isAdmin)) return;
   const articles = KB.articles.filter(a => a.category === catId);
 
-  document.getElementById('catViewTitle').textContent = `${cat.icon}  ${cat.label}`;
+  const catIconHtml = cat.iconImg
+    ? `<img src="${cat.iconImg}" class="cat-title-icon-img" alt="">`
+    : `${cat.icon}  `;
+  document.getElementById('catViewTitle').innerHTML = `${catIconHtml}${cat.label}`;
   document.getElementById('catViewDesc').textContent  = cat.desc;
 
   const grid = document.getElementById('articleGrid');

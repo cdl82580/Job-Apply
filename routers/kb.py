@@ -40,7 +40,8 @@ _SEED_CATEGORIES = [
     {"id": "cover-letter",    "label": "Cover Letter",         "icon": "✉️",  "desc": "Structure, tone rules, opening hooks, and evidence paragraph strategy."},
     {"id": "ats",             "label": "ATS Optimization",     "icon": "🤖", "desc": "How the ATS resume is built and what makes it parser-friendly."},
     {"id": "workflow",        "label": "Workflow & Web App",   "icon": "⚙️",  "desc": "Using the web interface, running the agent, and the interview prep workflow."},
-    {"id": "slack",           "label": "Slack Integration",    "icon": "💬", "desc": "Slash commands for running the agent, tracking applications, and calendar management."},
+    {"id": "slack",           "label": "Slack Integration",    "icon": "💬", "iconImg": "/img/slack-icon.svg", "desc": "Slash commands for running the agent, tracking applications, and calendar management."},
+    {"id": "teams",           "label": "Teams Integration",    "icon": "👥", "iconImg": "/img/teams-icon.svg", "desc": "Chat commands for running the agent, tracking applications, and calendar management from Microsoft Teams."},
     {"id": "admin",           "label": "Admin",                "icon": "🔐", "desc": "Webhooks, system architecture, Drive integration, XML editing, and troubleshooting.", "adminOnly": True},
 ]
 
@@ -324,6 +325,7 @@ console.log(JSON.stringify(KB));
             "id":        c.get("id", ""),
             "label":     c.get("label", ""),
             "icon":      c.get("icon", ""),
+            "iconImg":   c.get("iconImg", ""),
             "desc":      c.get("desc", ""),
             "adminOnly": bool(c.get("adminOnly", False)),
         }

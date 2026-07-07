@@ -10,13 +10,34 @@ to Microsoft Teams. Built with the Bot Framework SDK for Python (`botbuilder`).
 | `apply` | Generate a tailored resume, ATS resume, and cover letter |
 | `aq` | Answer an application question using resume + JD context |
 | `prep` | Generate an interview prep reference card |
+| `thankyou` | Generate a post-interview thank-you email |
 | `optimize` | Refine existing run documents (resume/cover letter) |
+| `rescore` | Re-score resume/JD match for an application |
 | `tracker` | Pipeline summary (counts by status) |
 | `track list [status]` | List applications, optionally filtered |
 | `track add` | Add a new application (Adaptive Card form) |
-| `track view` | View full application details |
+| `track view` | View full application details, including a link to its linked Google Drive output folder if one exists |
+| `track update` | Two-step: pick an application → edit all fields pre-filled |
+| `track note` | Add a comment to an application |
+| `track delete` | Delete an application (two-step confirm) |
+| `cal today` / `cal week` | Show today's / next 7 days' calendar events |
+| `cal add` / `cal view` / `cal delete` | Add, view, or delete a calendar event |
+| `company [name]` | Search company info via Logo.dev |
+| `profile resume` | Instructions for uploading a new master resume (attach a `.docx` directly to the chat) |
+| `profile guide` | Edit your profile & voice guide |
+| `notifications` | View and toggle email notification preferences |
+| `confirm` | Link your Teams identity to a Job Apply account |
+| `whoami` | Show which account you're linked as |
+| `unlink` | Remove your Teams identity's link |
 | `runs` | List recent agent runs (structured records with type, status, Drive links) |
 | `help` | Command reference |
+
+Every command above except `help`/`confirm`/`unlink` requires the caller's Teams
+identity to already be linked to a Job Apply account — see **Identity Linking**
+below — and `apply`/`prep`/`aq`/`thankyou` only run against a tracked application
+(no free-text company/role entry). Full per-command details live in the main
+[README.md](../README.md#teams-commands) `Teams Commands` section; this file
+covers bot architecture and deployment.
 
 ## Architecture
 
@@ -55,7 +76,13 @@ production.
 
 - **Adaptive Cards** replace Slack's Block Kit modals for rich form input
 - **Proactive messaging** via `ConversationReference` for long-running agent
-  jobs (apply, prep, aq) — same thread-and-poll pattern as the Slack bot
+  jobs (apply, prep, aq, thankyou, optimize) — same thread-and-poll pattern as
+  the Slack bot
+- **Per-user identity linking** — unlike the Slack bot (which always acts as
+  the single primary account), the Teams bot resolves which Job Apply account
+  each Teams user is acting on behalf of; see **Identity Linking** below
+- File upload via direct chat attachment (`profile resume`) instead of a
+  slash-command argument
 - All state lives in the FastAPI backend — the Teams bot is stateless
 
 ## Setup
@@ -159,13 +186,35 @@ Only do this once step 4's Web Chat test works.
 | Bot installs in Teams but never responds | Messaging endpoint in Azure Bot config doesn't match `https://apply.cdlav.us/api/messages`, or (if testing locally) a stale ngrok URL — those expire/rotate |
 | "Upload a custom app" option missing in Teams | Org policy blocks custom app uploads — needs a Teams admin to enable it |
 | Cards/forms don't render, plain text does | Adaptive Card JSON schema version mismatch with the Teams client — check `cards/*.json` against the [Adaptive Cards schema explorer](https://adaptivecards.io/explorer/) |
+| Re-consenting after a manifest version bump gets stuck in a loop instead of completing | The manifest's `privacyUrl`/`termsOfUseUrl` must be publicly reachable without auth — confirm `/privacy` and `/terms` return the pages directly rather than redirecting to `/login.html` |
+| Completion messages (apply/prep/aq/thankyou/optimize) never arrive after the run finishes successfully | `_proactive_message()` must pass `bot_id=Config.APP_ID` to `adapter.continue_conversation()` — a `None` bot_id is rejected outright by the SDK and fails silently in the background thread |
 
 ## How It Works
+
+### Identity Linking
+The bot has no built-in notion of "logged in." The first time a Teams user
+runs any command other than `help`/`confirm`/`unlink`, the bot looks up a
+`teams_links/{aad_object_id}.json` record in Tigris (`scripts/teams_links.py`).
+If missing or expired, it fetches the caller's email via the Bot Framework's
+`TeamsInfo.get_member()` roster API, checks whether a Job Apply account exists
+for that email, and — if so — asks the user to reply `confirm`. Only after
+that explicit confirmation does it persist the link (30-day expiry, then
+re-confirmation is required). Every subsequent API call the bot makes on that
+user's behalf carries an `X-Teams-User-Email` header so `api.py:_bot_user()`
+resolves that specific account instead of the shared primary account the
+Slack bot uses. `bot-key`-authenticated `/api/teams/*` endpoints back this
+flow (`link-status`, `account-lookup`, `link-confirm`, `link-token`,
+`link-claim`, `unlink`) — see the `Teams Bot` folder in the Postman
+collection.
 
 ### Command Routing
 Users type commands as plain messages (e.g., `apply`, `track list interviewing`).
 The bot parses the text, strips @mentions in group chats, and routes to the
-appropriate handler.
+appropriate handler. A message carrying an attachment only short-circuits
+into file-upload handling if that attachment is actually a `.docx` the bot
+processed — Teams attaches non-file metadata (mentions, rich-text elements)
+to plenty of ordinary text messages, and those still fall through to normal
+command dispatch.
 
 ### Adaptive Cards
 Form-based commands (`apply`, `aq`, `prep`, `track add`) respond with an
@@ -202,10 +251,16 @@ teams_bot/
 │   ├── aq_form.json
 │   ├── optimize_form.json
 │   ├── prep_form.json
+│   ├── thankyou_form.json
 │   └── track_add_form.json
 ├── manifest/              # Teams app manifest
-│   └── manifest.json
+│   ├── manifest.json
+│   ├── outline.png / color.png    # required icons — Teams rejects the upload without both
+│   └── job-apply-teams-app.zip    # built sideload package (manifest.json + icons)
 └── README.md
 
 routers/teams.py           # production mount point — POST /api/messages on the main FastAPI app
+frontend/privacy.html, frontend/terms.html  # served unauthenticated at /privacy, /terms —
+                                             # required by the manifest's privacyUrl/termsOfUseUrl
+                                             # for the Teams permission-consent dialog to complete
 ```

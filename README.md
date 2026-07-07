@@ -94,7 +94,32 @@ See [Slack Commands](#slack-commands) section below.
 See [Teams Commands](#teams-commands) section below. Unlike the Slack bot (which
 always acts as the single primary account), the Teams bot resolves *which*
 Job Apply account it's acting on behalf of per Teams user — see that section
-for the identity-linking flow.
+for the identity-linking flow. `frontend/privacy.html` and `frontend/terms.html`
+are served unauthenticated at `/privacy` and `/terms` — Teams' permission-consent
+dialog fetches the manifest's `privacyUrl`/`termsOfUseUrl` directly and gets stuck
+in a loop if either 404s or redirects to login.
+
+---
+
+## Agents at a Glance
+
+Six distinct Claude-powered agents, all triggerable from the web app plus Slack/Teams (CLI is resume-only):
+
+| Agent | What it produces | Web (Agent tab) | Slack | Teams | API |
+|---|---|---|---|---|---|
+| **Resume + ATS + Cover Letter** | Tailored resume DOCX, ATS-safe resume DOCX, cover letter DOCX | Generate | `/apply` | `apply` | `POST /api/run` |
+| **Application Questions** | Answer to a freeform application question, with clarification follow-ups | Application Questions | `/aq` | `aq` | `POST /api/aq` |
+| **Interview Prep** | 2-page interview prep reference DOCX | Interview Prep | `/prep` | `prep` | `POST /api/prep` |
+| **Thank You Email** | Post-interview thank-you email + DOCX | Thank You Email | `/thankyou` | `thankyou` | `POST /api/thankyou` |
+| **Optimize** | In-place revision of an existing run's resume/cover letter from a freeform instruction | Optimize | `/optimize` | `optimize` | `POST /api/optimize` |
+| **Rescore (Match Scoring)** | Resume↔JD fit score (0–100), category, and per-dimension breakdown | Tracker row → Score/Rescore button | `/rescore` | `rescore` | `POST /api/applications/{id}/score` |
+
+All six require a job description resolvable from a tracked application (either a saved
+`job_description.md` in its Drive folder, or its posting URL) except the first run of
+`apply`, which also accepts a pasted job posting directly. See the KB's
+["All the Agents"](https://apply.cdlav.us/kb.html#gs-agents-overview) article
+for a plain-language walkthrough, or the per-command sections below ([Slack Commands](#slack-commands),
+[Teams Commands](#teams-commands)) for exact syntax.
 
 ---
 
@@ -126,6 +151,8 @@ job-apply/
 │   ├── login.html             ← Login + Google OAuth
 │   ├── register.html
 │   ├── profile.html           ← Profile settings (Markdown editor)
+│   ├── privacy.html           ← Privacy policy (public, unauthenticated — required by the Teams manifest's privacyUrl)
+│   ├── terms.html             ← Terms of use (public, unauthenticated — required by the Teams manifest's termsOfUseUrl)
 │   ├── marked.min.js          ← Bundled marked.js (used by profile.html)
 │   └── img/                   ← logo.png + landing page assets (Slack/Teams brand icons, Unsplash photos)
 ├── routers/
@@ -198,7 +225,7 @@ job-apply/
 | 📅 Calendar | `/cal-delete` | Delete an event (two-step confirm) |
 | 📋 Tracker | `/tracker` | Pipeline summary by status |
 | 📋 Tracker | `/track-list [status]` | List applications (optional status filter) |
-| 📋 Tracker | `/track-view` | View full details of an application |
+| 📋 Tracker | `/track-view` | View full details of an application, including a link to its linked Google Drive output folder (most recently linked run) if one exists |
 | 📋 Tracker | `/track-add` | Add a new application (Logo.dev company search, all fields except priority) |
 | 📋 Tracker | `/track-update` | Two-step: pick app → edit all fields pre-filled (setting status to Applied auto-sets date applied) |
 | 📋 Tracker | `/track-note` | Add a comment to an application |
@@ -231,7 +258,7 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 | 📋 Tracker | `tracker` | Pipeline summary |
 | 📋 Tracker | `track list [status]` | List applications |
 | 📋 Tracker | `track add` | Add a new application |
-| 📋 Tracker | `track view` | View application details |
+| 📋 Tracker | `track view` | View application details, including a link to its linked Google Drive output folder (most recently linked run) if one exists |
 | 📋 Tracker | `track update` | Two-step: pick app → edit all fields pre-filled |
 | 📋 Tracker | `track note` | Add a comment to an application |
 | 📋 Tracker | `track delete` | Delete an application (two-step confirm) |

@@ -679,6 +679,45 @@
       ]
     },
     {
+      "name": "Utilities",
+      "item": [
+        {
+          "name": "POST /api/jd/format",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/jd/format",
+            "description": "Use Claude to convert a pasted plain-text job posting into clean, well-structured markdown (## headings, bullet lists) for storage as `job_description.md`. Used by the Agent tab's JD paste flow before a run/prep/aq starts.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"job_posting\": \"Paste raw job posting text here\\u2026\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"markdown\": \"## About the Role\\n\\n...\"}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/postman",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/postman",
+            "description": "Download this Postman collection as JSON. Backs the \u2b07 download button on `/api-docs.html`."
+          }
+        }
+      ]
+    },
+    {
       "name": "Application Runs",
       "description": "Start and monitor a resume + ATS resume + cover letter generation run.\n\n**Lifecycle:** POST \u2192 SSE stream \u2192 `done` event contains file names \u2192 download files.\n\nRuns are serialised per user (one active at a time per user). Up to 5 in-flight + queued entries per user. Admin accounts cannot create runs.\n\n**`done` event shape:**\n```json\n{\n  \"type\": \"done\",\n  \"run_id\": \"\u2026\",\n  \"framing_angle\": \"\u2026\",\n  \"folder_url\": \"https://drive.google.com/\u2026\",\n  \"replacements_warning\": null,\n  \"files\": {\n    \"resume\": \"Resume_\u2026docx\",\n    \"ats\": \"Resume_\u2026_ATS.docx\",\n    \"cover_letter\": \"CoverLetter_\u2026.docx\"\n  }\n}\n```\n`replacements_warning` is non-null if fewer than 70% of XML edits succeeded \u2014 some resume sections may need manual review.",
       "item": [
