@@ -240,6 +240,10 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 | 📅 Calendar | `cal add` | Add a calendar event (with an optional email reminder) |
 | 📅 Calendar | `cal view` | View full details of an event |
 | 📅 Calendar | `cal delete` | Delete an event (two-step confirm) |
+| 🔍 Lookup | `company [name]` | Search company info via Logo.dev |
+| 👤 Profile | `profile resume` | Instructions for uploading a new master resume (attach a `.docx` directly to the chat) |
+| 👤 Profile | `profile guide` | Edit your profile & voice guide |
+| 👤 Profile | `notifications` | View and toggle email notification preferences |
 | 🔑 Account | `confirm` | Link your Teams identity to a Job Apply account |
 | 🔑 Account | `whoami` | Show which account you're linked as |
 | 🔑 Account | `unlink` | Remove your Teams identity's link |
@@ -286,6 +290,16 @@ simplifies Slack's reminder-channel checkbox (email + Slack) down to a single
 implemented server-side to pair with it. Local date/time + IANA timezone are
 converted to UTC client-side (`_local_to_utc_iso`, same approach as
 slack_bot.py's `_local_to_utc_iso`) before being sent to the API.
+
+**`profile resume` uploads via a direct file attachment**, not a slash-command
+argument — attach a `.docx` to the chat and `_handle_file_upload` picks it up
+automatically. This requires `"supportsFiles": true` in
+`teams_bot/manifest/manifest.json` (already set); Teams sends a
+`FileDownloadInfo` attachment with a pre-authenticated `downloadUrl` that the
+bot can fetch directly, no bearer token needed (unlike Slack, whose file
+download requires the bot token). `company`, `profile guide`, and
+`notifications` mirror their Slack counterparts directly against
+`/api/companies/search` and `PUT /api/profile`.
 
 ---
 

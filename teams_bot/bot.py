@@ -22,6 +22,10 @@ Commands (type in chat):
   cal view     — view full details of an event
   cal delete   — delete an event (two-step confirm)
   runs         — list recent Drive run folders
+  company      — search company info via Logo.dev
+  profile resume — instructions for uploading a new master resume (attach a .docx directly to this chat)
+  profile guide  — edit your profile & voice guide
+  notifications  — view and toggle email notification preferences
   confirm      — link your Teams identity to a Job Apply account
   whoami       — show which account you're linked as
   unlink       — remove your Teams identity's link
@@ -50,6 +54,14 @@ Submitting that first step (_submit_*_select) looks up a saved
 job_description.md in the application's most recent linked Drive folder
 (_resolve_app_and_jd); if one exists, the run starts immediately,
 otherwise a follow-up card asks the user to paste the JD (_submit_*_final).
+
+profile resume works by attaching a .docx directly to the chat rather than
+a slash-command argument — requires "supportsFiles": true in the manifest
+(teams_bot/manifest/manifest.json). _handle_file_upload reads the
+FileDownloadInfo attachment Teams sends for a shared file (see
+https://learn.microsoft.com/microsoftteams/platform/bots/how-to/bots-filesv4)
+and downloads directly from its pre-authenticated downloadUrl — no bearer
+token needed, unlike Slack's file download which requires the bot token.
 """
 
 from __future__ import annotations
@@ -73,8 +85,15 @@ from botbuilder.schema import (
     HeroCard,
     CardAction,
 )
+from botbuilder.schema.teams import FileDownloadInfo
 
 import api_client
+
+# Attachment content type Teams uses for a file the user just shared in a
+# personal chat (see https://learn.microsoft.com/microsoftteams/platform/bots/how-to/bots-filesv4).
+# Not re-exported from botbuilder.schema.teams's __init__, so it's inlined
+# here rather than imported from its internal module path.
+_TEAMS_FILE_DOWNLOAD_CONTENT_TYPE = "application/vnd.microsoft.teams.file.download.info"
 
 CARDS_DIR = Path(__file__).parent / "cards"
 
@@ -123,6 +142,16 @@ EVENT_TYPE_EMOJI = {
     "offer_deadline": "\U0001f7e3",
     "prep":           "\U0001f4da",
     "custom":         "\U0001f4c5",
+}
+
+_NOTIF_LABELS = {
+    "researching_nudge":  "Researching nudge — remind me when an app stays in Researching too long",
+    "follow_up_reminder": "Follow-up reminder — nudge me to follow up after applying",
+    "gone_silent":        "Gone silent — alert when a company has not responded in a while",
+    "status_changed":     "Status changed — email on every status update",
+    "new_application":    "New application — email when a new app is added",
+    "daily_digest":       "Daily digest — one summary email each morning",
+    "weekly_digest":      "Weekly digest — one summary email each Sunday",
 }
 
 # Commands that must work even without a linked account.
@@ -315,6 +344,12 @@ class JobApplyBot(ActivityHandler):
             await self._handle_card_submit(turn_context, user)
             return
 
+        # A file the user just shared directly in this chat (requires
+        # supportsFiles: true in the manifest) — see _handle_file_upload.
+        if turn_context.activity.attachments:
+            await self._handle_file_upload(turn_context, user)
+            return
+
         if text in ("whoami", "/whoami"):
             await self._cmd_whoami(turn_context, user)
         elif text in ("apply", "/apply"):
@@ -358,6 +393,16 @@ class JobApplyBot(ActivityHandler):
             await self._cmd_cal_delete(turn_context, user)
         elif text in ("runs", "/runs"):
             await self._cmd_runs(turn_context, user)
+        elif text.startswith(("company", "/company")):
+            parts = text.split(maxsplit=1)
+            query = parts[1].strip() if len(parts) > 1 else ""
+            await self._cmd_company(turn_context, query)
+        elif text in ("profile resume", "/profile-resume", "profile-resume"):
+            await self._cmd_profile_resume(turn_context)
+        elif text in ("profile guide", "/profile-guide", "profile-guide"):
+            await self._cmd_profile_guide(turn_context, user)
+        elif text in ("notifications", "/notifications"):
+            await self._cmd_notifications(turn_context, user)
         else:
             await turn_context.send_activity(
                 MessageFactory.text(
@@ -908,6 +953,189 @@ class JobApplyBot(ActivityHandler):
         }
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
+    async def _cmd_company(self, ctx: TurnContext, query: str):
+        query = query.strip()
+        if not query:
+            await ctx.send_activity(MessageFactory.text(
+                "Usage: **company [company name]**\nExample: **company Salesforce**"
+            ))
+            return
+
+        try:
+            results = await asyncio.to_thread(api_client.search_companies, query)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Search failed: {exc}"))
+            return
+
+        if not results:
+            await ctx.send_activity(MessageFactory.text(f"\U0001f50d No results found for **{query}**."))
+            return
+
+        rows = []
+        for i, c in enumerate(results[:5]):
+            name = c.get("name", "?")
+            domain = c.get("domain", "")
+            desc = c.get("description", "")
+            subtitle = " · ".join(s for s in (domain, desc) if s)
+
+            text_items = [{"type": "TextBlock", "text": name, "weight": "Bolder", "wrap": True}]
+            if subtitle:
+                text_items.append({
+                    "type": "TextBlock", "text": subtitle,
+                    "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
+                })
+
+            columns = []
+            logo_col = _logo_column(domain, size=28)
+            if logo_col:
+                columns.append(logo_col)
+            columns.append({"type": "Column", "width": "stretch", "items": text_items})
+
+            rows.append({
+                "type": "ColumnSet",
+                "spacing": "Medium" if i else "Default",
+                "separator": i > 0,
+                "columns": columns,
+            })
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "text": f"\U0001f50d Company search: {query}",
+                    "size": "Large", "weight": "Bolder", "wrap": True,
+                },
+                *rows,
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_profile_resume(self, ctx: TurnContext):
+        await ctx.send_activity(MessageFactory.text(
+            "\U0001f4ce **Upload your master resume**\n\n"
+            "Attach a **.docx** file directly to this chat — I'll automatically "
+            "detect and save it as your new master resume."
+        ))
+
+    async def _handle_file_upload(self, ctx: TurnContext, user: dict):
+        """A user just shared a file directly in this chat (requires
+        supportsFiles: true in the manifest — see teams_bot/manifest/manifest.json).
+        Only acts on a .docx; anything else is silently ignored since group
+        chats/channels can attach files for unrelated reasons."""
+        docx_attachment = None
+        for att in ctx.activity.attachments or []:
+            content_type = getattr(att, "content_type", "") or ""
+            name = getattr(att, "name", "") or ""
+            if content_type == _TEAMS_FILE_DOWNLOAD_CONTENT_TYPE and name.lower().endswith(".docx"):
+                docx_attachment = att
+                break
+
+        if not docx_attachment:
+            return
+
+        try:
+            file_info = FileDownloadInfo().deserialize(docx_attachment.content)
+        except Exception:
+            await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
+            return
+
+        if not file_info.download_url:
+            await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
+            return
+
+        try:
+            # downloadUrl is pre-authenticated by Teams — no bearer token needed.
+            import requests
+            resp = await asyncio.to_thread(requests.get, file_info.download_url, timeout=30)
+            resp.raise_for_status()
+            file_bytes = resp.content
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not download the file: {exc}"))
+            return
+
+        if file_bytes[:4] != b"PK\x03\x04":
+            await ctx.send_activity(MessageFactory.text(
+                "❌ That doesn't look like a valid .docx file (must be a ZIP archive). "
+                "If this is a .doc file, convert it to .docx first."
+            ))
+            return
+
+        try:
+            await asyncio.to_thread(
+                api_client.upload_resume, docx_attachment.name, file_bytes, user_email=user["email"]
+            )
+            await ctx.send_activity(MessageFactory.text(
+                f"✅ Resume **{docx_attachment.name}** saved as your master resume."
+            ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to save resume: {exc}"))
+
+    async def _cmd_profile_guide(self, ctx: TurnContext, user: dict):
+        existing = ""
+        try:
+            profile = await asyncio.to_thread(api_client.get_profile, user_email=user["email"])
+            existing = profile.get("profile_text", "") or ""
+        except Exception:
+            pass
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Profile & Voice Guide", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "isSubtle": True, "spacing": "None",
+                    "text": "Your profile guide tells the AI how to write in your voice — tone, "
+                            "stories, phrases to avoid, and context about your background.",
+                },
+                {
+                    "type": "Input.Text", "id": "guide", "label": "Profile & Voice Guide",
+                    "isMultiline": True, "value": existing,
+                    "placeholder": "Describe your voice, tone, key stories, phrases to avoid…",
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Save", "data": {"action": "profile_guide_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_notifications(self, ctx: TurnContext, user: dict):
+        prefs: dict[str, Any] = {}
+        try:
+            profile = await asyncio.to_thread(api_client.get_profile, user_email=user["email"])
+            prefs = profile.get("notification_prefs", {}) or {}
+        except Exception:
+            pass
+
+        enabled_values = [key for key in _NOTIF_LABELS if prefs.get(key, True)]
+        choices = [{"title": label, "value": key} for key, label in _NOTIF_LABELS.items()]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Email Notifications", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "isSubtle": True, "spacing": "None",
+                    "text": "Choose which email notifications you want to receive.",
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "prefs", "label": "Enabled notifications",
+                    "isMultiSelect": True, "style": "expanded",
+                    "value": ",".join(enabled_values), "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Save", "data": {"action": "notifications_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
     # ── Instant commands ─────────────────────────────────────────────────
     # api_client calls below run via asyncio.to_thread: in production this
     # bot is mounted on the same FastAPI process it calls over HTTP, so a
@@ -1309,6 +1537,13 @@ class JobApplyBot(ActivityHandler):
             "- **cal add** — Add a calendar event\n"
             "- **cal view** — View full details of an event\n"
             "- **cal delete** — Delete an event (two-step confirm)\n\n"
+            "**\U0001f50d Lookup**\n"
+            "- **company [name]** — Search company info via Logo.dev\n\n"
+            "**\U0001f464 Profile**\n"
+            "- **profile resume** — Instructions for uploading a new master resume "
+            "(attach a .docx directly to this chat)\n"
+            "- **profile guide** — Edit your profile & voice guide\n"
+            "- **notifications** — View and toggle email notification preferences\n\n"
             "**\U0001f511 Account**\n"
             "- **confirm** — Link your Teams identity to a Job Apply account "
             "(offers a sign-in link if none matches your Teams email)\n"
@@ -1380,6 +1615,10 @@ class JobApplyBot(ActivityHandler):
             await self._submit_cal_delete_confirm(ctx, data, user)
         elif action == "cal_delete_cancel_submit":
             await ctx.send_activity(MessageFactory.text("Cancelled — nothing was deleted."))
+        elif action == "profile_guide_submit":
+            await self._submit_profile_guide(ctx, data, user)
+        elif action == "notifications_submit":
+            await self._submit_notifications(ctx, data, user)
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
 
@@ -2459,6 +2698,38 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text("\U0001f5d1️ Calendar event deleted."))
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Failed to delete: {exc}"))
+
+    async def _submit_profile_guide(self, ctx: TurnContext, data: dict, user: dict):
+        guide = data.get("guide", "") or ""
+        try:
+            await asyncio.to_thread(
+                api_client.update_profile, {"profile_text": guide}, user_email=user["email"]
+            )
+            await ctx.send_activity(MessageFactory.text("✅ Profile & voice guide saved."))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to save guide: {exc}"))
+
+    async def _submit_notifications(self, ctx: TurnContext, data: dict, user: dict):
+        raw = data.get("prefs", "") or ""
+        selected = {v for v in raw.split(",") if v}
+        prefs = {key: (key in selected) for key in _NOTIF_LABELS}
+
+        try:
+            await asyncio.to_thread(
+                api_client.update_profile, {"notification_prefs": prefs}, user_email=user["email"]
+            )
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to save preferences: {exc}"))
+            return
+
+        enabled = [label for key, label in _NOTIF_LABELS.items() if prefs[key]]
+        disabled = [label for key, label in _NOTIF_LABELS.items() if not prefs[key]]
+        lines = ["✅ **Notification preferences saved.**"]
+        if enabled:
+            lines.append("**On:** " + ", ".join(label.split(" —")[0] for label in enabled))
+        if disabled:
+            lines.append("**Off:** " + ", ".join(label.split(" —")[0] for label in disabled))
+        await ctx.send_activity(MessageFactory.text("\n".join(lines)))
 
     # ── Proactive messaging helper ───────────────────────────────────────
 

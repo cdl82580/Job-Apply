@@ -282,6 +282,24 @@ def get_profile(user_email: str | None = None) -> dict:
     return r.json()
 
 
+def update_profile(updates: dict, user_email: str | None = None) -> dict:
+    r = _api("put", "/api/profile", user_email=user_email, json=updates)
+    r.raise_for_status()
+    return r.json()
+
+
+def upload_resume(filename: str, file_bytes: bytes, user_email: str | None = None) -> dict:
+    r = _api(
+        "post", "/api/profile/resume", user_email=user_email,
+        files={"resume": (
+            filename, file_bytes,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )},
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 # ── Optimize ─────────────────────────────────────────────────────────────
 
 def post_optimize(app_id: str, folder_id: str, instruction: str,
