@@ -346,9 +346,14 @@ class JobApplyBot(ActivityHandler):
 
         # A file the user just shared directly in this chat (requires
         # supportsFiles: true in the manifest) — see _handle_file_upload.
+        # Only short-circuits when a matching .docx was actually found: Teams
+        # attaches non-file metadata to plenty of ordinary messages (mentions,
+        # rich-text elements, etc.), and treating every one of those as "this
+        # message is handled" would silently swallow normal text commands.
         if turn_context.activity.attachments:
-            await self._handle_file_upload(turn_context, user)
-            return
+            handled = await self._handle_file_upload(turn_context, user)
+            if handled:
+                return
 
         if text in ("whoami", "/whoami"):
             await self._cmd_whoami(turn_context, user)
@@ -1019,11 +1024,14 @@ class JobApplyBot(ActivityHandler):
             "detect and save it as your new master resume."
         ))
 
-    async def _handle_file_upload(self, ctx: TurnContext, user: dict):
+    async def _handle_file_upload(self, ctx: TurnContext, user: dict) -> bool:
         """A user just shared a file directly in this chat (requires
         supportsFiles: true in the manifest — see teams_bot/manifest/manifest.json).
-        Only acts on a .docx; anything else is silently ignored since group
-        chats/channels can attach files for unrelated reasons."""
+        Only acts on a .docx; anything else is silently ignored, since Teams
+        attaches non-file metadata to plenty of ordinary messages (mentions,
+        rich-text elements, etc.) that have nothing to do with a shared file —
+        the caller must only treat this as "handled" (and skip normal command
+        dispatch) when this returns True."""
         docx_attachment = None
         for att in ctx.activity.attachments or []:
             content_type = getattr(att, "content_type", "") or ""
@@ -1033,17 +1041,17 @@ class JobApplyBot(ActivityHandler):
                 break
 
         if not docx_attachment:
-            return
+            return False
 
         try:
             file_info = FileDownloadInfo().deserialize(docx_attachment.content)
         except Exception:
             await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
-            return
+            return True
 
         if not file_info.download_url:
             await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
-            return
+            return True
 
         try:
             # downloadUrl is pre-authenticated by Teams — no bearer token needed.
@@ -1053,14 +1061,14 @@ class JobApplyBot(ActivityHandler):
             file_bytes = resp.content
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Could not download the file: {exc}"))
-            return
+            return True
 
         if file_bytes[:4] != b"PK\x03\x04":
             await ctx.send_activity(MessageFactory.text(
                 "❌ That doesn't look like a valid .docx file (must be a ZIP archive). "
                 "If this is a .doc file, convert it to .docx first."
             ))
-            return
+            return True
 
         try:
             await asyncio.to_thread(
@@ -1071,6 +1079,7 @@ class JobApplyBot(ActivityHandler):
             ))
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Failed to save resume: {exc}"))
+        return True
 
     async def _cmd_profile_guide(self, ctx: TurnContext, user: dict):
         existing = ""
