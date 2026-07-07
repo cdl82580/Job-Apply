@@ -2408,11 +2408,11 @@ def rescore_view_submit(ack, body, client, view):
             client.chat_postMessage(channel=channel, text=f":x: Rescore failed: {msg}")
             return
 
-        score    = result.get("score", "?")
-        category = result.get("category", "?")
-        summary  = result.get("summary", "")
-        emoji    = ":large_green_circle:" if category == "strong" else (
-                   ":large_yellow_circle:" if category == "good" else ":red_circle:")
+        score     = result.get("score", "?")
+        category  = result.get("category", "?")
+        rationale = result.get("rationale", "")
+        emoji     = ":large_green_circle:" if category == "strong" else (
+                    ":large_yellow_circle:" if category == "good" else ":red_circle:")
 
         blocks = _fields_blocks(
             f"{emoji} Match Score", [("Score", f"{score}/100"), ("Category", str(category).capitalize())],
@@ -2420,8 +2420,8 @@ def rescore_view_submit(ack, body, client, view):
         logo_el = _logo_element(record.get("domain", ""), alt_text=company)
         subtitle = ([logo_el] if logo_el else []) + [{"type": "mrkdwn", "text": f"{company} — {role}"}]
         blocks.insert(1, {"type": "context", "elements": subtitle})
-        if summary:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"_{summary}_"}})
+        if rationale:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"_{rationale}_"}})
 
         client.chat_postMessage(channel=channel, blocks=blocks, text=f"{company} · {role} — score {score}/100")
 
