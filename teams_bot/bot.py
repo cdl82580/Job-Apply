@@ -2761,6 +2761,8 @@ class JobApplyBot(ActivityHandler):
 
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(adapter.continue_conversation(conv_ref, _send, None))
+            loop.run_until_complete(
+                adapter.continue_conversation(conv_ref, _send, api_client.Config.APP_ID)
+            )
         finally:
             loop.close()
