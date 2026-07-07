@@ -2719,11 +2719,18 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text(f"❌ Failed to save guide: {exc}"))
 
     async def _submit_notifications(self, ctx: TurnContext, data: dict, user: dict):
-        raw = data.get("prefs", "") or ""
-        selected = {v for v in raw.split(",") if v}
-        prefs = {key: (key in selected) for key in _NOTIF_LABELS}
-
         try:
+            raw = data.get("prefs", "") or ""
+            # Input.ChoiceSet w/ isMultiSelect submits a comma-delimited string per
+            # the Adaptive Cards spec, but some Teams clients have been observed
+            # sending a list instead — accept either so a shape mismatch here can't
+            # escape as an unhandled exception (-> generic Teams error banner).
+            if isinstance(raw, (list, tuple, set)):
+                selected = {str(v) for v in raw if v}
+            else:
+                selected = {v for v in str(raw).split(",") if v}
+            prefs = {key: (key in selected) for key in _NOTIF_LABELS}
+
             await asyncio.to_thread(
                 api_client.update_profile, {"notification_prefs": prefs}, user_email=user["email"]
             )
