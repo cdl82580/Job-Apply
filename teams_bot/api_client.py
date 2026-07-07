@@ -206,11 +206,13 @@ def score_application(app_id: str, user_email: str | None = None) -> dict:
 
 def get_calendar_events(from_dt: str | None = None, to_dt: str | None = None,
                          user_email: str | None = None) -> list[dict]:
+    # GET /api/calendar's query params are aliased to "from"/"to" (routers/calendar.py)
+    # — matches its docstring contract and what frontend/calendar.html already sends.
     params: dict[str, str] = {}
     if from_dt:
-        params["from_dt"] = from_dt
+        params["from"] = from_dt
     if to_dt:
-        params["to_dt"] = to_dt
+        params["to"] = to_dt
     r = _api("get", "/api/calendar", user_email=user_email, params=params)
     r.raise_for_status()
     return r.json().get("events", [])

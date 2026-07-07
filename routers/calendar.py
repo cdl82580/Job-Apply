@@ -19,7 +19,7 @@ from typing import Any
 
 import re as _re
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 
 _UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', _re.IGNORECASE)
@@ -247,8 +247,8 @@ def _verify_app_id(user_id: str, app_id: str | None) -> None:
 @router.get("")
 async def list_calendar_events(
     request: Request,
-    from_dt: str | None = None,
-    to_dt: str | None = None,
+    from_dt: str | None = Query(default=None, alias="from"),
+    to_dt: str | None = Query(default=None, alias="to"),
 ):
     user_id = _user_id_from_request(request)
     # Validate date params to prevent path injection / weird queries
