@@ -1244,7 +1244,7 @@ def apply_command(ack, body, client):
     options = _app_options(active_only=False)
     if not options:
         client.chat_postMessage(
-            channel=body["user"]["id"],
+            channel=body["user_id"],
             text=":x: No applications on file yet. Add one with `/track-add` first.",
         )
         return
@@ -1380,7 +1380,7 @@ def prep_command(ack, body, client):
     options = _app_options(active_only=False)
     if not options:
         client.chat_postMessage(
-            channel=body["user"]["id"],
+            channel=body["user_id"],
             text=":x: No applications on file yet. Add one with `/track-add` first.",
         )
         return
@@ -1557,7 +1557,7 @@ def aq_command(ack, body, client):
     options = _app_options(active_only=False)
     if not options:
         client.chat_postMessage(
-            channel=body["user"]["id"],
+            channel=body["user_id"],
             text=":x: No applications on file yet. Add one with `/track-add` first.",
         )
         return
@@ -2193,7 +2193,7 @@ def optimize_command(ack, body, client):
     options = _app_options(active_only=True)
     if not options:
         client.chat_postMessage(
-            channel=body["user"]["id"],
+            channel=body["user_id"],
             text=":x: No active applications found. Add one with `/track-add` first.",
         )
         return
@@ -2345,7 +2345,7 @@ def rescore_command(ack, body, client):
     options = _app_options(active_only=True)
     if not options:
         client.chat_postMessage(
-            channel=body["user"]["id"],
+            channel=body["user_id"],
             text=":x: No active applications found.",
         )
         return

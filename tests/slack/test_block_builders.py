@@ -14,7 +14,7 @@ os.environ.setdefault("BOT_API_KEY",          "test-key")
 import pytest
 from unittest.mock import patch, MagicMock
 
-from tests.slack.conftest import _PassthroughApp
+from tests.slack.conftest import _PassthroughApp, SAMPLE_APPS
 
 with patch("slack_bolt.App", _PassthroughApp):
     import slack_bot as bot
@@ -187,7 +187,8 @@ class TestApplyModal:
         client.views_open.return_value = {"ok": True}
         body = {"user_id": "U123", "trigger_id": "trigger.1", "channel_id": "C1",
                 "user_name": "user", "text": "", "team_id": "T1"}
-        bot.apply_command(ack=MagicMock(), body=body, client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=MagicMock(), body=body, client=client)
 
         view = client.views_open.call_args[1].get("view", {})
         assert view.get("type") == "modal"
@@ -201,7 +202,8 @@ class TestApplyModal:
         client.views_open.return_value = {"ok": True}
         body = {"user_id": "U123", "trigger_id": "trigger.1", "channel_id": "C1",
                 "user_name": "user", "text": "", "team_id": "T1"}
-        bot.apply_command(ack=MagicMock(), body=body, client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=MagicMock(), body=body, client=client)
 
         view = client.views_open.call_args[1].get("view", {})
         assert_valid_text_object(view["title"])
@@ -211,7 +213,8 @@ class TestApplyModal:
         client.views_open.return_value = {"ok": True}
         body = {"user_id": "U123", "trigger_id": "trigger.1", "channel_id": "C1",
                 "user_name": "user", "text": "", "team_id": "T1"}
-        bot.apply_command(ack=MagicMock(), body=body, client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=MagicMock(), body=body, client=client)
 
         view = client.views_open.call_args[1].get("view", {})
         for block in view.get("blocks", []):
@@ -226,7 +229,8 @@ class TestPrepModal:
         client.views_open.return_value = {"ok": True}
         body = {"user_id": "U123", "trigger_id": "trigger.1", "channel_id": "C1",
                 "user_name": "user", "text": "", "team_id": "T1"}
-        bot.prep_command(ack=MagicMock(), body=body, client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=MagicMock(), body=body, client=client)
 
         view = client.views_open.call_args[1].get("view", {})
         assert view.get("type") == "modal"
@@ -239,7 +243,8 @@ class TestPrepModal:
         client.views_open.return_value = {"ok": True}
         body = {"user_id": "U123", "trigger_id": "trigger.1", "channel_id": "C1",
                 "user_name": "user", "text": "", "team_id": "T1"}
-        bot.prep_command(ack=MagicMock(), body=body, client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=MagicMock(), body=body, client=client)
 
         view = client.views_open.call_args[1].get("view", {})
         all_options = []

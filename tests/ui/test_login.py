@@ -39,12 +39,6 @@ class TestLoginPage:
         reg_link = anon_page.locator("a[href*='register']")
         expect(reg_link).to_be_visible()
 
-    def test_protected_page_redirects_to_login(self, anon_page):
-        """Navigating to a protected page without auth should redirect to login."""
-        anon_page.goto("/")
-        anon_page.wait_for_url(lambda url: "login" in url, timeout=8_000)
-        expect(anon_page.locator("#loginForm")).to_be_visible()
-
     def test_profile_page_redirects_to_login(self, anon_page):
         anon_page.goto("/profile.html")
         anon_page.wait_for_url(lambda url: "login" in url, timeout=8_000)

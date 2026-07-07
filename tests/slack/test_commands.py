@@ -45,7 +45,7 @@ class TestTrackerCommand:
         respond = make_respond()
         with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
             bot.tracker_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
+        text = respond.call_args[0][0] if respond.call_args[0] else str(respond.call_args)
         assert str(len(SAMPLE_APPS)) in text
 
     def test_api_error_responds_with_error_message(self):
@@ -65,7 +65,7 @@ class TestTrackerCommand:
         respond = make_respond()
         with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
             bot.tracker_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
+        text = respond.call_args[0][0] if respond.call_args[0] else str(respond.call_args)
         assert "Interviewing" in text
 
 
@@ -155,21 +155,21 @@ class TestWhoamiCommand:
         respond = make_respond()
         with patch.object(bot, "_api", return_value=fake_response(200, SAMPLE_ME)):
             bot.me_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
+        text = respond.call_args[0][0] if respond.call_args[0] else str(respond.call_args)
         assert "test@example.com" in text
 
     def test_respond_shows_display_name(self):
         respond = make_respond()
         with patch.object(bot, "_api", return_value=fake_response(200, SAMPLE_ME)):
             bot.me_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
+        text = respond.call_args[0][0] if respond.call_args[0] else str(respond.call_args)
         assert "Test User" in text
 
     def test_verified_indicator(self):
         respond = make_respond()
         with patch.object(bot, "_api", return_value=fake_response(200, SAMPLE_ME)):
             bot.me_command(ack=make_ack(), respond=respond)
-        text = respond.call_args[0][0]
+        text = respond.call_args[0][0] if respond.call_args[0] else str(respond.call_args)
         assert "Verified" in text or "verified" in text.lower()
 
     def test_api_error_responds_with_error(self):
@@ -418,19 +418,34 @@ class TestCalWeekCommand:
 class TestApplyCommand:
     def test_ack_called(self):
         ack = make_ack()
-        bot.apply_command(ack=ack, body=make_body(), client=make_client())
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=ack, body=make_body(), client=make_client())
         ack.assert_called_once()
 
     def test_opens_modal(self):
         client = make_client()
-        bot.apply_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=make_ack(), body=make_body(), client=client)
         client.views_open.assert_called_once()
 
     def test_modal_callback_id(self):
         client = make_client()
-        bot.apply_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.apply_command(ack=make_ack(), body=make_body(), client=client)
         view_arg = client.views_open.call_args[1].get("view", {})
-        assert view_arg.get("callback_id") == "apply_submit"
+        assert view_arg.get("callback_id") == "apply_select_submit"
+
+    def test_no_applications_responds_with_error(self):
+        """apply_command messages the invoking user directly by user_id (slash
+        commands carry a flat user_id, not a `user` object) — regression test
+        for the KeyError this raised before the channel= arg was fixed."""
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=[]):
+            bot.apply_command(ack=make_ack(), body=make_body(user_id="U999"), client=client)
+        client.views_open.assert_not_called()
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args[1]["channel"] == "U999"
+        assert "No applications" in client.chat_postMessage.call_args[1]["text"]
 
 
 # ── /prep (modal open) ────────────────────────────────────────────────────────
@@ -438,19 +453,31 @@ class TestApplyCommand:
 class TestPrepCommand:
     def test_ack_called(self):
         ack = make_ack()
-        bot.prep_command(ack=ack, body=make_body(), client=make_client())
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=ack, body=make_body(), client=make_client())
         ack.assert_called_once()
 
     def test_opens_modal(self):
         client = make_client()
-        bot.prep_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=make_ack(), body=make_body(), client=client)
         client.views_open.assert_called_once()
 
     def test_modal_callback_id(self):
         client = make_client()
-        bot.prep_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=make_ack(), body=make_body(), client=client)
         view_arg = client.views_open.call_args[1].get("view", {})
-        assert view_arg.get("callback_id") == "prep_submit"
+        assert view_arg.get("callback_id") == "prep_select_submit"
+
+    def test_no_applications_responds_with_error(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=[]):
+            bot.prep_command(ack=make_ack(), body=make_body(user_id="U999"), client=client)
+        client.views_open.assert_not_called()
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args[1]["channel"] == "U999"
+        assert "No applications" in client.chat_postMessage.call_args[1]["text"]
 
 
 # ── /thankyou (modal open) ───────────────────────────────────────────────────
@@ -480,19 +507,98 @@ class TestThankYouCommand:
 class TestAQCommand:
     def test_ack_called(self):
         ack = make_ack()
-        bot.aq_command(ack=ack, body=make_body(), client=make_client())
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.aq_command(ack=ack, body=make_body(), client=make_client())
         ack.assert_called_once()
 
     def test_opens_modal(self):
         client = make_client()
-        bot.aq_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.aq_command(ack=make_ack(), body=make_body(), client=client)
         client.views_open.assert_called_once()
 
     def test_modal_callback_id(self):
         client = make_client()
-        bot.aq_command(ack=make_ack(), body=make_body(), client=client)
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.aq_command(ack=make_ack(), body=make_body(), client=client)
         view_arg = client.views_open.call_args[1].get("view", {})
-        assert view_arg.get("callback_id") == "aq_submit"
+        assert view_arg.get("callback_id") == "aq_select_submit"
+
+    def test_no_applications_responds_with_error(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=[]):
+            bot.aq_command(ack=make_ack(), body=make_body(user_id="U999"), client=client)
+        client.views_open.assert_not_called()
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args[1]["channel"] == "U999"
+        assert "No applications" in client.chat_postMessage.call_args[1]["text"]
+
+
+# ── /optimize (modal open) ──────────────────────────────────────────────────
+
+class TestOptimizeCommand:
+    def test_ack_called(self):
+        ack = make_ack()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.optimize_command(ack=ack, body=make_body(), client=make_client())
+        ack.assert_called_once()
+
+    def test_opens_modal(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.optimize_command(ack=make_ack(), body=make_body(), client=client)
+        client.views_open.assert_called_once()
+
+    def test_modal_callback_id(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.optimize_command(ack=make_ack(), body=make_body(), client=client)
+        view_arg = client.views_open.call_args[1].get("view", {})
+        assert view_arg.get("callback_id") == "optimize_submit"
+
+    def test_no_active_applications_responds_with_error(self):
+        """optimize_command messages the invoking user directly by user_id (no
+        `user` object on slash-command payloads) — regression test for the
+        KeyError this raised before the channel= arg was fixed."""
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=[]):
+            bot.optimize_command(ack=make_ack(), body=make_body(user_id="U999"), client=client)
+        client.views_open.assert_not_called()
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args[1]["channel"] == "U999"
+        assert "No active applications" in client.chat_postMessage.call_args[1]["text"]
+
+
+# ── /rescore (modal open) ────────────────────────────────────────────────────
+
+class TestRescoreCommand:
+    def test_ack_called(self):
+        ack = make_ack()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.rescore_command(ack=ack, body=make_body(), client=make_client())
+        ack.assert_called_once()
+
+    def test_opens_modal(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.rescore_command(ack=make_ack(), body=make_body(), client=client)
+        client.views_open.assert_called_once()
+
+    def test_modal_callback_id(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.rescore_command(ack=make_ack(), body=make_body(), client=client)
+        view_arg = client.views_open.call_args[1].get("view", {})
+        assert view_arg.get("callback_id") == "rescore_submit"
+
+    def test_no_active_applications_responds_with_error(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=[]):
+            bot.rescore_command(ack=make_ack(), body=make_body(user_id="U999"), client=client)
+        client.views_open.assert_not_called()
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args[1]["channel"] == "U999"
+        assert "No active applications" in client.chat_postMessage.call_args[1]["text"]
 
 
 # ── /help includes /thankyou and /aq ────────────────────────────────────────
