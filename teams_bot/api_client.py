@@ -193,6 +193,15 @@ def add_comment(app_id: str, text: str, user_email: str | None = None) -> dict:
     return r.json()
 
 
+def score_application(app_id: str, user_email: str | None = None) -> dict:
+    """Synchronous — resolves the JD itself server-side (linked Drive folder,
+    or the application's posting URL). Returns {dimensions, score, category,
+    rationale, scored_at, scored_by}."""
+    r = _api("post", f"/api/applications/{app_id}/score", user_email=user_email)
+    r.raise_for_status()
+    return r.json()
+
+
 # ── Thank-you email ──────────────────────────────────────────────────────
 
 def post_thankyou(job_posting: str, company: str, role: str, round_type: str,

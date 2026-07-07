@@ -8,6 +8,7 @@ Commands (type in chat):
   prep         — generate interview prep doc
   thankyou     — generate a post-interview thank-you email
   optimize     — refine an existing run's documents from a prompt
+  rescore      — re-score resume/JD match for an application
   tracker      — pipeline summary
   track list   — list applications (optionally filter by status)
   track add    — add a new application
@@ -291,6 +292,8 @@ class JobApplyBot(ActivityHandler):
             await self._cmd_optimize(turn_context, user)
         elif text in ("thankyou", "/thankyou", "thank you", "thank-you"):
             await self._cmd_thankyou(turn_context, user)
+        elif text in ("rescore", "/rescore"):
+            await self._cmd_rescore(turn_context, user)
         elif text in ("runs", "/runs"):
             await self._cmd_runs(turn_context, user)
         else:
@@ -584,6 +587,48 @@ class JobApplyBot(ActivityHandler):
             "choices": choices,
         }
         card["body"].insert(2, app_selector)
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_rescore(self, ctx: TurnContext, user: dict):
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Error loading applications: {exc}"))
+            return
+
+        active = [a for a in apps if a.get("status") not in ("Rejected", "Not Applying")]
+        if not active:
+            await ctx.send_activity(
+                MessageFactory.text("❌ No active applications found. Add one with **track add** first.")
+            )
+            return
+
+        choices = [
+            {"title": f"{a.get('company', '?')} — {a.get('role_title', '?')}", "value": a["id"]}
+            for a in active[:20]
+        ]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Rescore Match", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "isSubtle": True, "spacing": "None",
+                    "text": "Re-score how well your resume matches this application's job posting. "
+                            "Requires a linked job description.",
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "app_id", "label": "Application",
+                    "isRequired": True, "errorMessage": "Select an application",
+                    "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Rescore", "data": {"action": "rescore_submit"}},
+            ],
+        }
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
     # ── Instant commands ─────────────────────────────────────────────────
@@ -971,7 +1016,8 @@ class JobApplyBot(ActivityHandler):
             "- **aq** — Answer an application question\n"
             "- **prep** — Generate interview prep doc\n"
             "- **thankyou** — Generate a post-interview thank-you email\n"
-            "- **optimize** — Refine existing run documents\n\n"
+            "- **optimize** — Refine existing run documents\n"
+            "- **rescore** — Re-score resume/JD match for an application\n\n"
             "**\U0001f4cb Tracker Commands**\n"
             "- **tracker** — Pipeline summary\n"
             "- **track list** [status] — List applications\n"
@@ -1039,6 +1085,8 @@ class JobApplyBot(ActivityHandler):
             await self._submit_track_delete_confirm(ctx, data, user)
         elif action == "track_delete_cancel_submit":
             await ctx.send_activity(MessageFactory.text("Cancelled — nothing was deleted."))
+        elif action == "rescore_submit":
+            await self._submit_rescore(ctx, data, user)
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
 
@@ -1563,6 +1611,87 @@ class JobApplyBot(ActivityHandler):
                     adapter, conv_ref,
                     f"❌ Optimization failed: {status.get('error', 'Unknown error')}",
                 )
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    async def _submit_rescore(self, ctx: TurnContext, data: dict, user: dict):
+        app_id = (data.get("app_id") or "").strip()
+        if not app_id:
+            await ctx.send_activity(MessageFactory.text("❌ Please select an application."))
+            return
+
+        user_email = user["email"]
+        try:
+            record = await asyncio.to_thread(api_client.get_application, app_id, user_email=user_email)
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load application: {exc}"))
+            return
+
+        company = record.get("company", "?")
+        role = record.get("role_title", "?")
+        domain = record.get("domain", "")
+
+        await ctx.send_activity(MessageFactory.text(f"⏳ Scoring **{role}** @ **{company}**…"))
+
+        conv_ref = TurnContext.get_conversation_reference(ctx.activity)
+        adapter = ctx.adapter
+
+        def _run():
+            try:
+                result = api_client.score_application(app_id, user_email=user_email)
+            except Exception as exc:
+                detail = str(exc)
+                response = getattr(exc, "response", None)
+                if response is not None:
+                    try:
+                        detail = response.json().get("detail", detail)
+                    except Exception:
+                        pass
+                self._proactive_message(adapter, conv_ref, f"❌ Rescore failed: {detail}")
+                return
+
+            score = result.get("score", "?")
+            category = str(result.get("category", "?"))
+            rationale = result.get("rationale", "")
+            emoji = "\U0001f7e2" if category == "strong" else ("\U0001f7e1" if category == "good" else "\U0001f534")
+
+            subtitle_text = {
+                "type": "TextBlock", "text": f"{company} — {role}",
+                "isSubtle": True, "wrap": True, "spacing": "None",
+            }
+            logo_col = _logo_column(domain, size=28)
+            subtitle: dict[str, Any] = (
+                {
+                    "type": "ColumnSet", "spacing": "None",
+                    "columns": [logo_col, {
+                        "type": "Column", "width": "stretch",
+                        "verticalContentAlignment": "Center", "items": [subtitle_text],
+                    }],
+                }
+                if logo_col else subtitle_text
+            )
+
+            body: list[dict[str, Any]] = [
+                {"type": "TextBlock", "text": f"{emoji} Match Score", "size": "Large", "weight": "Bolder"},
+                subtitle,
+                {
+                    "type": "FactSet", "spacing": "Medium",
+                    "facts": [
+                        {"title": "Score", "value": f"{score}/100"},
+                        {"title": "Category", "value": category.capitalize()},
+                    ],
+                },
+            ]
+            if rationale:
+                body.append({"type": "TextBlock", "text": rationale, "wrap": True, "spacing": "Medium", "isSubtle": True})
+
+            card = {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.5",
+                "body": body,
+            }
+            self._proactive_message(adapter, conv_ref, card=card)
 
         threading.Thread(target=_run, daemon=True).start()
 

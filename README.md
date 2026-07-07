@@ -227,6 +227,7 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 | 🤖 Agent | `prep` | Generate interview prep doc |
 | 🤖 Agent | `thankyou` | Generate a post-interview thank-you email |
 | 🤖 Agent | `optimize` | Refine existing run documents |
+| 🤖 Agent | `rescore` | Re-score resume/JD match for an application |
 | 📋 Tracker | `tracker` | Pipeline summary |
 | 📋 Tracker | `track list [status]` | List applications |
 | 📋 Tracker | `track add` | Add a new application |
