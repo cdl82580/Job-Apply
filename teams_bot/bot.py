@@ -16,6 +16,11 @@ Commands (type in chat):
   track update — edit an application's status/fields (two-step: pick app -> edit form)
   track note   — add a comment to an application
   track delete — delete an application (two-step confirm)
+  cal today    — show today's calendar events
+  cal week     — show events in the next 7 days
+  cal add      — add a calendar event (with an optional email reminder)
+  cal view     — view full details of an event
+  cal delete   — delete an event (two-step confirm)
   runs         — list recent Drive run folders
   confirm      — link your Teams identity to a Job Apply account
   whoami       — show which account you're linked as
@@ -53,7 +58,7 @@ import asyncio
 import json
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +106,25 @@ STATUS_COLOR = {
     "Not Applying":  "Attention",
 }
 
+EVENT_TYPE_LABELS = {
+    "interview":      "Interview",
+    "phone_screen":   "Phone Screen",
+    "deadline":       "Deadline",
+    "follow_up":      "Follow-Up",
+    "offer_deadline": "Offer Deadline",
+    "prep":           "Prep",
+    "custom":         "Custom",
+}
+EVENT_TYPE_EMOJI = {
+    "interview":      "\U0001f3af",
+    "phone_screen":   "\U0001f4de",
+    "deadline":       "⏰",
+    "follow_up":      "\U0001f4ec",
+    "offer_deadline": "\U0001f7e3",
+    "prep":           "\U0001f4da",
+    "custom":         "\U0001f4c5",
+}
+
 # Commands that must work even without a linked account.
 _NO_AUTH_COMMANDS = ("help", "/help", "confirm", "/confirm", "unlink", "/unlink")
 
@@ -136,6 +160,34 @@ def _logo_column(domain: str, size: int = 32) -> dict | None:
         "type": "Column", "width": "auto", "verticalContentAlignment": "Center",
         "items": [{"type": "Image", "url": icon, "width": f"{size}px", "height": f"{size}px"}],
     }
+
+
+def _fmt_event_dt(iso: str) -> str:
+    if not iso:
+        return "—"
+    try:
+        d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        # %-d / %-I are Linux-only; format manually for portability
+        hour = d.hour % 12 or 12
+        minute = f"{d.minute:02d}"
+        ampm = "AM" if d.hour < 12 else "PM"
+        return f"{d.strftime('%a %b')}{d.day}, {hour}:{minute} {ampm} UTC"
+    except Exception:
+        return iso[:16].replace("T", " ") + " UTC"
+
+
+def _local_to_utc_iso(date_str: str, time_str: str, tz: str) -> str:
+    """Convert a naive date+time in the given IANA timezone to a UTC ISO string."""
+    from zoneinfo import ZoneInfo
+    try:
+        zone = ZoneInfo(tz)
+    except Exception:
+        zone = ZoneInfo("UTC")
+    h, m = (time_str.split(":") + ["0"])[:2]
+    naive = datetime(int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]), int(h), int(m), 0)
+    local_dt = naive.replace(tzinfo=zone)
+    utc_dt = local_dt.astimezone(timezone.utc)
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class JobApplyBot(ActivityHandler):
@@ -294,6 +346,16 @@ class JobApplyBot(ActivityHandler):
             await self._cmd_thankyou(turn_context, user)
         elif text in ("rescore", "/rescore"):
             await self._cmd_rescore(turn_context, user)
+        elif text in ("cal today", "/cal-today", "cal-today"):
+            await self._cmd_cal_today(turn_context, user)
+        elif text in ("cal week", "/cal-week", "cal-week"):
+            await self._cmd_cal_week(turn_context, user)
+        elif text in ("cal add", "/cal-add", "cal-add"):
+            await self._cmd_cal_add(turn_context, user)
+        elif text in ("cal view", "/cal-view", "cal-view"):
+            await self._cmd_cal_view(turn_context, user)
+        elif text in ("cal delete", "/cal-delete", "cal-delete"):
+            await self._cmd_cal_delete(turn_context, user)
         elif text in ("runs", "/runs"):
             await self._cmd_runs(turn_context, user)
         else:
@@ -627,6 +689,221 @@ class JobApplyBot(ActivityHandler):
             ],
             "actions": [
                 {"type": "Action.Submit", "title": "Rescore", "data": {"action": "rescore_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _send_event_list(self, ctx: TurnContext, header: str, events: list[dict], limit: int = 20):
+        """Shared row-list renderer for cal_today/cal_week."""
+        shown = events[:limit]
+        rows = []
+        for i, ev in enumerate(shown):
+            emoji = EVENT_TYPE_EMOJI.get(ev.get("event_type", ""), "\U0001f4c5")
+            rows.append({
+                "type": "ColumnSet",
+                "spacing": "Medium" if i else "Default",
+                "separator": i > 0,
+                "columns": [{
+                    "type": "Column", "width": "stretch",
+                    "items": [
+                        {"type": "TextBlock", "text": f"{emoji} {ev.get('title', '?')}", "weight": "Bolder", "wrap": True},
+                        {
+                            "type": "TextBlock", "text": _fmt_event_dt(ev.get("datetime", "")),
+                            "isSubtle": True, "wrap": True, "spacing": "None", "size": "Small",
+                        },
+                    ],
+                }],
+            })
+
+        body: list[dict[str, Any]] = [
+            {"type": "TextBlock", "text": header, "size": "Large", "weight": "Bolder", "wrap": True},
+            *rows,
+        ]
+        if len(events) > limit:
+            body.append({
+                "type": "TextBlock", "text": f"…and {len(events) - limit} more.",
+                "isSubtle": True, "spacing": "Medium",
+            })
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": body,
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_cal_today(self, ctx: TurnContext, user: dict):
+        today = datetime.now(timezone.utc).date()
+        from_dt = f"{today}T00:00:00Z"
+        to_dt = f"{today}T23:59:59Z"
+        try:
+            events = await asyncio.to_thread(
+                api_client.get_calendar_events, from_dt, to_dt, user_email=user["email"]
+            )
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load calendar: {exc}"))
+            return
+
+        if not events:
+            await ctx.send_activity(MessageFactory.text("\U0001f4c5 No events today."))
+            return
+
+        header = (
+            f"\U0001f4c5 Today — {today.strftime('%A, %B')} {today.day} "
+            f"({len(events)} event{'s' if len(events) != 1 else ''})"
+        )
+        await self._send_event_list(ctx, header, events)
+
+    async def _cmd_cal_week(self, ctx: TurnContext, user: dict):
+        try:
+            events = await asyncio.to_thread(api_client.get_upcoming_events, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load calendar: {exc}"))
+            return
+
+        if not events:
+            await ctx.send_activity(MessageFactory.text("\U0001f4c5 No events in the next 7 days."))
+            return
+
+        header = f"\U0001f4c5 Upcoming — Next 7 Days ({len(events)} event{'s' if len(events) != 1 else ''})"
+        await self._send_event_list(ctx, header, events)
+
+    async def _cmd_cal_add(self, ctx: TurnContext, user: dict):
+        app_choices = [{"title": "— None —", "value": "none"}]
+        try:
+            apps = await asyncio.to_thread(api_client.get_applications, user_email=user["email"])
+            for a in apps[:99]:
+                app_choices.append({
+                    "title": f"{a.get('company', '?')} — {a.get('role_title', '?')}",
+                    "value": a["id"],
+                })
+        except Exception:
+            pass
+
+        event_type_choices = [{"title": v, "value": k} for k, v in EVENT_TYPE_LABELS.items()]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Add Calendar Event", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "Input.Text", "id": "title", "label": "Event Title",
+                    "isRequired": True, "errorMessage": "Title is required",
+                    "placeholder": "e.g. HM Interview — Salesforce",
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "event_type", "label": "Event Type",
+                    "value": "interview", "choices": event_type_choices,
+                },
+                {
+                    "type": "Input.Date", "id": "event_date", "label": "Date",
+                    "isRequired": True, "errorMessage": "Date is required",
+                },
+                {
+                    "type": "Input.Text", "id": "event_time", "label": "Time (HH:MM, 24h)",
+                    "value": "09:00", "placeholder": "14:00",
+                },
+                {
+                    "type": "Input.Text", "id": "event_tz", "label": "Timezone (IANA name)",
+                    "value": "America/New_York", "placeholder": "America/New_York",
+                },
+                {
+                    "type": "Input.Number", "id": "duration", "label": "Duration (minutes)",
+                    "value": 60,
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "app_link", "label": "Linked Application (optional)",
+                    "value": "none", "choices": app_choices,
+                },
+                {
+                    "type": "Input.Number", "id": "reminder_offset",
+                    "label": "Remind me (minutes before, optional)", "value": 1440,
+                },
+                {
+                    "type": "Input.Toggle", "id": "reminder_email", "title": "Email reminder", "value": "true",
+                },
+                {
+                    "type": "Input.Text", "id": "notes", "label": "Notes (optional)",
+                    "isMultiline": True, "placeholder": "Interviewer name, focus areas, prep notes…",
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Add", "data": {"action": "cal_add_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_cal_view(self, ctx: TurnContext, user: dict):
+        try:
+            events = await asyncio.to_thread(api_client.get_calendar_events, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load calendar: {exc}"))
+            return
+
+        if not events:
+            await ctx.send_activity(MessageFactory.text("No events found. Add one with **cal add** first."))
+            return
+
+        events = sorted(events, key=lambda e: e.get("datetime", ""))
+        choices = [
+            {"title": f"{e.get('title', '?')} — {_fmt_event_dt(e.get('datetime', ''))}", "value": e["id"]}
+            for e in events[:20]
+        ]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "View Event", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "Input.ChoiceSet", "id": "event_id", "label": "Select event",
+                    "isRequired": True, "errorMessage": "Select an event", "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "View", "data": {"action": "cal_view_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _cmd_cal_delete(self, ctx: TurnContext, user: dict):
+        try:
+            events = await asyncio.to_thread(api_client.get_calendar_events, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load calendar: {exc}"))
+            return
+
+        if not events:
+            await ctx.send_activity(MessageFactory.text("No events found."))
+            return
+
+        events = sorted(events, key=lambda e: e.get("datetime", ""))
+        choices = [
+            {"title": f"{e.get('title', '?')} — {_fmt_event_dt(e.get('datetime', ''))}", "value": e["id"]}
+            for e in events[:20]
+        ]
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {"type": "TextBlock", "text": "Delete Event", "size": "Large", "weight": "Bolder"},
+                {
+                    "type": "TextBlock", "wrap": True, "color": "Attention",
+                    "text": "⚠️ This will permanently delete the event and all its reminders.",
+                },
+                {
+                    "type": "Input.ChoiceSet", "id": "event_id", "label": "Select event to delete",
+                    "isRequired": True, "errorMessage": "Select an event", "choices": choices,
+                },
+            ],
+            "actions": [
+                {"type": "Action.Submit", "title": "Continue", "data": {"action": "cal_delete_select_submit"}},
             ],
         }
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
@@ -1026,6 +1303,12 @@ class JobApplyBot(ActivityHandler):
             "- **track update** — Edit an application's status/fields\n"
             "- **track note** — Add a comment to an application\n"
             "- **track delete** — Delete an application (two-step confirm)\n\n"
+            "**\U0001f4c5 Calendar**\n"
+            "- **cal today** — Show today's events\n"
+            "- **cal week** — Show events in the next 7 days\n"
+            "- **cal add** — Add a calendar event\n"
+            "- **cal view** — View full details of an event\n"
+            "- **cal delete** — Delete an event (two-step confirm)\n\n"
             "**\U0001f511 Account**\n"
             "- **confirm** — Link your Teams identity to a Job Apply account "
             "(offers a sign-in link if none matches your Teams email)\n"
@@ -1087,6 +1370,16 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text("Cancelled — nothing was deleted."))
         elif action == "rescore_submit":
             await self._submit_rescore(ctx, data, user)
+        elif action == "cal_add_submit":
+            await self._submit_cal_add(ctx, data, user)
+        elif action == "cal_view_submit":
+            await self._submit_cal_view(ctx, data, user)
+        elif action == "cal_delete_select_submit":
+            await self._submit_cal_delete_select(ctx, data, user)
+        elif action == "cal_delete_confirm_submit":
+            await self._submit_cal_delete_confirm(ctx, data, user)
+        elif action == "cal_delete_cancel_submit":
+            await ctx.send_activity(MessageFactory.text("Cancelled — nothing was deleted."))
         else:
             await ctx.send_activity(MessageFactory.text(f"Unknown action: {action}"))
 
@@ -2011,6 +2304,159 @@ class JobApplyBot(ActivityHandler):
             await ctx.send_activity(MessageFactory.text(
                 f"🗑️ Deleted **{record.get('role_title')}** at **{record.get('company')}**."
             ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to delete: {exc}"))
+
+    async def _submit_cal_add(self, ctx: TurnContext, data: dict, user: dict):
+        title = (data.get("title") or "").strip()
+        event_type = (data.get("event_type") or "custom").strip()
+        date_str = (data.get("event_date") or "").strip()
+        time_str = (data.get("event_time") or "09:00").strip().replace(".", ":")
+        tz = (data.get("event_tz") or "America/New_York").strip()
+        duration_raw = data.get("duration")
+        app_link = (data.get("app_link") or "none").strip()
+        offset_raw = data.get("reminder_offset")
+        email_reminder = data.get("reminder_email") == "true"
+        notes = (data.get("notes") or "").strip()
+
+        if not title or not date_str:
+            await ctx.send_activity(MessageFactory.text("❌ Title and date are required."))
+            return
+
+        try:
+            dt_iso = _local_to_utc_iso(date_str, time_str, tz)
+        except Exception:
+            await ctx.send_activity(MessageFactory.text("❌ Invalid time format. Use HH:MM (e.g. 14:00)."))
+            return
+
+        try:
+            duration = max(0, min(1440, int(duration_raw))) if duration_raw not in (None, "") else 60
+        except (TypeError, ValueError):
+            duration = 60
+
+        reminders = []
+        if offset_raw not in (None, "") and email_reminder:
+            try:
+                offset_minutes = max(0, int(offset_raw))
+                reminders = [{"offset_minutes": offset_minutes, "channels": ["email"]}]
+            except (TypeError, ValueError):
+                pass
+
+        payload = {
+            "title": title,
+            "event_type": event_type if event_type in EVENT_TYPE_LABELS else "custom",
+            "datetime": dt_iso,
+            "timezone": tz,
+            "duration_minutes": duration,
+            "notes": notes,
+            "app_id": app_link if app_link != "none" else None,
+            "reminders": reminders,
+        }
+
+        try:
+            ev = await asyncio.to_thread(
+                api_client.create_calendar_event, payload, user_email=user["email"]
+            )
+            type_label = EVENT_TYPE_LABELS.get(event_type, event_type)
+            await ctx.send_activity(MessageFactory.text(
+                f"✅ **{title}** added to calendar\n"
+                f"{type_label} · {_fmt_event_dt(ev.get('datetime', ''))}"
+            ))
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Failed to create event: {exc}"))
+
+    async def _submit_cal_view(self, ctx: TurnContext, data: dict, user: dict):
+        event_id = (data.get("event_id") or "").strip()
+        if not event_id:
+            await ctx.send_activity(MessageFactory.text("❌ No event selected."))
+            return
+
+        try:
+            ev = await asyncio.to_thread(api_client.get_calendar_event, event_id, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load event: {exc}"))
+            return
+
+        type_label = EVENT_TYPE_LABELS.get(ev.get("event_type", ""), ev.get("event_type", "?"))
+        emoji = EVENT_TYPE_EMOJI.get(ev.get("event_type", ""), "\U0001f4c5")
+
+        facts = [
+            {"title": "Type", "value": type_label},
+            {"title": "Time", "value": f"{_fmt_event_dt(ev.get('datetime', ''))} ({ev.get('timezone', 'UTC')})"},
+        ]
+        if ev.get("duration_minutes"):
+            facts.append({"title": "Duration", "value": f"{ev['duration_minutes']} min"})
+        for r in ev.get("reminders", []):
+            offset = r.get("offset_minutes", 0)
+            label = f"{offset}m" if offset < 60 else (f"{offset // 60}h" if offset < 1440 else f"{offset // 1440}d")
+            facts.append({"title": "\U0001f514 Reminder", "value": f"{label} before via {', '.join(r.get('channels', []))}"})
+
+        body: list[dict[str, Any]] = [
+            {
+                "type": "TextBlock", "text": f"{emoji} {ev.get('title', '?')}",
+                "size": "Large", "weight": "Bolder", "wrap": True,
+            },
+            {"type": "FactSet", "facts": facts, "spacing": "Medium"},
+        ]
+        if ev.get("notes"):
+            body.append({
+                "type": "Container", "spacing": "Medium", "separator": True,
+                "items": [
+                    {"type": "TextBlock", "text": "Notes", "weight": "Bolder"},
+                    {"type": "TextBlock", "text": ev["notes"][:500], "wrap": True},
+                ],
+            })
+
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": body,
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_cal_delete_select(self, ctx: TurnContext, data: dict, user: dict):
+        event_id = (data.get("event_id") or "").strip()
+        if not event_id:
+            await ctx.send_activity(MessageFactory.text("❌ Please select an event."))
+            return
+
+        try:
+            ev = await asyncio.to_thread(api_client.get_calendar_event, event_id, user_email=user["email"])
+        except Exception as exc:
+            await ctx.send_activity(MessageFactory.text(f"❌ Could not load event: {exc}"))
+            return
+
+        label = f"{ev.get('title', '?')} — {_fmt_event_dt(ev.get('datetime', ''))}"
+        card = {
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock", "wrap": True, "color": "Attention",
+                    "text": f"⚠️ Are you sure you want to delete **{label}**?\n\nThis cannot be undone.",
+                },
+            ],
+            "actions": [
+                {
+                    "type": "Action.Submit", "title": "Delete", "style": "destructive",
+                    "data": {"action": "cal_delete_confirm_submit", "event_id": event_id},
+                },
+                {"type": "Action.Submit", "title": "Cancel", "data": {"action": "cal_delete_cancel_submit"}},
+            ],
+        }
+        await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
+
+    async def _submit_cal_delete_confirm(self, ctx: TurnContext, data: dict, user: dict):
+        event_id = (data.get("event_id") or "").strip()
+        if not event_id:
+            await ctx.send_activity(MessageFactory.text("❌ Missing event reference."))
+            return
+
+        try:
+            await asyncio.to_thread(api_client.delete_calendar_event, event_id, user_email=user["email"])
+            await ctx.send_activity(MessageFactory.text("\U0001f5d1️ Calendar event deleted."))
         except Exception as exc:
             await ctx.send_activity(MessageFactory.text(f"❌ Failed to delete: {exc}"))
 

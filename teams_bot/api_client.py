@@ -202,6 +202,43 @@ def score_application(app_id: str, user_email: str | None = None) -> dict:
     return r.json()
 
 
+# ── Calendar ─────────────────────────────────────────────────────────────
+
+def get_calendar_events(from_dt: str | None = None, to_dt: str | None = None,
+                         user_email: str | None = None) -> list[dict]:
+    params: dict[str, str] = {}
+    if from_dt:
+        params["from_dt"] = from_dt
+    if to_dt:
+        params["to_dt"] = to_dt
+    r = _api("get", "/api/calendar", user_email=user_email, params=params)
+    r.raise_for_status()
+    return r.json().get("events", [])
+
+
+def get_upcoming_events(user_email: str | None = None) -> list[dict]:
+    r = _api("get", "/api/calendar/upcoming", user_email=user_email)
+    r.raise_for_status()
+    return r.json().get("events", [])
+
+
+def create_calendar_event(payload: dict, user_email: str | None = None) -> dict:
+    r = _api("post", "/api/calendar", user_email=user_email, json=payload)
+    r.raise_for_status()
+    return r.json()
+
+
+def get_calendar_event(event_id: str, user_email: str | None = None) -> dict:
+    r = _api("get", f"/api/calendar/{event_id}", user_email=user_email)
+    r.raise_for_status()
+    return r.json()
+
+
+def delete_calendar_event(event_id: str, user_email: str | None = None) -> None:
+    r = _api("delete", f"/api/calendar/{event_id}", user_email=user_email)
+    r.raise_for_status()
+
+
 # ── Thank-you email ──────────────────────────────────────────────────────
 
 def post_thankyou(job_posting: str, company: str, role: str, round_type: str,

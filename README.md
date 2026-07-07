@@ -235,6 +235,11 @@ The bot also publishes a dynamic **App Home tab** showing live pipeline stats, u
 | 📋 Tracker | `track update` | Two-step: pick app → edit all fields pre-filled |
 | 📋 Tracker | `track note` | Add a comment to an application |
 | 📋 Tracker | `track delete` | Delete an application (two-step confirm) |
+| 📅 Calendar | `cal today` | Show today's events |
+| 📅 Calendar | `cal week` | Show events in the next 7 days |
+| 📅 Calendar | `cal add` | Add a calendar event (with an optional email reminder) |
+| 📅 Calendar | `cal view` | View full details of an event |
+| 📅 Calendar | `cal delete` | Delete an event (two-step confirm) |
 | 🔑 Account | `confirm` | Link your Teams identity to a Job Apply account |
 | 🔑 Account | `whoami` | Show which account you're linked as |
 | 🔑 Account | `unlink` | Remove your Teams identity's link |
@@ -273,6 +278,14 @@ URL, DUA flag, recruiter, plus an optional note) via `PUT /api/applications/{id}
 `track note` posts a comment via `POST /api/applications/{id}/comments`; `track
 delete` shows a destructive-styled confirm card before calling
 `DELETE /api/applications/{id}`.
+
+**`cal today`/`cal week`/`cal add`/`cal view`/`cal delete`** mirror Slack's
+`/cal-*` commands against the same `/api/calendar` endpoints. `cal add`
+simplifies Slack's reminder-channel checkbox (email + Slack) down to a single
+"Email reminder" toggle, since there's no Teams-side reminder delivery channel
+implemented server-side to pair with it. Local date/time + IANA timezone are
+converted to UTC client-side (`_local_to_utc_iso`, same approach as
+slack_bot.py's `_local_to_utc_iso`) before being sent to the API.
 
 ---
 
