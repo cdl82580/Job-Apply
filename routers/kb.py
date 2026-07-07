@@ -257,12 +257,14 @@ async def seed_kb_from_file(request: Request):
     if not os.path.exists(kb_path):
         raise HTTPException(500, "frontend/kb.html not found on server")
 
-    with open(kb_path, "r", encoding="utf-8") as f:
-        kb_html = f.read()
-
-    # Embed the HTML directly in the script to avoid process.argv index differences
-    node_script = (
-        "const html = " + json.dumps(kb_html) + r""";
+    # Node reads kb.html itself (by path) rather than receiving its content as
+    # part of the script — kb.html is large and growing, and embedding it in
+    # the -e argument hits the OS's exec() argument-length limit (E2BIG) once
+    # the file gets big enough, even though it's well under ARG_MAX alone —
+    # the container's environment block eats into the same budget.
+    node_script = r"""
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf-8');
 const start = html.indexOf('const KB = {');
 if (start === -1) { console.error('KB const not found'); process.exit(1); }
 const sub = html.slice(start + 'const KB = '.length);
@@ -285,16 +287,17 @@ let KB;
 try { KB = eval('(' + objSrc + ')'); } catch(e) { console.error('eval failed: ' + e.message); process.exit(1); }
 console.log(JSON.stringify(KB));
 """
-    )
     try:
         result = subprocess.run(
-            ["node", "-e", node_script],
+            ["node", "-e", node_script, kb_path],
             capture_output=True, text=True, timeout=15,
         )
     except FileNotFoundError:
         raise HTTPException(500, "Node.js not available on server")
     except subprocess.TimeoutExpired:
         raise HTTPException(500, "Node.js script timed out")
+    except OSError as e:
+        raise HTTPException(500, f"Failed to launch Node.js: {e}")
 
     if result.returncode != 0:
         raise HTTPException(500, f"KB extraction failed: {result.stderr.strip()}")
