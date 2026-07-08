@@ -550,6 +550,8 @@ See `JobApply.postman_collection.json` for the full request/response reference.
 | POST | `/api/admin/kb/seed` | admin | Replace entire KB from JSON payload |
 | POST | `/api/admin/kb/seed-from-file` | admin | Re-extract KB from `frontend/kb.html` via Node.js and seed to Tigris |
 | GET | `/api/notifications/action?token=` | — | Consume a signed one-time notification token (from nudge/follow-up emails) — executes `status` or `snooze` action; redirects to tracker on success |
+| GET | `/api/notifications/confirm-applied?token=` | — | Signed-token date picker page for "Applied" status without a pre-set date |
+| POST | `/api/notifications/confirm-applied` | — | Submit the applied date from the confirm-applied form |
 | GET | `/api/admin/users` | admin | List all users |
 | PUT | `/api/admin/users/{id}` | admin | Edit user (name, email, role, active, verified) — invalidates user cache |
 | PUT | `/api/admin/users/{id}/role` | admin | Set user role only (`user`/`admin`) — Slack bot compat; invalidates user cache |

@@ -1,6 +1,7 @@
 # Secrets and credentials — never commit
 .env
 gdrive_credentials.json
+.claude/settings.local.json
 
 # Generated output
 output/

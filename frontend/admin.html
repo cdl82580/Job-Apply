@@ -1618,6 +1618,14 @@ function esc(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function safeHref(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(String(url), location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : null;
+  } catch (_) { return null; }
+}
+
 function fmtDate(iso) {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }); }
@@ -1634,11 +1642,17 @@ function fmtDateTime(iso) {
 }
 
 const LOGODEV_PK = 'pk_U3oIYbhyTvinmftvOvCTJg';
+function makeLogoPlaceholder(company) {
+  const el = document.createElement('div');
+  el.className = 'co-logo-ph';
+  el.textContent = (company || '?').slice(0, 2).toUpperCase();
+  return el;
+}
 function logoHtml(domain, company, size = 24) {
   if (domain) return `<img class="co-logo" style="width:${size}px;height:${size}px"
     src="https://img.logo.dev/${esc(domain)}?token=${LOGODEV_PK}&size=${size}&format=png&retina=true"
     alt="${esc(company)}" data-company="${esc(company)}"
-    onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'co-logo-ph',textContent:'${esc(company).slice(0,2).toUpperCase()}'}))">`;
+    onerror="this.replaceWith(makeLogoPlaceholder(this.dataset.company))">`;
   return `<div class="co-logo-ph">${esc(company).slice(0,2).toUpperCase()}</div>`;
 }
 
@@ -1971,7 +1985,7 @@ function renderApps() {
       <td style="font-size:.8rem;color:var(--muted)">${esc(a._user_email || '')}</td>
       <td style="font-size:.8rem;color:var(--muted);white-space:nowrap">${dateVal}</td>
       <td><div style="display:flex;gap:.3rem">
-        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
+        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app"
                 data-uid="${a._user_id}" data-aid="${a.id}"
                 data-uemail="${esc(a._user_email || '')}">Edit</button>
@@ -4230,7 +4244,7 @@ function renderAppCards(list) {
         <span style="color:var(--muted);font-size:.775rem">${dateVal}</span>
       </div>
       <div class="admin-card-actions">
-        ${a.url ? `<a class="btn btn-ghost btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">Job ↗</a>` : ''}
+        ${safeHref(a.url) ? `<a class="btn btn-ghost btn-sm" href="${esc(safeHref(a.url))}" target="_blank" rel="noopener">Job ↗</a>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="edit-app" data-uid="${a._user_id}" data-aid="${a.id}" data-uemail="${esc(a._user_email||'')}">Edit</button>
         <button class="btn btn-danger btn-sm" data-action="del-app" data-uid="${a._user_id}" data-aid="${a.id}" data-label="${esc(a.company)} — ${esc(a.role_title)}">Del</button>
       </div>

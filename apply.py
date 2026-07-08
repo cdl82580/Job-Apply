@@ -625,12 +625,20 @@ def step3_unpack(config: WorkflowConfig):
     config.progress("  ✓ Unpacked")
 
 
+def _xml_attr_escape(text: str) -> str:
+    """Escape text for safe insertion inside an XML attribute value (handles quotes too)."""
+    return html.escape(str(text), quote=True)
+
+
 def apply_brand_colors(xml: str, colors: dict) -> str:
     """Replace the three hardcoded palette hex values with the brand colors."""
-    xml = xml.replace('w:val="1A3C5E"',  f'w:val="{colors["primary"]}"')
-    xml = xml.replace('w:color="1A3C5E"', f'w:color="{colors["primary"]}"')
-    xml = xml.replace('w:color="2B6CB0"', f'w:color="{colors["border"]}"')
-    xml = xml.replace('w:fill="EEF4FB"',  f'w:fill="{colors["fill"]}"')
+    primary = _xml_attr_escape(colors["primary"])
+    border = _xml_attr_escape(colors["border"])
+    fill = _xml_attr_escape(colors["fill"])
+    xml = xml.replace('w:val="1A3C5E"',  f'w:val="{primary}"')
+    xml = xml.replace('w:color="1A3C5E"', f'w:color="{primary}"')
+    xml = xml.replace('w:color="2B6CB0"', f'w:color="{border}"')
+    xml = xml.replace('w:fill="EEF4FB"',  f'w:fill="{fill}"')
     return xml
 
 
@@ -1161,8 +1169,8 @@ def step6_cover_letter(
         salutation=escape_js_string(salutation),
         body_paragraphs="\n".join(body_paragraphs),
         output_path=str(output_path).replace("\\", "/"),
-        primary_color=palette["primary"],
-        border_color=palette["border"],
+        primary_color=escape_js_string(palette["primary"]),
+        border_color=escape_js_string(palette["border"]),
         contact_line=escape_js_string(APPLICANT_CONTACT_LINE),
         sign_off_contact=sign_off_contact,
     )
@@ -2183,7 +2191,7 @@ def _build_prep_docx_js(
     def tr(text: str, bold: bool = False, italic: bool = False,
            size: int = 19, color: str = DARK) -> str:
         props = [f'text: "{esc(text)}"', 'font: "Arial"',
-                 f'size: {size}', f'color: "{color}"']
+                 f'size: {size}', f'color: "{esc(color)}"']
         if bold:   props.append("bold: true")
         if italic: props.append("italic: true")
         return "new TextRun({ " + ", ".join(props) + " })"
@@ -2194,7 +2202,7 @@ def _build_prep_docx_js(
         indent  = f", indent: {{ left: {left} }}" if left else ""
         border  = (
             f', border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 4, '
-            f'color: "{border_bottom_color}", space: 4 }} }}'
+            f'color: "{esc(border_bottom_color)}", space: 4 }} }}'
         ) if border_bottom_color else ""
         return (f'new Paragraph({{ spacing: {{ {spacing} }}{indent}{border}, '
                 f'children: [{", ".join(children)}] }})')

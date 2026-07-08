@@ -584,7 +584,10 @@ _PUBLIC_PATHS = frozenset({
 })
 
 
-_PUBLIC_PREFIXES = ("/img/", "/js/", "/css/", "/fonts/", "/api/kb/")
+_PUBLIC_PREFIXES = (
+    "/img/", "/js/", "/css/", "/fonts/", "/api/kb/",
+    "/api/notifications/",  # signed-token email action links, not our session/BOT_API_KEY auth
+)
 
 
 @app.middleware("http")

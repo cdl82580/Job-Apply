@@ -15,6 +15,7 @@ GET  /api/notifications/action?token=...
 
 from __future__ import annotations
 
+import html
 import time
 from typing import Any
 
@@ -106,9 +107,9 @@ async def notification_action(token: str = Query(...)):
                        action_taken="status_update", new_status=new_status,
                        app_id=app_id, company=record["company"], role_title=record["role_title"])
 
-        msg = f"Status updated to <strong>{new_status}</strong>."
+        msg = f"Status updated to <strong>{html.escape(str(new_status))}</strong>."
         if date_applied:
-            msg += f" Applied date set to {date_applied}."
+            msg += f" Applied date set to {html.escape(str(date_applied))}."
         return _ok_page(msg, record["company"], record["role_title"])
 
     raise HTTPException(400, f"Unknown action: {action!r}")
@@ -129,10 +130,11 @@ async def confirm_applied_page(token: str = Query(...)):
         return HTMLResponse(_error_page("Application not found."), status_code=404)
 
     today = time.strftime("%Y-%m-%d", time.gmtime())
-    company   = record["company"]
-    role      = record["role_title"]
+    company   = html.escape(str(record["company"]))
+    role      = html.escape(str(record["role_title"]))
+    safe_token = html.escape(token)
 
-    html = f"""<!DOCTYPE html>
+    page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -165,7 +167,7 @@ async def confirm_applied_page(token: str = Query(...)):
     <h1>When did you apply?</h1>
     <p class="sub">{company} — {role}</p>
     <form method="POST" action="/api/notifications/confirm-applied">
-      <input type="hidden" name="token" value="{token}">
+      <input type="hidden" name="token" value="{safe_token}">
       <label for="date">Applied date</label>
       <input type="date" id="date" name="date_applied" value="{today}" max="{today}" required>
       <div class="actions">
@@ -176,7 +178,7 @@ async def confirm_applied_page(token: str = Query(...)):
   </div>
 </body>
 </html>"""
-    return HTMLResponse(html)
+    return HTMLResponse(page)
 
 
 @router.post("/confirm-applied", response_class=HTMLResponse)
@@ -207,7 +209,7 @@ async def confirm_applied_submit(request: Request):
                    app_id=app_id, company=record["company"], role_title=record["role_title"])
 
     return _ok_page(
-        f"Status updated to <strong>Applied</strong>. Applied date set to {date_applied}.",
+        f"Status updated to <strong>Applied</strong>. Applied date set to {html.escape(date_applied)}.",
         record["company"], record["role_title"],
     )
 
@@ -240,7 +242,9 @@ def _apply_status(
 
 
 def _ok_page(message: str, company: str, role: str) -> HTMLResponse:
-    html = f"""<!DOCTYPE html>
+    company = html.escape(str(company))
+    role = html.escape(str(role))
+    page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -271,7 +275,7 @@ def _ok_page(message: str, company: str, role: str) -> HTMLResponse:
   </div>
 </body>
 </html>"""
-    return HTMLResponse(html)
+    return HTMLResponse(page)
 
 
 def _error_page(message: str) -> str:

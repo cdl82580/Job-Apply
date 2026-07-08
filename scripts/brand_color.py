@@ -12,6 +12,7 @@ Usage:
 """
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -29,6 +30,10 @@ DEFAULT_PALETTE = {
 
 # Brandfetch search client token (autocomplete endpoint). Set BRANDFETCH_SEARCH_CLIENT in env.
 _SEARCH_CLIENT = os.environ.get("BRANDFETCH_SEARCH_CLIENT", "")
+
+# Brand colors are spliced into generated JS/DOCX-XML downstream — only accept
+# well-formed 6-digit hex so a malformed API response can't break out of those contexts.
+_HEX_RE = re.compile(r"^[0-9A-F]{6}$")
 
 
 def _load_api_key() -> str:
@@ -115,9 +120,12 @@ def get_brand_color(company_name: str) -> dict:
         for priority in ("accent", "dark", "light"):
             match = next((c for c in colors if c.get("type") == priority), None)
             if match and match.get("hex"):
-                hex_val = match["hex"].lstrip("#").upper()
-                chosen_type = priority
-                break
+                candidate = match["hex"].lstrip("#").upper()
+                if _HEX_RE.match(candidate):
+                    hex_val = candidate
+                    chosen_type = priority
+                    break
+                print(f"  ⚠ Brandfetch: malformed hex '{match['hex']}' for type '{priority}' — skipping")
 
         if not hex_val:
             print("  ⚠ Brandfetch: no usable color in brand data — using default colors")
