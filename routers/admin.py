@@ -17,10 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import concurrent.futures
-import ipaddress
-import socket
 import time
-import urllib.parse
 import uuid
 from typing import Any
 
@@ -28,29 +25,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 
-_PRIVATE_NETS = [
-    ipaddress.ip_network(n) for n in (
-        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-        "127.0.0.0/8", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
-    )
-]
-
-
-def _is_ssrf_url(url: str) -> bool:
-    """Return True if the URL resolves to a private/loopback/link-local address."""
-    try:
-        parsed = urllib.parse.urlparse(url)
-        host   = parsed.hostname or ""
-        addrs  = socket.getaddrinfo(host, None)
-        for _, _, _, _, sockaddr in addrs:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if any(ip in net for net in _PRIVATE_NETS):
-                return True
-    except Exception:
-        pass
-    return False
-
 from scripts import storage
+from scripts.ssrf import is_ssrf_url as _is_ssrf_url
 from scripts import applications as app_store
 from scripts import user_audit
 from scripts import email_verification as ev
@@ -238,6 +214,8 @@ async def set_user_role(user_id: str, body: RoleUpdate, request: Request):
     old_role = user.get("role", "user")
     user["role"] = body.role
     storage.save_user(user)
+    from api import _invalidate_user_cache
+    _invalidate_user_cache(user_id)
     user_audit.log(user_id, "role_changed", admin["email"],
                    old_role=old_role, new_role=body.role, changed_by=admin["email"])
     return {"ok": True, "user_id": user_id, "role": body.role}
@@ -720,6 +698,8 @@ class ActivityEntry(BaseModel):
 @router.post("/log-activity")
 async def log_activity(body: ActivityEntry, request: Request):
     """Log an admin action (e.g. CSV export) originating from the browser."""
+    from api import _client_ip  # deferred: api.py imports this router at module load time
+
     admin = _admin(request)
     user_audit.log(admin["user_id"], "admin_csv_export", admin["email"],
                    _client_ip(request),

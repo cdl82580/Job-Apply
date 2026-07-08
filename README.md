@@ -55,10 +55,13 @@ Includes a full-featured application tracker, calendar, admin dashboard, webhook
 
 ### Security
 - `Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, `Content-Security-Policy`, `Referrer-Policy` on every response
-- Rate limiting on login (10/min), register (5/hr), resend-verification (3/hr), change-password (5/hr), change-email (5/hr), resume-upload (10/hr), forgot-password (3/hr), reset-password (5/hr)
-- SSRF guard on webhook URLs (DNS resolution + private-net check), re-applied at delivery time
-- Webhook HMAC secrets encrypted at rest with AES-256-GCM (key derived from `SESSION_SECRET`)
-- `safeHref()` scheme validation on all user-supplied URLs rendered as `href`/`src` in the frontend
+- Rate limiting on login (10/min), register (5/hr), resend-verification (3/hr), change-password (5/hr), change-email (5/hr), resume-upload (10/hr), forgot-password (3/hr), reset-password (5/hr), company search (30/min)
+- SSRF guard on webhook URLs (DNS resolution + private-net check, shared via `scripts/ssrf.py`), re-applied at delivery time; outbound webhook delivery does not follow redirects
+- Webhook HMAC secrets encrypted at rest with AES-256-GCM (key derived from `SESSION_SECRET`; fails fast if unset)
+- `safeHref()`/`esc()` applied to all user-supplied URLs and text rendered as `href`/`src`/`innerHTML` in the frontend; KB article HTML sanitized client-side with DOMPurify (`frontend/dompurify.min.js`) before rendering
+- Password-reset tokens are single-use (bound to a password-hash fingerprint at issuance; invalidated the moment the password changes)
+- Google Drive folder IDs are verified against the caller's actual Drive folders before being accepted into an application's linked runs
+- Uploaded DOCX files are capped at 100 MB decompressed and hard-rejected on any DOCTYPE/malformed XML (no silent fallback)
 - Audit log stored as individual S3 objects (atomic writes, no cross-machine race condition)
 - Per-user record cache (30s TTL) avoids S3 round-trips on every authenticated request
 

@@ -24,11 +24,16 @@ from helpers.merge_runs import merge_runs as do_merge_runs
 from helpers.simplify_redlines import simplify_redlines as do_simplify_redlines
 
 SMART_QUOTE_REPLACEMENTS = {
-    "\u201c": "&#x201C;",  
-    "\u201d": "&#x201D;",  
-    "\u2018": "&#x2018;",  
-    "\u2019": "&#x2019;",  
+    "\u201c": "&#x201C;",
+    "\u201d": "&#x201D;",
+    "\u2018": "&#x2018;",
+    "\u2019": "&#x2019;",
 }
+
+# Office files decompress at most a few MB in practice. A crafted archive can
+# claim a far larger uncompressed size (a zip bomb) while staying under any
+# reasonable upload-size limit \u2014 cap the total before extracting.
+MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 def unpack(
@@ -51,21 +56,32 @@ def unpack(
         output_path.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(input_path, "r") as zf:
+            total_uncompressed = sum(info.file_size for info in zf.infolist())
+            if total_uncompressed > MAX_UNCOMPRESSED_BYTES:
+                return None, (
+                    f"Error: {input_file} would decompress to "
+                    f"{total_uncompressed / (1024 * 1024):.0f} MB, over the "
+                    f"{MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB limit"
+                )
             zf.extractall(output_path)
 
         xml_files = list(output_path.rglob("*.xml")) + list(output_path.rglob("*.rels"))
         for xml_file in xml_files:
-            _pretty_print_xml(xml_file)
+            _pretty_print_xml(xml_file)  # raises on malformed/DTD-bearing XML — never silently skip
 
         message = f"Unpacked {input_file} ({len(xml_files)} XML files)"
 
         if suffix == ".docx":
             if simplify_redlines:
-                simplify_count, _ = do_simplify_redlines(str(output_path))
+                simplify_count, simplify_msg = do_simplify_redlines(str(output_path))
+                if simplify_msg.startswith("Error"):
+                    return None, f"Error unpacking: {simplify_msg}"
                 message += f", simplified {simplify_count} tracked changes"
 
             if merge_runs:
-                merge_count, _ = do_merge_runs(str(output_path))
+                merge_count, merge_msg = do_merge_runs(str(output_path))
+                if merge_msg.startswith("Error"):
+                    return None, f"Error unpacking: {merge_msg}"
                 message += f", merged {merge_count} runs"
 
         for xml_file in xml_files:
@@ -80,12 +96,15 @@ def unpack(
 
 
 def _pretty_print_xml(xml_file: Path) -> None:
-    try:
-        content = xml_file.read_text(encoding="utf-8")
-        dom = defusedxml.minidom.parseString(content)
-        xml_file.write_bytes(dom.toprettyxml(indent="  ", encoding="utf-8"))
-    except Exception:
-        pass  
+    """Parse xml_file through defusedxml (rejects DOCTYPEs/external entities/entity
+    expansion) and rewrite it pretty-printed. Deliberately does NOT swallow parse
+    failures — a genuine Office-generated XML part always parses cleanly, so a
+    failure here (e.g. a DOCTYPE defusedxml refuses) means the input is suspect
+    and the whole unpack should fail rather than silently leaving the original,
+    unsanitized bytes on disk."""
+    content = xml_file.read_text(encoding="utf-8")
+    dom = defusedxml.minidom.parseString(content)
+    xml_file.write_bytes(dom.toprettyxml(indent="  ", encoding="utf-8"))
 
 
 def _escape_smart_quotes(xml_file: Path) -> None:

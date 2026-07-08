@@ -6,6 +6,7 @@
   <title>Profile - Job Apply</title>
   <link rel="icon" href="/favicon.png" type="image/png">
   <script src="/marked.min.js"></script>
+  <script src="/dompurify.min.js"></script>
   <script>
     (function(){
       var t = localStorage.getItem('theme') ||
@@ -643,7 +644,8 @@
   function renderPreview(text) {
     const preview = document.getElementById('profilePreview');
     if (typeof marked !== 'undefined') {
-      preview.innerHTML = marked.parse(text || '*No profile content yet.*');
+      const html = marked.parse(text || '*No profile content yet.*');
+      preview.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
     } else {
       preview.textContent = text || '';
     }
@@ -676,7 +678,13 @@
     const res = await apiFetch('/api/profile');
     const d   = await res.json();
 
-    document.getElementById('accountInfo').innerHTML = `Signed in as <strong>${d.email}</strong>`;
+    {
+      const info = document.getElementById('accountInfo');
+      info.textContent = 'Signed in as ';
+      const strong = document.createElement('strong');
+      strong.textContent = d.email;
+      info.appendChild(strong);
+    }
     document.getElementById('display_name').value  = d.display_name ?? '';
     document.getElementById('profile_text').value  = d.profile_text ?? '';
     renderPreview(d.profile_text ?? '');

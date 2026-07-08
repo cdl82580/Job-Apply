@@ -83,7 +83,6 @@ import hmac
 import json
 import logging
 import os
-import secrets
 import tempfile
 import threading
 import time
@@ -112,6 +111,7 @@ from scripts import agent_runs
 from scripts.notification_tokens import create_token as _create_notif_token
 from scripts.session import SESSION_DAYS as _SESSION_DAYS_SHARED
 from scripts.session import create_session_token, verify_session_token, verify_bot_key
+from scripts.session import resolve_session_secret
 from routers.applications import router as applications_router
 from routers.companies import router as companies_router
 from routers.auth_google import router as auth_google_router
@@ -161,13 +161,12 @@ FLY_APP_NAME   = os.environ.get("FLY_APP_NAME", "job-apply-corey")
 # Signing secret for session tokens.  Generated fresh on each deploy if unset
 # (means all existing sessions are invalidated on restart) — set SESSION_SECRET
 # as a Fly.io secret to get persistent sessions across restarts.
-_SESSION_SECRET  = os.environ.get("SESSION_SECRET", "")
-if not _SESSION_SECRET:
+if not os.environ.get("SESSION_SECRET"):
     logger.warning(
         "SESSION_SECRET is not set. Using a random secret — all sessions will be "
         "invalidated on every restart. Set SESSION_SECRET as a Fly.io secret."
     )
-    _SESSION_SECRET = secrets.token_hex(32)
+_SESSION_SECRET  = resolve_session_secret()
 _SESSION_COOKIE  = "session"
 _SESSION_DAYS    = _SESSION_DAYS_SHARED
 # Bearer token for the Slack bot — set BOT_API_KEY as a Fly.io secret.
@@ -581,6 +580,7 @@ _PUBLIC_PATHS = frozenset({
     "/api/health",
     "/favicon.ico",
     "/api/messages",  # Teams webhook — Bot Framework JWT, not our session/BOT_API_KEY auth
+    "/dompurify.min.js", "/marked.min.js",  # static assets used by the public kb.html page
 })
 
 
@@ -1965,9 +1965,15 @@ async def forgot_password(request: Request):
         logger.warning("forgot_password: no account found for email=%r", email)
     else:
         try:
+            from scripts.session import pw_version as _pw_version
             token = _create_notif_token(
                 user["user_id"], "password_reset", "password_reset",
-                payload={"email": email}, ttl=3600,
+                # pwv binds the token to the password hash it was issued against —
+                # once used (or the password changes any other way), pwv no longer
+                # matches and the token can't be replayed, without needing separate
+                # single-use-token storage.
+                payload={"email": email, "pwv": _pw_version(user.get("password_hash", ""))},
+                ttl=3600,
             )
             reset_url = f"{_APP_URL}/reset-password.html?token={token}"
 
@@ -2022,6 +2028,14 @@ async def reset_password(request: Request):
     record  = storage.get_user_by_id(user_id)
     if not record:
         raise HTTPException(404, "Account not found.")
+
+    from scripts.session import pw_version as _pw_version
+    token_pwv = (data.get("payload") or {}).get("pwv")
+    if token_pwv != _pw_version(record.get("password_hash", "")):
+        # Password already changed since this token was issued (either by an
+        # earlier use of this same token, or any other password change) — the
+        # token is stateless, so this pwv mismatch is what makes it single-use.
+        raise HTTPException(400, "This reset link has expired or is invalid.")
 
     record["password_hash"] = _hash_password(new_password)
     storage.save_user(record)
@@ -2500,7 +2514,9 @@ async def gdrive_get_job_posting(folder_id: str, request: Request):
     user_label = user_data["email"]
     # Verify the folder belongs to this user by checking their application records.
     # This is fast (Tigris lookup) and handles all linked_run folder types without
-    # the 100-folder cap that the Drive listing has.
+    # the 100-folder cap that the Drive listing has. Safe against IDOR because
+    # link_run() (routers/applications.py) validates gdrive_folder_id against the
+    # user's real Drive folders before it's ever allowed into linked_runs.
     from scripts import applications as app_store
     apps_result = app_store.list_applications(user_id)
     allowed_ids = {
@@ -3132,6 +3148,8 @@ async def create_optimize(req: OptimizeRequest, request: Request, response: Resp
 
     # Verify the folder belongs to this user via their application records —
     # same authorization check as /api/gdrive/runs/{folder_id}/job_posting.
+    # Safe against IDOR because link_run() validates gdrive_folder_id against
+    # the user's real Drive folders before it's ever allowed into linked_runs.
     from scripts import applications as app_store
     apps_result = app_store.list_applications(user_id)
     allowed_ids = {

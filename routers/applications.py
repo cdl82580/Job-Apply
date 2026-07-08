@@ -636,6 +636,22 @@ async def link_run(app_id: str, body: RunLinkCreate, request: Request):
     actor   = _actor(request)
     _get_or_404(user_id, app_id)  # 404 guard
 
+    if body.gdrive_folder_id:
+        # gdrive_folder_id ends up trusted downstream (job-posting read/write,
+        # optimize-run access) as proof this folder belongs to the caller, so
+        # verify it against the caller's actual Drive folders here rather than
+        # accepting an arbitrary client-supplied id — otherwise any user could
+        # link (and thereby read/write) another user's Drive folder by guessing
+        # or observing its id.
+        from apply import WorkflowConfig, list_gdrive_run_folders
+        config = WorkflowConfig(progress=lambda _: None, user_label=actor)
+        try:
+            owned_ids = {f.get("id") for f in list_gdrive_run_folders(actor, config) if f.get("id")}
+        except Exception:
+            raise HTTPException(503, "Could not verify Drive folder ownership — please try again")
+        if body.gdrive_folder_id not in owned_ids:
+            raise HTTPException(403, "That Drive folder does not belong to you")
+
     run_info = {
         "id":               str(uuid.uuid4()),
         "type":             body.type,

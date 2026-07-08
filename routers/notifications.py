@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html
 import time
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -199,6 +200,11 @@ async def confirm_applied_submit(request: Request):
 
     if not date_applied:
         date_applied = time.strftime("%Y-%m-%d", time.gmtime())
+    else:
+        try:
+            datetime.strptime(date_applied, "%Y-%m-%d")
+        except ValueError:
+            return HTMLResponse(_error_page("Applied date must be in YYYY-MM-DD format."), status_code=400)
 
     _apply_status(user_id, app_id, record, "Applied", date_applied)
     notif_state.clear_researching(user_id, app_id)

@@ -73,6 +73,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from botbuilder.core import ActivityHandler, CardFactory, InvokeResponse, MessageFactory, TurnContext
 from botbuilder.core.teams import TeamsInfo
@@ -94,6 +95,27 @@ import api_client
 # Not re-exported from botbuilder.schema.teams's __init__, so it's inlined
 # here rather than imported from its internal module path.
 _TEAMS_FILE_DOWNLOAD_CONTENT_TYPE = "application/vnd.microsoft.teams.file.download.info"
+
+# Defense in depth for the "download URL Teams hands us" flow below: the URL
+# comes from an already Bot-Framework-JWT-authenticated Activity, so it's
+# effectively Microsoft-controlled today, but nothing else validates it. Cap
+# it to the hosts Teams file attachments actually resolve to.
+_TRUSTED_DOWNLOAD_HOST_SUFFIXES = (
+    ".sharepoint.com",
+    ".sharepointonline.com",
+    ".officeapps.live.com",
+    ".msteams.api.skype.com",
+    "graph.microsoft.com",
+)
+
+
+def _is_trusted_download_host(url: str) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host.endswith(_TRUSTED_DOWNLOAD_HOST_SUFFIXES)
+
 
 CARDS_DIR = Path(__file__).parent / "cards"
 
@@ -1050,6 +1072,10 @@ class JobApplyBot(ActivityHandler):
             return True
 
         if not file_info.download_url:
+            await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
+            return True
+
+        if not _is_trusted_download_host(file_info.download_url):
             await ctx.send_activity(MessageFactory.text("❌ Could not read the uploaded file."))
             return True
 

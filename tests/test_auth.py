@@ -1,5 +1,8 @@
 """Integration tests for auth endpoints via FastAPI TestClient."""
 
+import re
+from unittest.mock import patch
+
 import pytest
 from tests.conftest import make_user, _store
 
@@ -94,3 +97,50 @@ class TestProtectedRoutes:
         else:
             r = fn(path, json={})
         assert r.status_code == 401
+
+
+class TestPasswordReset:
+    """A reset token must work once, then fail on replay (single-use, via
+    the pw_version fingerprint embedded at issuance time)."""
+
+    def _request_reset_token(self, client, email: str) -> str:
+        with patch("api._send_email", return_value=True) as mock_send:
+            r = client.post("/api/auth/forgot-password", json={"email": email})
+        assert r.status_code == 200
+        text = mock_send.call_args.args[2]
+        match = re.search(r"token=([\w\-=.]+)", text)
+        assert match, f"no token found in email text: {text!r}"
+        return match.group(1)
+
+    def test_reset_succeeds_once(self, client):
+        user = make_user(email="reset1@example.com")
+        token = self._request_reset_token(client, user["email"])
+        r = client.post("/api/auth/reset-password",
+                        json={"token": token, "new_password": "brandnewpass123"})
+        assert r.status_code == 200
+
+    def test_reset_token_rejected_on_replay(self, client):
+        user = make_user(email="reset2@example.com")
+        token = self._request_reset_token(client, user["email"])
+        r1 = client.post("/api/auth/reset-password",
+                         json={"token": token, "new_password": "firstnewpass123"})
+        assert r1.status_code == 200
+
+        r2 = client.post("/api/auth/reset-password",
+                         json={"token": token, "new_password": "secondnewpass123"})
+        assert r2.status_code == 400
+
+    def test_reset_token_rejected_after_unrelated_password_change(self, client):
+        """A token issued before some other password change (e.g. a second
+        concurrent reset request) must not still work afterward."""
+        user = make_user(email="reset3@example.com")
+        token = self._request_reset_token(client, user["email"])
+
+        # Simulate the password changing by some other path before this token is used
+        record = _store.get_user_by_id(user["user_id"])
+        record["password_hash"] = "scrypt:othersalt:otherhash"
+        _store.save_user(record)
+
+        r = client.post("/api/auth/reset-password",
+                        json={"token": token, "new_password": "somenewpass123"})
+        assert r.status_code == 400

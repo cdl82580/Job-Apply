@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KB - Job Apply</title>
   <link rel="icon" href="/favicon.png" type="image/png">
+  <script src="/dompurify.min.js"></script>
   <script>
     (function(){
       var t = localStorage.getItem('theme') ||
@@ -2218,13 +2219,13 @@ function buildHomeCards() {
   KB.categories.filter(cat => !cat.adminOnly || _isAdmin).forEach(cat => {
     const count = KB.articles.filter(a => a.category === cat.id).length;
     const iconHtml = cat.iconImg
-      ? `<img src="${cat.iconImg}" class="cat-card-icon-img" alt="">`
-      : cat.icon;
+      ? `<img src="${escHtml(cat.iconImg)}" class="cat-card-icon-img" alt="">`
+      : escHtml(cat.icon);
     const card = document.createElement('div');
     card.className = 'cat-card';
     card.innerHTML = `
       <div class="cat-card-icon">${iconHtml}</div>
-      <div class="cat-card-title">${cat.label}</div>
+      <div class="cat-card-title">${escHtml(cat.label)}</div>
       <div class="cat-card-count">${count} article${count !== 1 ? 's' : ''}</div>
     `;
     card.onclick = () => showCategory(cat.id);
@@ -2248,9 +2249,9 @@ function showCategory(catId) {
   const articles = KB.articles.filter(a => a.category === catId);
 
   const catIconHtml = cat.iconImg
-    ? `<img src="${cat.iconImg}" class="cat-title-icon-img" alt="">`
-    : `${cat.icon}  `;
-  document.getElementById('catViewTitle').innerHTML = `${catIconHtml}${cat.label}`;
+    ? `<img src="${escHtml(cat.iconImg)}" class="cat-title-icon-img" alt="">`
+    : `${escHtml(cat.icon)}  `;
+  document.getElementById('catViewTitle').innerHTML = `${catIconHtml}${escHtml(cat.label)}`;
   document.getElementById('catViewDesc').textContent  = cat.desc;
 
   const grid = document.getElementById('articleGrid');
@@ -2259,8 +2260,8 @@ function showCategory(catId) {
     const card = document.createElement('div');
     card.className = 'article-card';
     card.innerHTML = `
-      <div class="article-card-title">${art.title}</div>
-      <p class="article-card-snippet">${art.snippet}</p>
+      <div class="article-card-title">${escHtml(art.title)}</div>
+      <p class="article-card-snippet">${escHtml(art.snippet)}</p>
     `;
     card.onclick = () => showArticle(art.id);
     grid.appendChild(card);
@@ -2287,14 +2288,14 @@ function showArticle(artId) {
   bc.innerHTML = `
     <button onclick="showHome()">All Categories</button>
     <span>›</span>
-    <button onclick="showCategory('${cat.id}')">${cat.label}</button>
+    <button onclick="showCategory('${escHtml(cat.id)}')">${escHtml(cat.label)}</button>
     <span>›</span>
-    <span>${art.title}</span>
+    <span>${escHtml(art.title)}</span>
   `;
 
   document.getElementById('articleTitle').textContent = art.title;
-  document.getElementById('articleMeta').innerHTML    = `<span>${cat.label}</span><span>${art.readTime} read</span>`;
-  document.getElementById('articleBody').innerHTML    = art.body;
+  document.getElementById('articleMeta').innerHTML    = `<span>${escHtml(cat.label)}</span><span>${escHtml(art.readTime)} read</span>`;
+  document.getElementById('articleBody').innerHTML    = DOMPurify.sanitize(art.body);
 
   hideAll();
   document.getElementById('articleView').classList.add('visible');
@@ -2358,7 +2359,7 @@ function runSearch(q) {
       item.className = 'result-item';
       const snippet = highlight(art.snippet, q);
       item.innerHTML = `
-        <div class="result-cat">${cat(art.category)?.icon} ${cat(art.category)?.label}</div>
+        <div class="result-cat">${escHtml(cat(art.category)?.icon)} ${escHtml(cat(art.category)?.label)}</div>
         <div class="result-title">${highlight(art.title, q)}</div>
         <div class="result-snippet">${snippet}</div>
       `;
@@ -2381,7 +2382,7 @@ function highlight(text, q) {
 }
 
 function stripHtml(h) { return h.replace(/<[^>]+>/g, ' '); }
-function escHtml(s)   { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s)   { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function escRe(s)     { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
 
 /* ─────────────────────────────────────────────────────────────

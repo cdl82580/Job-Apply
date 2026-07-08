@@ -16,41 +16,17 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import ipaddress
 import json
-import socket
 import threading
 import time
 import urllib.parse
 import uuid
 from typing import Any
 
-_PRIVATE_NETS = [
-    ipaddress.ip_network(n) for n in (
-        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-        "127.0.0.0/8", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
-    )
-]
-
-
-def _is_ssrf_url(url: str) -> bool:
-    """Return True if the URL resolves to a private/loopback/link-local address.
-    Called at delivery time to guard against DNS rebinding after the initial check."""
-    try:
-        parsed = urllib.parse.urlparse(url)
-        host   = parsed.hostname or ""
-        addrs  = socket.getaddrinfo(host, None)
-        for _, _, _, _, sockaddr in addrs:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if any(ip in net for net in _PRIVATE_NETS):
-                return True
-    except Exception:
-        pass
-    return False
-
 import requests as _requests
 
 from . import storage
+from .ssrf import is_ssrf_url as _is_ssrf_url
 
 _INDEX_KEY    = "webhooks/_index.json"
 
@@ -65,8 +41,10 @@ import struct as _struct
 
 def _secret_key() -> bytes:
     """32-byte key derived from SESSION_SECRET via SHA-256."""
-    raw = _os.environ.get("SESSION_SECRET", "").encode()
-    return hashlib.sha256(raw).digest()
+    raw = _os.environ.get("SESSION_SECRET", "")
+    if not raw:
+        raise RuntimeError("SESSION_SECRET is not set — required to encrypt webhook secrets")
+    return hashlib.sha256(raw.encode()).digest()
 
 
 def _encrypt_secret(plaintext: str) -> str:
@@ -80,7 +58,7 @@ def _encrypt_secret(plaintext: str) -> str:
         blob = _base64.b64encode(nonce + ct_and_tag).decode()
         return f"enc:v1:{blob}"
     except ImportError:
-        # cryptography package not installed — store plaintext with a warning prefix
+        # cryptography package not installed — store plaintext (no encryption available)
         return plaintext
 
 
@@ -473,7 +451,7 @@ def _deliver(webhook: dict[str, Any], event: dict[str, Any]) -> None:
     # Retry once on network errors or 5xx responses (transient failures).
     for attempt in range(2):
         try:
-            resp = _requests.post(url, data=body, headers=headers, timeout=10)
+            resp = _requests.post(url, data=body, headers=headers, timeout=10, allow_redirects=False)
             status_code = resp.status_code
             success     = 200 <= status_code < 300
             error       = None

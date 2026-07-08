@@ -1837,13 +1837,13 @@
           return `<span class="run-row-badge type-${t}">${labels[t] || t}</span>`;
         }).join('');
         row.innerHTML = `
-          <span class="run-row-name" title="${r.name}">${label}</span>
+          <span class="run-row-name" title="${esc(r.name)}">${esc(label)}</span>
           <span class="run-row-badges">
             ${typeBadges}
             ${r.source === 'legacy' ? '<span class="run-row-badge">legacy</span>' : ''}
           </span>
-          ${r.web_view_link
-            ? `<a class="run-row-link" href="${r.web_view_link}" target="_blank" rel="noopener">
+          ${safeHref(r.web_view_link)
+            ? `<a class="run-row-link" href="${esc(safeHref(r.web_view_link))}" target="_blank" rel="noopener">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 Open in Drive</a>`
             : ''}`;

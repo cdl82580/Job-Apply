@@ -307,6 +307,15 @@ class TestHandleFileUpload:
         assert result is True
         assert "Could not read the uploaded file" in sent_texts(ctx)[0]
 
+    async def test_untrusted_download_host_rejected(self, bot):
+        att = make_file_attachment(download_url="https://evil.example.com/resume.docx")
+        ctx = make_ctx(attachments=[att])
+        with patch("requests.get") as mock_get:
+            result = await bot._handle_file_upload(ctx, {"email": "a@b.com"})
+        mock_get.assert_not_called()
+        assert result is True
+        assert "Could not read the uploaded file" in sent_texts(ctx)[0]
+
     async def test_download_failure_sends_error_and_returns_true(self, bot):
         att = make_file_attachment()
         ctx = make_ctx(attachments=[att])

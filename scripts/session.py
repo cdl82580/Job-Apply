@@ -10,10 +10,27 @@ import base64
 import hashlib
 import hmac
 import json
+import os
+import secrets
 import time
 
 
 SESSION_DAYS = 30
+
+_resolved_secret: str | None = None
+
+
+def resolve_session_secret() -> str:
+    """Return SESSION_SECRET from the environment.
+
+    Memoized so that if the env var is unset, every caller in this process
+    (api.py, routers/auth_google.py) agrees on the same random fallback
+    instead of each independently generating its own — which would silently
+    make tokens signed by one unverifiable by the other."""
+    global _resolved_secret
+    if _resolved_secret is None:
+        _resolved_secret = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+    return _resolved_secret
 
 
 def verify_bot_key(auth_header: str, expected_key: str) -> bool:

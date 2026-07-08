@@ -9,6 +9,7 @@
   <!-- Quill WYSIWYG editor (KB article body) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
   <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+  <script src="/dompurify.min.js"></script>
   <link rel="icon" href="/favicon.png" type="image/png">
   <script>
     (function(){
@@ -1122,7 +1123,10 @@
       </div>
       <div>
         <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Secret <span style="font-weight:400;color:var(--muted)">(optional — used for HMAC-SHA256 signature)</span></label>
-        <input type="text" id="whSecret" placeholder="Leave blank to skip signing" style="width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
+        <div style="display:flex;gap:.4rem">
+          <input type="password" id="whSecret" placeholder="Leave blank to skip signing" autocomplete="off" style="flex:1;width:100%;padding:.45rem .75rem;border:1px solid var(--input-border);border-radius:6px;font-size:.875rem;font-family:'SF Mono','Fira Code',monospace;background:var(--input-bg);color:var(--text)">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="const el=document.getElementById('whSecret'); el.type = el.type === 'password' ? 'text' : 'password';">Show</button>
+        </div>
       </div>
       <div>
         <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.3rem">Payload Format</label>
@@ -3336,10 +3340,10 @@ function renderWebhooks() {
         <div style="font-size:.72rem;color:var(--muted);margin-top:.1rem">${({'generic':'Generic JSON','slack':'Slack','ms_teams':'MS Teams','grafana_loki':'Grafana Loki'})[w.payload_format||'generic']||'Generic JSON'}</div>
         ${(() => {
           const parts = [];
-          if (w.filter_actors)     parts.push(`Actor: ${w.filter_actors.split(',').map(s=>s.trim()).filter(Boolean).join(', ')}`);
-          if (w.filter_source)     parts.push(`Source: ${w.filter_source}`);
-          if ((w.filter_categories||[]).length) parts.push(`Cat: ${w.filter_categories.join(', ')}`);
-          if (w.filter_app_id)     parts.push(`App: ${w.filter_app_id.slice(0,8)}…`);
+          if (w.filter_actors)     parts.push(`Actor: ${esc(w.filter_actors.split(',').map(s=>s.trim()).filter(Boolean).join(', '))}`);
+          if (w.filter_source)     parts.push(`Source: ${esc(w.filter_source)}`);
+          if ((w.filter_categories||[]).length) parts.push(`Cat: ${esc(w.filter_categories.join(', '))}`);
+          if (w.filter_app_id)     parts.push(`App: ${esc(w.filter_app_id.slice(0,8))}…`);
           return parts.length ? `<div style="font-size:.7rem;color:var(--border);margin-top:.2rem">🔽 ${parts.join(' · ')}</div>` : '';
         })()}
       </td>
@@ -3905,7 +3909,7 @@ function _kbSetMode(mode) {
   preEl.style.display     = mode === 'preview' ? 'block' : 'none';
 
   if (mode === 'preview') {
-    document.getElementById('kbPreviewBody').innerHTML = sourceEl.value;
+    document.getElementById('kbPreviewBody').innerHTML = DOMPurify.sanitize(sourceEl.value);
   }
 
   srcBtn.style.fontWeight = mode === 'source'  ? '700' : '';

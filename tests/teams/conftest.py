@@ -101,7 +101,7 @@ def make_entity_mention(text: str = "<at>Job Apply</at>"):
     return e
 
 
-def make_file_attachment(name: str = "resume.docx", download_url: str = "https://files.example.com/resume.docx"):
+def make_file_attachment(name: str = "resume.docx", download_url: str = "https://contoso.sharepoint.com/resume.docx"):
     from botbuilder.schema import Attachment
     return Attachment(
         content_type="application/vnd.microsoft.teams.file.download.info",

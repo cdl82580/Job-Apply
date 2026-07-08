@@ -60,6 +60,7 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.parse import urlparse
 
 import requests
 from slack_bolt import App
@@ -81,6 +82,20 @@ SLACK_APP_TOKEN      = os.environ.get("SLACK_APP_TOKEN", "")  # xapp-... for Soc
 BOT_API_KEY          = os.environ["BOT_API_KEY"]
 API_BASE             = os.environ.get("JOB_APPLY_API_URL", "https://apply.cdlav.us").rstrip("/")
 PORT                 = int(os.environ.get("PORT", "3000"))
+
+# Defense in depth for handle_message_with_file below: url_private(_download)
+# is normally a files.slack.com URL from a real Slack `message` event, but
+# nothing else validates that before we send SLACK_BOT_TOKEN to it as a
+# Bearer header — cap it to Slack's own file-hosting domain.
+_TRUSTED_SLACK_FILE_HOST_SUFFIX = ".slack.com"
+
+
+def _is_trusted_slack_file_host(url: str) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host.endswith(_TRUSTED_SLACK_FILE_HOST_SUFFIX)
 
 # Slack user ID authorised to run test suites (resolved once at startup).
 # Set TEST_RUNNER_SLACK_USER_ID as a Fly secret, or falls back to
@@ -2069,7 +2084,7 @@ def handle_message_with_file(body, client, logger):
         # Try both url_private_download and url_private with proper auth.
         file_bytes = None
         for url in [f.get("url_private_download"), f.get("url_private")]:
-            if not url:
+            if not url or not _is_trusted_slack_file_host(url):
                 continue
             dl = requests.get(url, headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}, timeout=30)
             dl.raise_for_status()

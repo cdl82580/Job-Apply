@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 
 import requests
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
@@ -22,7 +22,10 @@ _LOGODEV_SEARCH = "https://api.logo.dev/search"
 
 
 @router.get("/search")
-async def search_companies(q: str = Query(..., min_length=1)):
+async def search_companies(request: Request, q: str = Query(..., min_length=1)):
+    from api import _check_rate_limit  # deferred: api.py imports this router at module load time
+    _check_rate_limit(request, "company_search", max_hits=30, window_secs=60)
+
     if not _LOGODEV_KEY:
         raise HTTPException(503, "Company search not configured (LOGODEV_API_KEY not set)")
     try:

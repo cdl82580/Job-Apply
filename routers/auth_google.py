@@ -29,6 +29,7 @@ from google.auth.transport import requests as google_requests
 from scripts import storage
 from scripts import user_audit
 from scripts.session import SESSION_DAYS as _SESSION_DAYS, create_session_token
+from scripts.session import resolve_session_secret
 
 router = APIRouter(tags=["auth"])
 
@@ -190,8 +191,10 @@ async def google_callback(
     else:
         user_audit.log(user["user_id"], "login_google", email, ip)
 
-    # Read the same env vars api.py uses — avoids a circular import.
-    _session_secret  = os.environ.get("SESSION_SECRET", "")
+    # Shared, memoized secret resolution (scripts/session.py) — avoids api.py
+    # and this module each generating their own independent random fallback
+    # when SESSION_SECRET is unset, which would make tokens cross-unverifiable.
+    _session_secret  = resolve_session_secret()
     _fly_machine_id  = os.environ.get("FLY_MACHINE_ID", "")
 
     role = user.get("role", "user")

@@ -8,18 +8,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl pandoc \
 
 WORKDIR /app
 
-# Python deps first (layer-cache friendly)
+# Python deps first (layer-cache friendly). requirements-test.txt pulls in
+# requirements.txt itself, so this installs both from pinned, known-working
+# versions rather than letting pip resolve unpinned test-tooling at build time.
 COPY requirements.txt requirements-test.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir pytest pytest-asyncio pytest-mock pytest-cov httpx \
- && pip install --no-cache-dir playwright pytest-playwright pytest-base-url
+RUN pip install --no-cache-dir -r requirements-test.txt
 
 # Install Chromium + system deps for Playwright UI tests
 RUN playwright install chromium --with-deps
 
 # Node deps (docx package for cover letter + ATS resume generation)
-COPY package.json .
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Application code
 COPY . .
