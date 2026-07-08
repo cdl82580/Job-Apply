@@ -50,16 +50,21 @@ class TestNavigation:
 
 
 class TestLogout:
+    """Logout redirects to / (the public landing page), not /login.html —
+    see frontend/agents.html's/profile.html's logoutBtn handlers."""
+
     def test_logout_from_agent_page(self, auth_page):
         auth_page.goto("/agents.html")
         auth_page.wait_for_selector("#logoutBtn", timeout=15_000)
         auth_page.click("#logoutBtn")
-        auth_page.wait_for_url(lambda url: "login" in url, timeout=15_000)
-        expect(auth_page.locator("#loginForm")).to_be_visible()
+        auth_page.wait_for_url(lambda url: "agents.html" not in url, timeout=15_000)
+        assert "login" not in auth_page.url
+        expect(auth_page.locator(".header-actions a[href='/login.html']")).to_be_visible()
 
     def test_logout_from_profile_page(self, auth_page):
         auth_page.goto("/profile.html")
         auth_page.wait_for_selector("#logoutBtnHeader", timeout=8_000)
         auth_page.click("#logoutBtnHeader")
-        auth_page.wait_for_url(lambda url: "login" in url, timeout=10_000)
-        expect(auth_page.locator("#loginForm")).to_be_visible()
+        auth_page.wait_for_url(lambda url: "profile.html" not in url, timeout=10_000)
+        assert "login" not in auth_page.url
+        expect(auth_page.locator(".header-actions a[href='/login.html']")).to_be_visible()
