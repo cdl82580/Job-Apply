@@ -205,10 +205,11 @@ def get_brand_logo(company_name: str) -> dict | None:
         brand_data = _fetch_brand_data(domain, api_key)
 
         logos = brand_data.get("logos", [])
-        # Prefer an actual "logo" (wordmark/lockup) over "icon"/"symbol".
+        # Prefer the "icon" mark (square, reads well small in a doc header)
+        # over the full "logo" wordmark/lockup, which is often wide and thin.
         ordered_logos = (
-            [l for l in logos if l.get("type") == "logo"]
-            + [l for l in logos if l.get("type") != "logo"]
+            [l for l in logos if l.get("type") == "icon"]
+            + [l for l in logos if l.get("type") != "icon"]
         )
 
         for logo in ordered_logos:

@@ -256,3 +256,41 @@ class TestPrepDocxBuild:
             Path("/tmp/test_out.docx"), {},
         )
         assert "new ExternalHyperlink(" not in js
+
+    def test_space_before_hyperlink_is_preserved(self):
+        """Regression test: splitting text around a URL used to strip the
+        boundary space, running 'Location:' straight into the link with no gap."""
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+            location="https://meet.google.com/abc-defg-hij",
+        )
+        assert '"Location: "' in js
+
+    def test_space_between_words_and_hyperlink_is_preserved(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer",
+            "Jane Smith - VP Eng - https://www.linkedin.com/in/janesmith/",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert '"Interviewer: Jane Smith - VP Eng - "' in js
+
+    def test_all_text_runs_disable_proofing(self):
+        """All prep-doc text is machine-generated — noProof suppresses Word's
+        spell-check squiggles on proper nouns like the company name."""
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        data = {"elevator_pitch": "Chipply is a great fit."}
+        js = _build_prep_docx_js(
+            data, "Chipply", "Solutions Engineer", "Jane Smith",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert js.count("new TextRun(") > 0
+        assert js.count("noProof: true") == js.count("new TextRun(")

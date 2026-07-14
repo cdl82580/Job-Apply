@@ -111,10 +111,23 @@ class TestGetBrandLogo:
             result = brand_color.get_brand_logo("Acme")
         assert result == {"bytes": b"\x89PNG-fake-bytes", "format": "png", "width": 200, "height": 60}
 
-    def test_prefers_logo_type_over_icon(self):
+    def test_prefers_icon_type_over_logo(self):
+        """The square "icon" mark reads better small in a doc header than the
+        wide "logo" wordmark, so icon should win when both exist."""
         search_resp = _resp([{"domain": "acme.com"}])
         brand_resp = _resp({"logos": [
+            {"type": "logo", "formats": [{"format": "png", "src": "https://x/logo.png"}]},
             {"type": "icon", "formats": [{"format": "png", "src": "https://x/icon.png"}]},
+        ]})
+        img_resp = _resp(content=b"icon-bytes")
+        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp, img_resp]) as mock_get:
+            result = brand_color.get_brand_logo("Acme")
+        assert result["bytes"] == b"icon-bytes"
+        assert mock_get.call_args_list[-1][0][0] == "https://x/icon.png"
+
+    def test_falls_back_to_logo_type_when_no_icon(self):
+        search_resp = _resp([{"domain": "acme.com"}])
+        brand_resp = _resp({"logos": [
             {"type": "logo", "formats": [{"format": "png", "src": "https://x/logo.png"}]},
         ]})
         img_resp = _resp(content=b"logo-bytes")

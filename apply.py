@@ -2197,9 +2197,11 @@ def _build_prep_docx_js(
         return escape_js_string(" ".join(str(text).split()))
 
     def _run(text: str, bold: bool = False, italic: bool = False,
-             size: int = 19, color: str = DARK, underline: bool = False) -> str:
-        props = [f'text: "{esc(text)}"', 'font: "Arial"',
-                 f'size: {size}', f'color: "{esc(color)}"']
+             size: int = 19, color: str = DARK, underline: bool = False,
+             _pre_escaped: str | None = None) -> str:
+        escaped = _pre_escaped if _pre_escaped is not None else esc(text)
+        props = [f'text: "{escaped}"', 'font: "Arial"',
+                 f'size: {size}', f'color: "{esc(color)}"', 'noProof: true']
         if bold:      props.append("bold: true")
         if italic:    props.append("italic: true")
         if underline: props.append("underline: {}")
@@ -2217,7 +2219,8 @@ def _build_prep_docx_js(
         if len(parts) == 1:
             return [_run(text, bold=bold, italic=italic, size=size, color=color)]
         runs: list[str] = []
-        for part in parts:
+        last_idx = len(parts) - 1
+        for i, part in enumerate(parts):
             if not part:
                 continue
             if _URL_RE.fullmatch(part):
@@ -2234,7 +2237,19 @@ def _build_prep_docx_js(
                 if trail:
                     runs.append(_run(trail, bold=bold, italic=italic, size=size, color=color))
             else:
-                runs.append(_run(part, bold=bold, italic=italic, size=size, color=color))
+                # Collapse internal whitespace but only strip at the very edges
+                # of the whole text — a boundary space next to a hyperlink
+                # (e.g. "Location: <link>") must survive so words don't run
+                # together with the link.
+                collapsed = re.sub(r"\s+", " ", part)
+                if i == 0:
+                    collapsed = collapsed.lstrip()
+                if i == last_idx:
+                    collapsed = collapsed.rstrip()
+                if not collapsed:
+                    continue
+                runs.append(_run(part, bold=bold, italic=italic, size=size, color=color,
+                                  _pre_escaped=escape_js_string(collapsed)))
         return runs
 
     def para(children: list[str], before: int = 0, after: int = 80,
@@ -2276,7 +2291,7 @@ def _build_prep_docx_js(
             f'data: Buffer.from("{logo_b64}", "base64"), '
             f'transformation: {{ width: {out_w}, height: {out_h} }} }})'
         )
-        paras.append(para([image_run], before=0, after=50))
+        paras.append(para([image_run], before=0, after=200))
 
     paras.append(para(tr(f"{company} — {role}", bold=True, size=30, color=NAVY),
                        before=0, after=40))
