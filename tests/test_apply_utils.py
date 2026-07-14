@@ -209,3 +209,50 @@ class TestPrepDocxBuild:
             Path("/tmp/test_out.docx"), {}, logo=None,
         )
         assert "new ImageRun(" not in js
+
+    def test_interviewer_url_becomes_hyperlink(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer",
+            "Jane Smith - VP Eng - https://www.linkedin.com/in/janesmith/",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert "new ExternalHyperlink(" in js
+        assert 'link: "https://www.linkedin.com/in/janesmith/"' in js
+        # Trailing text stays outside the hyperlink run
+        assert "Jane Smith - VP Eng -" in js
+
+    def test_location_url_becomes_hyperlink(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+            location="https://meet.google.com/abc-defg-hij",
+        )
+        assert "new ExternalHyperlink(" in js
+        assert 'link: "https://meet.google.com/abc-defg-hij"' in js
+
+    def test_trailing_punctuation_excluded_from_link(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+            location="See https://example.com/path, thanks.",
+        )
+        assert 'link: "https://example.com/path"' in js
+
+    def test_no_url_skips_hyperlink(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "Jane Smith - VP Eng",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert "new ExternalHyperlink(" not in js

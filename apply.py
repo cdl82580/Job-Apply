@@ -2196,13 +2196,46 @@ def _build_prep_docx_js(
     def esc(text: str) -> str:
         return escape_js_string(" ".join(str(text).split()))
 
-    def tr(text: str, bold: bool = False, italic: bool = False,
-           size: int = 19, color: str = DARK) -> str:
+    def _run(text: str, bold: bool = False, italic: bool = False,
+             size: int = 19, color: str = DARK, underline: bool = False) -> str:
         props = [f'text: "{esc(text)}"', 'font: "Arial"',
                  f'size: {size}', f'color: "{esc(color)}"']
-        if bold:   props.append("bold: true")
-        if italic: props.append("italic: true")
+        if bold:      props.append("bold: true")
+        if italic:    props.append("italic: true")
+        if underline: props.append("underline: {}")
         return "new TextRun({ " + ", ".join(props) + " })"
+
+    _URL_RE = re.compile(r'(https?://[^\s]+|www\.[^\s]+)')
+    _URL_TRAILING_PUNCT = ".,;:)]}”’"
+
+    def tr(text: str, bold: bool = False, italic: bool = False,
+           size: int = 19, color: str = DARK) -> list[str]:
+        """Split text on URL-looking substrings and render each as a real
+        clickable hyperlink, everything else as plain text — so a pasted
+        LinkedIn profile or video-call link becomes clickable automatically."""
+        parts = _URL_RE.split(str(text))
+        if len(parts) == 1:
+            return [_run(text, bold=bold, italic=italic, size=size, color=color)]
+        runs: list[str] = []
+        for part in parts:
+            if not part:
+                continue
+            if _URL_RE.fullmatch(part):
+                trail = ""
+                while part and part[-1] in _URL_TRAILING_PUNCT:
+                    trail = part[-1] + trail
+                    part = part[:-1]
+                link_text = esc(part)
+                runs.append(
+                    'new ExternalHyperlink({ link: "' + link_text + '", children: ['
+                    + _run(part, bold=bold, italic=italic, size=size, color="0563C1", underline=True)
+                    + '] })'
+                )
+                if trail:
+                    runs.append(_run(trail, bold=bold, italic=italic, size=size, color=color))
+            else:
+                runs.append(_run(part, bold=bold, italic=italic, size=size, color=color))
+        return runs
 
     def para(children: list[str], before: int = 0, after: int = 80,
              left: int = 0, border_bottom_color: str = "") -> str:
@@ -2216,10 +2249,10 @@ def _build_prep_docx_js(
                 f'children: [{", ".join(children)}] }})')
 
     def bullet(text: str, size: int = 18) -> str:
-        return para([tr(f"•  {text}", size=size)], before=15, after=15, left=200)
+        return para(tr(f"•  {text}", size=size), before=15, after=15, left=200)
 
     def section_header(number: int, title: str, color: str) -> str:
-        return para([tr(f"{number}. {title}", bold=True, size=21, color=color)],
+        return para(tr(f"{number}. {title}", bold=True, size=21, color=color),
                     before=200, after=70, border_bottom_color=color)
 
     def logo_dims(width, height, max_w: int = 160, max_h: int = 50) -> tuple[int, int]:
@@ -2245,9 +2278,9 @@ def _build_prep_docx_js(
         )
         paras.append(para([image_run], before=0, after=50))
 
-    paras.append(para([tr(f"{company} — {role}", bold=True, size=30, color=NAVY)],
+    paras.append(para(tr(f"{company} — {role}", bold=True, size=30, color=NAVY),
                        before=0, after=40))
-    paras.append(para([tr("Interview Prep Sheet · Corey Laverdiere", size=21, color=GRAY)],
+    paras.append(para(tr("Interview Prep Sheet · Corey Laverdiere", size=21, color=GRAY),
                        before=0, after=30))
 
     interviewer_lines = [ln.strip() for ln in (interviewer or "").splitlines() if ln.strip()]
@@ -2264,18 +2297,18 @@ def _build_prep_docx_js(
     if interviewer_lines:
         label = "Interviewers:" if len(interviewer_lines) > 1 else "Interviewer:"
         header_lines.append(
-            ([tr(f"{label} {interviewer_lines[0]}", italic=True, size=19, color=GRAY)], {})
+            (tr(f"{label} {interviewer_lines[0]}", italic=True, size=19, color=GRAY), {})
         )
         for line in interviewer_lines[1:]:
             header_lines.append(
-                ([tr(line, italic=True, size=19, color=GRAY)], {"left": 200})
+                (tr(line, italic=True, size=19, color=GRAY), {"left": 200})
             )
     else:
         header_lines.append(
-            ([tr("Interviewer: [Name] — [Title/Role]", italic=True, size=19, color=GRAY)], {})
+            (tr("Interviewer: [Name] — [Title/Role]", italic=True, size=19, color=GRAY), {})
         )
     if logistics_line:
-        header_lines.append(([tr(logistics_line, italic=True, size=19, color=GRAY)], {}))
+        header_lines.append((tr(logistics_line, italic=True, size=19, color=GRAY), {}))
 
     for i, (children, kwargs) in enumerate(header_lines):
         is_last = i == len(header_lines) - 1
@@ -2288,13 +2321,13 @@ def _build_prep_docx_js(
     paras.append(section_header(1, 'Your Elevator Pitch — “Tell Me About Yourself”', TEAL))
     pitch = data.get("elevator_pitch", "")
     if pitch:
-        paras.append(para([tr(f"“{pitch}”", size=19)], before=40, after=60))
+        paras.append(para(tr(f"“{pitch}”", size=19), before=40, after=60))
     timing = data.get("pitch_timing", "")
     if timing:
-        paras.append(para([tr(timing, italic=True, size=17, color=GRAY)], before=0, after=20))
+        paras.append(para(tr(timing, italic=True, size=17, color=GRAY), before=0, after=20))
     adapt = data.get("pitch_adapt", "")
     if adapt:
-        paras.append(para([tr(adapt, italic=True, size=17, color=GRAY)], before=0, after=80))
+        paras.append(para(tr(adapt, italic=True, size=17, color=GRAY), before=0, after=80))
 
     # =========================================================================
     # 2 — Role & Company Snapshot
@@ -2313,7 +2346,7 @@ def _build_prep_docx_js(
     for pillar in data.get("pillars", []):
         name = pillar.get("name", "")
         if name:
-            paras.append(para([tr(name, bold=True, size=19, color=NAVY)], before=60, after=25))
+            paras.append(para(tr(name, bold=True, size=19, color=NAVY), before=60, after=25))
         for b in pillar.get("bullets", []):
             paras.append(bullet(b))
 
@@ -2325,9 +2358,9 @@ def _build_prep_docx_js(
         q = item.get("question", "")
         a = item.get("answer", "")
         if q:
-            paras.append(para([tr(f"“{q}”", bold=True, size=18)], before=50, after=10))
+            paras.append(para(tr(f"“{q}”", bold=True, size=18), before=50, after=10))
         if a:
-            paras.append(para([tr(a, size=18)], before=0, after=15, left=100))
+            paras.append(para(tr(a, size=18), before=0, after=15, left=100))
 
     # =========================================================================
     # 5 — Smart Questions to Ask Them
@@ -2349,7 +2382,7 @@ def _build_prep_docx_js(
 
     return f"""\
 const {{
-  Document, Packer, Paragraph, TextRun, BorderStyle, ImageRun
+  Document, Packer, Paragraph, TextRun, BorderStyle, ImageRun, ExternalHyperlink
 }} = require('docx');
 const fs = require('fs');
 
