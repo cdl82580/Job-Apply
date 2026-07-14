@@ -578,9 +578,13 @@ const TYPE_LABELS = {
 /* ============================================================
    API helpers
    ============================================================ */
+let _loggingOut = false;
 async function apiFetch(path, opts = {}) {
   const res = await fetch(path, opts);
-  if (res.status === 401) { window.location.href = '/login.html'; throw new Error('401'); }
+  if (res.status === 401) {
+    if (!_loggingOut) window.location.href = '/login.html';
+    throw new Error('401');
+  }
   return res;
 }
 
@@ -1196,6 +1200,7 @@ applyTheme(localStorage.getItem('theme') ||
    Logout
    ============================================================ */
 document.getElementById('logoutBtn').addEventListener('click', async () => {
+  _loggingOut = true;
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/';
 });
