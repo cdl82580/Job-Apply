@@ -38,6 +38,29 @@ class TestGetBrandColor:
             result = brand_color.get_brand_color("Acme")
         assert result == brand_color.DEFAULT_PALETTE
 
+    def test_given_domain_skips_name_search(self):
+        """Regression test: a company-name search is fuzzy and can resolve to
+        the wrong company for an ambiguous name (e.g. "Melior" not resolving
+        to getmelior.com). When the caller already knows the domain — e.g.
+        from the application tracker record — it must be used directly,
+        with no name-search call at all."""
+        brand_resp = _resp({"colors": [{"type": "accent", "hex": "#123ABC"}]})
+        with patch.object(brand_color.requests, "get", return_value=brand_resp) as mock_get:
+            result = brand_color.get_brand_color("Melior", domain="getmelior.com")
+        assert result["primary"] == "123ABC"
+        assert mock_get.call_count == 1
+        called_url = mock_get.call_args[0][0]
+        assert "getmelior.com" in called_url
+        assert "search" not in called_url
+
+    def test_blank_domain_falls_back_to_name_search(self):
+        search_resp = _resp([{"domain": "acme.com"}])
+        brand_resp = _resp({"colors": [{"type": "accent", "hex": "#123ABC"}]})
+        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp]) as mock_get:
+            result = brand_color.get_brand_color("Acme", domain="")
+        assert result["primary"] == "123ABC"
+        assert mock_get.call_count == 2
+
     def test_single_color_derives_distinct_secondary(self):
         """With only one brand color, secondary should be a darkened shade —
         not just a fixed fallback and not identical to primary or border."""
@@ -98,6 +121,18 @@ class TestGetBrandLogo:
         ]})
         with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp]):
             assert brand_color.get_brand_logo("Acme") is None
+
+    def test_given_domain_skips_name_search(self):
+        brand_resp = _resp({"logos": [
+            {"type": "icon", "formats": [{"format": "png", "src": "https://x/icon.png"}]},
+        ]})
+        img_resp = _resp(content=b"icon-bytes")
+        with patch.object(brand_color.requests, "get", side_effect=[brand_resp, img_resp]) as mock_get:
+            result = brand_color.get_brand_logo("Melior", domain="getmelior.com")
+        assert result["bytes"] == b"icon-bytes"
+        assert mock_get.call_count == 2
+        brand_call_url = mock_get.call_args_list[0][0][0]
+        assert "getmelior.com" in brand_call_url
 
     def test_downloads_and_returns_logo_bytes(self):
         search_resp = _resp([{"domain": "acme.com"}])

@@ -187,12 +187,13 @@ def _api(method: str, path: str, **kwargs) -> requests.Response:
     return getattr(requests, method)(f"{API_BASE}{path}", headers=headers, timeout=30, **kwargs)
 
 
-def _post_run(job_posting: str, company: str, role: str, contact: str = "") -> dict:
+def _post_run(job_posting: str, company: str, role: str, contact: str = "", domain: str = "") -> dict:
     r = _api("post", "/api/run", json={
         "job_posting": job_posting,
         "company": company,
         "role": role,
         "contact": contact or None,
+        "domain": domain or None,
     })
     r.raise_for_status()
     return r.json()
@@ -200,7 +201,8 @@ def _post_run(job_posting: str, company: str, role: str, contact: str = "") -> d
 
 def _post_prep(job_posting: str, company: str, role: str,
                round_type: str, focus: str = "", interviewer: str = "",
-               interview_date: str = "", interview_time: str = "", location: str = "") -> dict:
+               interview_date: str = "", interview_time: str = "", location: str = "",
+               domain: str = "") -> dict:
     r = _api("post", "/api/prep", json={
         "job_posting": job_posting,
         "company": company,
@@ -211,6 +213,7 @@ def _post_prep(job_posting: str, company: str, role: str,
         "interview_date": interview_date or None,
         "interview_time": interview_time or None,
         "location": location or None,
+        "domain": domain or None,
     })
     r.raise_for_status()
     return r.json()
@@ -1226,7 +1229,7 @@ def _start_apply_run(channel: str, client, company: str, role: str, contact: str
             text=f":hourglass_flowing_sand: Starting application for *{role}* at *{company}*…",
         )
         try:
-            run_data = _post_run(job_posting, company, role, contact)
+            run_data = _post_run(job_posting, company, role, contact, domain)
             run_id   = run_data["run_id"]
             status   = _poll_run(run_id)
         except Exception as exc:
@@ -1364,7 +1367,7 @@ def _start_prep_run(channel: str, client, company: str, role: str, round_type: s
         )
         try:
             prep_data = _post_prep(job_posting, company, role, round_type, focus, interviewer,
-                                    interview_date, interview_time, location)
+                                    interview_date, interview_time, location, domain)
             prep_id   = prep_data["prep_id"]
             status    = _poll_prep(prep_id)
         except Exception as exc:

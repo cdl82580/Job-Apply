@@ -735,7 +735,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"jd_folder_id\": null,\n  \"model\": null\n}"
+              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"domain\": \"acme.com\",\n  \"jd_folder_id\": null,\n  \"model\": null\n}"
             }
           }
         },
@@ -780,7 +780,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/prep",
-            "description": "Start an interview prep run. interviewer accepts freeform multi-line text (one interviewer per line — name/role/LinkedIn, etc.); interview_date, interview_time, and location are all optional and each only shown in the generated doc if provided. Returns {prep_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream.",
+            "description": "Start an interview prep run. interviewer accepts freeform multi-line text (one interviewer per line — name/role/LinkedIn, etc.); interview_date, interview_time, and location are all optional and each only shown in the generated doc if provided. Returns {prep_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream. domain (optional) is the company's domain — pass it directly, or supply app_id and it is read from that application's tracker record, so brand-color/logo lookups use it directly instead of a fuzzy company-name search that can match the wrong company for a common/ambiguous name.",
             "header": [
               {
                 "key": "Content-Type",
@@ -789,7 +789,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"interviewer\": \"Jane Smith — Engineering Manager — linkedin.com/in/janesmith\",\n  \"interview_date\": \"2026-07-20\",\n  \"interview_time\": \"14:00\",\n  \"location\": \"Zoom: https://zoom.us/j/123 or a physical address\",\n  \"focus\": \"Lean into the agentic AI angle\",\n  \"app_id\": \"optional-application-uuid\",\n  \"model\": null\n}"
+              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"interviewer\": \"Jane Smith — Engineering Manager — linkedin.com/in/janesmith\",\n  \"interview_date\": \"2026-07-20\",\n  \"interview_time\": \"14:00\",\n  \"location\": \"Zoom: https://zoom.us/j/123 or a physical address\",\n  \"focus\": \"Lean into the agentic AI angle\",\n  \"app_id\": \"optional-application-uuid\",\n  \"domain\": \"acme.com\",\n  \"model\": null\n}"
             }
           }
         },

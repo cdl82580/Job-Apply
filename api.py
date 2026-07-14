@@ -277,6 +277,22 @@ def _hash_password(password: str) -> str:
 _DUMMY_HASH = _hash_password("dummy-constant-time-sentinel")
 
 
+def _get_app_domain(user_id: str, app_id: str | None) -> str:
+    """Best-effort: return the domain stored on a tracked application record.
+
+    Passed straight to Brandfetch instead of a fuzzy company-name search,
+    which can match the wrong company for a common/ambiguous name.
+    """
+    if not app_id:
+        return ""
+    try:
+        from scripts.applications import get_application
+        record = get_application(user_id, app_id)
+        return (record or {}).get("domain", "") or ""
+    except Exception:
+        return ""
+
+
 def _link_run_to_app(
     user_id: str,
     app_id: str,
@@ -1687,6 +1703,7 @@ class RunRequest(BaseModel):
     contact: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
+    domain: str | None = None   # optional: company domain, if already known (skips Brandfetch name search)
     jd_folder_id: str | None = None  # load JD from this Drive folder instead of job_posting
 
 class PrepRequest(BaseModel):
@@ -1701,6 +1718,7 @@ class PrepRequest(BaseModel):
     location: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
+    domain: str | None = None   # optional: company domain, if already known (skips Brandfetch name search)
 
 class AQRequest(BaseModel):
     question: str
@@ -2359,6 +2377,7 @@ async def create_run(req: RunRequest, request: Request, response: Response):
             role=req.role,
             contact=req.contact,
             config=config,
+            domain=req.domain or _get_app_domain(user_id, req.app_id),
         )
         if req.app_id:
             _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="resume",
@@ -2660,6 +2679,7 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
             interview_date=req.interview_date or "",
             interview_time=req.interview_time or "",
             location=req.location or "",
+            domain=req.domain or _get_app_domain(user_id, req.app_id),
             model=req.model or _get_active_model(),
             progress=progress,
             master_resume=resume_path,
@@ -3201,6 +3221,7 @@ async def create_optimize(req: OptimizeRequest, request: Request, response: Resp
             progress=progress,
             user_id=user_id,
             user_label=user_data["email"],
+            domain=_get_app_domain(user_id, req.app_id),
         )
         result = optimize_run(config)
         _link_run_to_app(user_id=user_id, app_id=req.app_id, run_type="optimize",

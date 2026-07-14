@@ -126,9 +126,16 @@ def _palette_from_hex(hex6: str, secondary_hex: str | None) -> dict:
     }
 
 
-def get_brand_color(company_name: str) -> dict:
+def get_brand_color(company_name: str, domain: str | None = None) -> dict:
     """
     Look up the brand accent/dark/light colors for company_name via Brandfetch.
+
+    If domain is given (e.g. the domain already resolved and stored on the
+    application tracker record), it's used directly — company-name search is
+    fuzzy and can match the wrong company entirely for a common/ambiguous
+    name (a "Melior" search might not resolve to getmelior.com). Only falls
+    back to a name search when no domain is known yet.
+
     Returns a palette dict: {primary, secondary, border, fill} as 6-char
     uppercase hex strings. Falls back to DEFAULT_PALETTE on any error.
     """
@@ -139,7 +146,7 @@ def get_brand_color(company_name: str) -> dict:
     try:
         api_key = _load_api_key()
 
-        domain = _resolve_domain(company_name)
+        domain = domain.strip() if domain else _resolve_domain(company_name)
         if not domain:
             print("  ⚠ Brandfetch: using default colors")
             return DEFAULT_PALETTE
@@ -186,9 +193,13 @@ def get_brand_color(company_name: str) -> dict:
         return DEFAULT_PALETTE
 
 
-def get_brand_logo(company_name: str) -> dict | None:
+def get_brand_logo(company_name: str, domain: str | None = None) -> dict | None:
     """
     Look up and download company_name's logo via Brandfetch.
+
+    See get_brand_color() for why a pre-resolved domain (when available)
+    should always be passed instead of relying on a name search.
+
     Returns {"bytes": raw image bytes, "format": "png"/"jpeg", "width": int|None,
     "height": int|None}, or None if no logo is available or anything fails.
     """
@@ -198,7 +209,7 @@ def get_brand_logo(company_name: str) -> dict | None:
     try:
         api_key = _load_api_key()
 
-        domain = _resolve_domain(company_name)
+        domain = domain.strip() if domain else _resolve_domain(company_name)
         if not domain:
             return None
 

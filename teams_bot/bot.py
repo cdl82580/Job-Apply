@@ -1722,14 +1722,16 @@ class JobApplyBot(ActivityHandler):
 
         company = app.get("company", "?")
         role = app.get("role_title", "?")
+        domain = app.get("domain", "")
         if job_posting:
             await self._submit_apply(
-                ctx, {"company": company, "role": role, "contact": contact, "job_posting": job_posting}, user,
+                ctx, {"company": company, "role": role, "contact": contact,
+                      "job_posting": job_posting, "domain": domain}, user,
             )
             return
 
         card = self._jd_paste_card("apply_final_submit", {
-            "app_id": app_id, "company": company, "role": role, "contact": contact,
+            "app_id": app_id, "company": company, "role": role, "contact": contact, "domain": domain,
         })
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
@@ -1741,6 +1743,7 @@ class JobApplyBot(ActivityHandler):
         await self._submit_apply(ctx, {
             "company": data.get("company", ""), "role": data.get("role", ""),
             "contact": data.get("contact", ""), "job_posting": job_posting,
+            "domain": data.get("domain", ""),
         }, user)
 
     async def _submit_prep_select(self, ctx: TurnContext, data: dict, user: dict):
@@ -1763,11 +1766,13 @@ class JobApplyBot(ActivityHandler):
 
         company = app.get("company", "?")
         role = app.get("role_title", "?")
+        domain = app.get("domain", "")
         if job_posting:
             await self._submit_prep(ctx, {
                 "company": company, "role": role, "round_type": round_type,
                 "interviewer": interviewer, "focus": focus, "job_posting": job_posting,
                 "interview_date": interview_date, "interview_time": interview_time, "location": location,
+                "domain": domain,
             }, user)
             return
 
@@ -1775,6 +1780,7 @@ class JobApplyBot(ActivityHandler):
             "app_id": app_id, "company": company, "role": role,
             "round_type": round_type, "interviewer": interviewer, "focus": focus,
             "interview_date": interview_date, "interview_time": interview_time, "location": location,
+            "domain": domain,
         })
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
@@ -1788,7 +1794,7 @@ class JobApplyBot(ActivityHandler):
             "round_type": data.get("round_type", ""), "interviewer": data.get("interviewer", ""),
             "focus": data.get("focus", ""), "job_posting": job_posting,
             "interview_date": data.get("interview_date", ""), "interview_time": data.get("interview_time", ""),
-            "location": data.get("location", ""),
+            "location": data.get("location", ""), "domain": data.get("domain", ""),
         }, user)
 
     async def _submit_aq_select(self, ctx: TurnContext, data: dict, user: dict):
@@ -1887,6 +1893,7 @@ class JobApplyBot(ActivityHandler):
         role = (data.get("role") or "").strip()
         contact = (data.get("contact") or "").strip()
         job_posting = (data.get("job_posting") or "").strip()
+        domain = (data.get("domain") or "").strip()
 
         if not company or not role or not job_posting:
             await ctx.send_activity(MessageFactory.text("❌ Company, role, and job posting are required."))
@@ -1902,7 +1909,7 @@ class JobApplyBot(ActivityHandler):
 
         def _run():
             try:
-                run_data = api_client.post_run(job_posting, company, role, contact, user_email=user_email)
+                run_data = api_client.post_run(job_posting, company, role, contact, domain, user_email=user_email)
                 run_id = run_data["run_id"]
                 status = api_client.poll_run(run_id, user_email=user_email)
             except Exception as exc:
@@ -1938,6 +1945,7 @@ class JobApplyBot(ActivityHandler):
         location = (data.get("location") or "").strip()
         focus = (data.get("focus") or "").strip()
         job_posting = (data.get("job_posting") or "").strip()
+        domain = (data.get("domain") or "").strip()
 
         if not company or not role or not round_type or not job_posting:
             await ctx.send_activity(
@@ -1957,7 +1965,7 @@ class JobApplyBot(ActivityHandler):
             try:
                 prep_data = api_client.post_prep(
                     job_posting, company, role, round_type, focus, interviewer,
-                    interview_date, interview_time, location, user_email=user_email
+                    interview_date, interview_time, location, domain, user_email=user_email
                 )
                 prep_id = prep_data["prep_id"]
                 status = api_client.poll_prep(prep_id, user_email=user_email)

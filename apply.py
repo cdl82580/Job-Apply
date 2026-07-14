@@ -171,6 +171,7 @@ class InterviewPrepConfig:
     interview_date: str                   = ""
     interview_time: str                   = ""
     location:       str                   = ""
+    domain:         str                   = ""
 
 
 @dataclass
@@ -250,6 +251,7 @@ class OptimizeConfig:
     progress:              Callable[[str], None]  = field(default=print)
     user_id:               str | None             = None
     user_label:            str | None             = None
+    domain:                str                    = ""
 
 
 @dataclass
@@ -609,9 +611,9 @@ Return ONLY valid JSON. No preamble, no markdown fences, no commentary.
 # Step 2b: Brand colors
 # ---------------------------------------------------------------------------
 
-def step2b_brand_colors(company: str, config: WorkflowConfig) -> dict:
+def step2b_brand_colors(company: str, config: WorkflowConfig, domain: str = "") -> dict:
     print_step("2b", "Fetching Brand Colors", config)
-    return get_brand_color(company)
+    return get_brand_color(company, domain=domain or None)
 
 # ---------------------------------------------------------------------------
 # Steps 3–5: Resume build
@@ -2044,6 +2046,7 @@ def run_workflow(
     role: str,
     contact: str | None = None,
     config: WorkflowConfig | None = None,
+    domain: str | None = None,
 ) -> WorkflowResult:
     """
     Run the full job-application workflow.
@@ -2054,6 +2057,10 @@ def run_workflow(
         role:        Role title.
         contact:     Hiring manager name, or None to let analysis infer it.
         config:      WorkflowConfig for model, progress callback, debug, dry_run.
+        domain:      Company domain, if already known (e.g. from the application
+                     tracker record) — passed straight to Brandfetch instead of a
+                     fuzzy name search, which can match the wrong company for a
+                     common/ambiguous name.
 
     Returns:
         WorkflowResult with paths to generated files and optional Drive URL.
@@ -2103,7 +2110,7 @@ def run_workflow(
         )
 
     # Step 2b
-    colors = step2b_brand_colors(company, config)
+    colors = step2b_brand_colors(company, config, domain=domain or "")
 
     # Steps 3–5: styled resume
     step3_unpack(config)
@@ -2618,8 +2625,8 @@ Return ONLY valid JSON. No preamble, no markdown fences.
 
     # Step 2b: Brand colors + logo
     print_step("2b", "Fetching Brand Colors", wfc)
-    colors = get_brand_color(company)
-    logo   = get_brand_logo(company)
+    colors = get_brand_color(company, domain=config.domain or None)
+    logo   = get_brand_logo(company, domain=config.domain or None)
 
     # Step 3: Build DOCX
     print_step(3, "Building Interview Prep DOCX", wfc)
@@ -3417,7 +3424,7 @@ def optimize_run(config: OptimizeConfig) -> OptimizeResult:
             cover_out = run_dir / cover["name"]
             step6_cover_letter(
                 analysis, config.company, config.role, cover_out, wfc,
-                colors=get_brand_color(config.company),
+                colors=get_brand_color(config.company, domain=config.domain or None),
             )
             _gdrive_upsert_file(service, config.folder_id, cover["name"], cover_out)
             config.progress(f"  ✓ Updated {cover['name']} in Drive")

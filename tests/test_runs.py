@@ -188,6 +188,58 @@ class TestPrepEndpoint:
         assert config.interview_time == ""
         assert config.location == ""
 
+    def test_app_id_domain_reaches_prep_config(self, authed_client, user_record):
+        """Regression test: brand color/logo lookups used to always do a fuzzy
+        company-name search, which can resolve to the wrong company for an
+        ambiguous name. When the request has an app_id, the domain already
+        stored on that tracked application record should be used instead."""
+        from scripts.applications import save_application
+        _seed_user_with_resume(user_record)
+        app_id = str(uuid.uuid4())
+        save_application(user_record["user_id"], {
+            "id": app_id, "company": "Melior", "role_title": "Engineer",
+            "status": "Applied", "domain": "getmelior.com",
+        })
+        with patch("api.threading.Thread") as mock_thread, \
+             patch("api.generate_interview_prep") as mock_gen:
+            mock_thread.return_value = MagicMock()
+            body = {**PREP_BODY, "company": "Melior", "app_id": app_id}
+            r = authed_client.post("/api/prep", json=body)
+            assert r.status_code == 200
+
+            _worker_args = mock_thread.call_args[1]["args"]
+            prep_fn = _worker_args[5]
+            mock_gen.return_value = MagicMock(run_dir="/tmp/x", folder_url=None,
+                                               prep_path=MagicMock(name="prep.docx"))
+            prep_fn(resume_path="/tmp/resume.docx", progress=lambda *_: None)
+
+        config = mock_gen.call_args.kwargs["config"]
+        assert config.domain == "getmelior.com"
+
+    def test_explicit_domain_takes_priority_over_app_record(self, authed_client, user_record):
+        from scripts.applications import save_application
+        _seed_user_with_resume(user_record)
+        app_id = str(uuid.uuid4())
+        save_application(user_record["user_id"], {
+            "id": app_id, "company": "Melior", "role_title": "Engineer",
+            "status": "Applied", "domain": "wrong-domain.com",
+        })
+        with patch("api.threading.Thread") as mock_thread, \
+             patch("api.generate_interview_prep") as mock_gen:
+            mock_thread.return_value = MagicMock()
+            body = {**PREP_BODY, "company": "Melior", "app_id": app_id, "domain": "getmelior.com"}
+            r = authed_client.post("/api/prep", json=body)
+            assert r.status_code == 200
+
+            _worker_args = mock_thread.call_args[1]["args"]
+            prep_fn = _worker_args[5]
+            mock_gen.return_value = MagicMock(run_dir="/tmp/x", folder_url=None,
+                                               prep_path=MagicMock(name="prep.docx"))
+            prep_fn(resume_path="/tmp/resume.docx", progress=lambda *_: None)
+
+        config = mock_gen.call_args.kwargs["config"]
+        assert config.domain == "getmelior.com"
+
 
 THANKYOU_BODY = {
     "job_posting": JD,

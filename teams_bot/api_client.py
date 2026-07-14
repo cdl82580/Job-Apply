@@ -65,12 +65,13 @@ def teams_link_token(aad_object_id: str, teams_email: str) -> str:
 # ── Agent runs ───────────────────────────────────────────────────────────
 
 def post_run(job_posting: str, company: str, role: str, contact: str = "",
-             user_email: str | None = None) -> dict:
+             domain: str = "", user_email: str | None = None) -> dict:
     r = _api("post", "/api/run", user_email=user_email, json={
         "job_posting": job_posting,
         "company": company,
         "role": role,
         "contact": contact or None,
+        "domain": domain or None,
     })
     r.raise_for_status()
     return r.json()
@@ -91,7 +92,7 @@ def poll_run(run_id: str, timeout: int = 300, user_email: str | None = None) -> 
 def post_prep(job_posting: str, company: str, role: str,
               round_type: str, focus: str = "", interviewer: str = "",
               interview_date: str = "", interview_time: str = "", location: str = "",
-              user_email: str | None = None) -> dict:
+              domain: str = "", user_email: str | None = None) -> dict:
     r = _api("post", "/api/prep", user_email=user_email, json={
         "job_posting": job_posting,
         "company": company,
@@ -102,6 +103,7 @@ def post_prep(job_posting: str, company: str, role: str,
         "interview_date": interview_date or None,
         "interview_time": interview_time or None,
         "location": location or None,
+        "domain": domain or None,
     })
     r.raise_for_status()
     return r.json()

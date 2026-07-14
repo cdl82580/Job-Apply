@@ -168,7 +168,7 @@ class TestSubmitApplySelect:
         mock_apply.assert_awaited_once_with(
             ctx,
             {"company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"],
-             "contact": "Jane", "job_posting": "Saved JD text"},
+             "contact": "Jane", "job_posting": "Saved JD text", "domain": SAMPLE_APP["domain"]},
             user,
         )
 
@@ -182,6 +182,7 @@ class TestSubmitApplySelect:
         assert action["data"] == {
             "action": "apply_final_submit", "app_id": "app-001",
             "company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"], "contact": "Jane",
+            "domain": SAMPLE_APP["domain"],
         }
 
 
@@ -200,7 +201,8 @@ class TestSubmitApplyFinal:
                 ctx, {"company": "Acme", "role": "Eng", "contact": "Jane", "job_posting": "JD text"}, user,
             )
         mock_apply.assert_awaited_once_with(
-            ctx, {"company": "Acme", "role": "Eng", "contact": "Jane", "job_posting": "JD text"}, user,
+            ctx, {"company": "Acme", "role": "Eng", "contact": "Jane", "job_posting": "JD text",
+                  "domain": ""}, user,
         )
 
 
@@ -238,7 +240,7 @@ class TestSubmitPrepSelect:
             ctx,
             {"company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"], "round_type": "technical",
              "interviewer": "Bob", "focus": "system design", "job_posting": "Saved JD",
-             "interview_date": "", "interview_time": "", "location": ""},
+             "interview_date": "", "interview_time": "", "location": "", "domain": SAMPLE_APP["domain"]},
             user,
         )
 
@@ -255,7 +257,7 @@ class TestSubmitPrepSelect:
             "action": "prep_final_submit", "app_id": "app-001",
             "company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"],
             "round_type": "technical", "interviewer": "Bob", "focus": "sd",
-            "interview_date": "", "interview_time": "", "location": "",
+            "interview_date": "", "interview_time": "", "location": "", "domain": SAMPLE_APP["domain"],
         }
 
 
@@ -280,7 +282,7 @@ class TestSubmitPrepFinal:
             ctx,
             {"company": "Acme", "role": "Eng", "round_type": "technical",
              "interviewer": "Bob", "focus": "sd", "job_posting": "JD",
-             "interview_date": "", "interview_time": "", "location": ""},
+             "interview_date": "", "interview_time": "", "location": "", "domain": ""},
             user,
         )
 
