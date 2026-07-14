@@ -1696,6 +1696,9 @@ class PrepRequest(BaseModel):
     round_type: str
     focus: str | None = None
     interviewer: str | None = None
+    interview_date: str | None = None
+    interview_time: str | None = None
+    location: str | None = None
     model: str | None = None
     app_id: str | None = None   # optional: link to application tracker record
 
@@ -2654,6 +2657,9 @@ async def create_prep(req: PrepRequest, request: Request, response: Response):
             round_type=req.round_type,
             focus=req.focus or "",
             interviewer=req.interviewer or "",
+            interview_date=req.interview_date or "",
+            interview_time=req.interview_time or "",
+            location=req.location or "",
             model=req.model or _get_active_model(),
             progress=progress,
             master_resume=resume_path,

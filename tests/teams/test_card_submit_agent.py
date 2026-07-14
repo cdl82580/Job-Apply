@@ -237,7 +237,8 @@ class TestSubmitPrepSelect:
         mock_prep.assert_awaited_once_with(
             ctx,
             {"company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"], "round_type": "technical",
-             "interviewer": "Bob", "focus": "system design", "job_posting": "Saved JD"},
+             "interviewer": "Bob", "focus": "system design", "job_posting": "Saved JD",
+             "interview_date": "", "interview_time": "", "location": ""},
             user,
         )
 
@@ -254,6 +255,7 @@ class TestSubmitPrepSelect:
             "action": "prep_final_submit", "app_id": "app-001",
             "company": SAMPLE_APP["company"], "role": SAMPLE_APP["role_title"],
             "round_type": "technical", "interviewer": "Bob", "focus": "sd",
+            "interview_date": "", "interview_time": "", "location": "",
         }
 
 
@@ -277,7 +279,8 @@ class TestSubmitPrepFinal:
         mock_prep.assert_awaited_once_with(
             ctx,
             {"company": "Acme", "role": "Eng", "round_type": "technical",
-             "interviewer": "Bob", "focus": "sd", "job_posting": "JD"},
+             "interviewer": "Bob", "focus": "sd", "job_posting": "JD",
+             "interview_date": "", "interview_time": "", "location": ""},
             user,
         )
 

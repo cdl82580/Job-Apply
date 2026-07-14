@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Job Apply API",
-    "description": "Complete API reference for the Job Application Agent (https://apply.cdlav.us/).\n\n**Auth model:** stateless HMAC-signed `HttpOnly` session cookie (`session`, 30-day TTL). Login/register set the cookie automatically. All protected requests include it. Admins also accepted via `Authorization: Bearer {BOT_API_KEY}` header.\n\n**Run lifecycle (application & prep):**\n1. POST to start \u2192 returns `run_id` / `prep_id`\n2. GET `\u2026/stream` \u2192 SSE; events: `progress` (log line), `done` (files + folder_url + optional replacements_warning), `error`\n3. `done` event contains `files` with filenames\n4. GET `\u2026/files/{name}` \u2192 download DOCX\n\n**Rate limits (per IP, sliding window):**\n- Login: 10/min\n- Register: 5/hr\n- Resend-verification: 3/hr\n- Change password: 5/hr\n- Change email: 5/hr\n- Resume upload: 10/hr\n- Forgot password: 3/hr\n- Reset password: 5/hr\n- Company search: 30/min\n\n**Security headers on every response:** HSTS (2-year), X-Frame-Options: DENY, X-Content-Type-Options: nosniff, CSP, Referrer-Policy.\n\n**Base URL:** `{{base_url}}` defaults to `https://apply.cdlav.us`. Override with `http://localhost:8000` for local dev.",
+    "description": "Complete API reference for the Job Application Agent (https://apply.cdlav.us/).\n\n**Auth model:** stateless HMAC-signed `HttpOnly` session cookie (`session`, 30-day TTL). Login/register set the cookie automatically. All protected requests include it. Admins also accepted via `Authorization: Bearer {BOT_API_KEY}` header.\n\n**Run lifecycle (application & prep):**\n1. POST to start → returns `run_id` / `prep_id`\n2. GET `…/stream` → SSE; events: `progress` (log line), `done` (files + folder_url + optional replacements_warning), `error`\n3. `done` event contains `files` with filenames\n4. GET `…/files/{name}` → download DOCX\n\n**Rate limits (per IP, sliding window):**\n- Login: 10/min\n- Register: 5/hr\n- Resend-verification: 3/hr\n- Change password: 5/hr\n- Change email: 5/hr\n- Resume upload: 10/hr\n- Forgot password: 3/hr\n- Reset password: 5/hr\n- Company search: 30/min\n\n**Security headers on every response:** HSTS (2-year), X-Frame-Options: DENY, X-Content-Type-Options: nosniff, CSP, Referrer-Policy.\n\n**Base URL:** `{{base_url}}` defaults to `https://apply.cdlav.us`. Override with `http://localhost:8000` for local dev.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -80,7 +80,7 @@
       "key": "bot_api_key",
       "value": "",
       "type": "string",
-      "description": "BOT_API_KEY secret \u2014 required for all /api/teams/* endpoints (Bearer auth) and X-Teams-User-Email overrides on any bot-authenticated call"
+      "description": "BOT_API_KEY secret — required for all /api/teams/* endpoints (Bearer auth) and X-Teams-User-Email overrides on any bot-authenticated call"
     }
   ],
   "item": [
@@ -141,7 +141,7 @@
                 },
                 {
                   "key": "profile_text",
-                  "value": "## Voice\u2026",
+                  "value": "## Voice…",
                   "type": "text"
                 },
                 {
@@ -200,7 +200,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/auth/google/callback",
-            "description": "Google OAuth callback. Handled by the browser redirect \u2014 do not call directly. Verifies CSRF nonce, exchanges code for tokens, verifies id_token via google-auth, finds or creates user, sets session cookie."
+            "description": "Google OAuth callback. Handled by the browser redirect — do not call directly. Verifies CSRF nonce, exchanges code for tokens, verifies id_token via google-auth, finds or creates user, sets session cookie."
           }
         },
         {
@@ -305,7 +305,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"display_name\": \"Corey L.\",\n  \"profile_text\": \"Updated guide\u2026\"\n}"
+              "raw": "{\n  \"display_name\": \"Corey L.\",\n  \"profile_text\": \"Updated guide…\"\n}"
             }
           }
         },
@@ -314,7 +314,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/profile/resume",
-            "description": "Replace master resume. Must be a .docx file \u2265 1 KB, \u2264 10 MB. Rate-limited: 10/hr per IP.",
+            "description": "Replace master resume. Must be a .docx file ≥ 1 KB, ≤ 10 MB. Rate-limited: 10/hr per IP.",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -350,7 +350,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/profile/email",
-            "description": "Change email address. Requires current password. Marks account as unverified and sends verification to the new address. Deletes current session cookie \u2014 user must log in again. Rate-limited: 5/hr per IP.",
+            "description": "Change email address. Requires current password. Marks account as unverified and sends verification to the new address. Deletes current session cookie — user must log in again. Rate-limited: 5/hr per IP.",
             "header": [
               {
                 "key": "Content-Type",
@@ -367,7 +367,7 @@
     },
     {
       "name": "Calendar",
-      "description": "Create and manage calendar events with optional email/Slack reminders. Events can be linked to application tracker records. Reminders fire via the background scheduler (60s polling).\n\n**Event types:** `interview`, `phone_screen`, `deadline`, `follow_up`, `offer`, `other`, `custom`\n\n**Reminder channels:** `email`, `slack`\n\n**Limits:** 1,000 events/user, 10 reminders/event, offset_minutes 0\u2013525,600 (1 year).",
+      "description": "Create and manage calendar events with optional email/Slack reminders. Events can be linked to application tracker records. Reminders fire via the background scheduler (60s polling).\n\n**Event types:** `interview`, `phone_screen`, `deadline`, `follow_up`, `offer`, `other`, `custom`\n\n**Reminder channels:** `email`, `slack`\n\n**Limits:** 1,000 events/user, 10 reminders/event, offset_minutes 0–525,600 (1 year).",
       "item": [
         {
           "name": "GET /api/calendar",
@@ -409,7 +409,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/calendar",
-            "description": "Create a calendar event. `reminders` is an array of `{offset_minutes, channels}` \u2014 the scheduler fires each reminder at `event_datetime - offset_minutes`. `app_id` must be a valid application ID owned by the user if provided.",
+            "description": "Create a calendar event. `reminders` is an array of `{offset_minutes, channels}` — the scheduler fires each reminder at `event_datetime - offset_minutes`. `app_id` must be a valid application ID owned by the user if provided.",
             "header": [
               {
                 "key": "Content-Type",
@@ -418,7 +418,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"HM Interview \u2014 Salesforce\",\n  \"event_type\": \"interview\",\n  \"datetime\": \"2026-06-15T14:00:00Z\",\n  \"timezone\": \"America/New_York\",\n  \"duration_minutes\": 60,\n  \"notes\": \"Ask about the agentic roadmap.\",\n  \"app_id\": \"optional-application-uuid\",\n  \"run_ids\": [],\n  \"reminders\": [\n    {\"offset_minutes\": 1440, \"channels\": [\"email\", \"slack\"]},\n    {\"offset_minutes\": 60,   \"channels\": [\"slack\"]}\n  ]\n}"
+              "raw": "{\n  \"title\": \"HM Interview — Salesforce\",\n  \"event_type\": \"interview\",\n  \"datetime\": \"2026-06-15T14:00:00Z\",\n  \"timezone\": \"America/New_York\",\n  \"duration_minutes\": 60,\n  \"notes\": \"Ask about the agentic roadmap.\",\n  \"app_id\": \"optional-application-uuid\",\n  \"run_ids\": [],\n  \"reminders\": [\n    {\"offset_minutes\": 1440, \"channels\": [\"email\", \"slack\"]},\n    {\"offset_minutes\": 60,   \"channels\": [\"slack\"]}\n  ]\n}"
             }
           }
         },
@@ -460,7 +460,7 @@
     },
     {
       "name": "Application Tracker",
-      "description": "Full CRUD for job applications. All data is scoped to the authenticated user. Index fields returned by the list endpoint; full records include `comments`, `audit_log`, and `linked_runs`.\n\n**Valid statuses:** Not Applying, Researching, Applied, Phone Screen, Interviewing, On Hold, Offer, Rejected\n\n**Valid priorities:** Low, Medium, High\n\n**Auto-behaviours on PUT:**\n- `status \u2192 Applied`: sets `date_applied` to today (YYYY-MM-DD) if not already set\n- `url` changed: re-runs background JD extraction and saves `job_description.md` to Drive",
+      "description": "Full CRUD for job applications. All data is scoped to the authenticated user. Index fields returned by the list endpoint; full records include `comments`, `audit_log`, and `linked_runs`.\n\n**Valid statuses:** Not Applying, Researching, Applied, Phone Screen, Interviewing, On Hold, Offer, Rejected\n\n**Valid priorities:** Low, Medium, High\n\n**Auto-behaviours on PUT:**\n- `status → Applied`: sets `date_applied` to today (YYYY-MM-DD) if not already set\n- `url` changed: re-runs background JD extraction and saves `job_description.md` to Drive",
       "item": [
         {
           "name": "GET /api/applications",
@@ -498,7 +498,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/applications",
-            "description": "Create a new application. `url` must start with http:// or https:// if provided. `company_logo_url` is no longer used \u2014 logos are rendered dynamically from `domain` via Logo.dev.",
+            "description": "Create a new application. `url` must start with http:// or https:// if provided. `company_logo_url` is no longer used — logos are rendered dynamically from `domain` via Logo.dev.",
             "header": [
               {
                 "key": "Content-Type",
@@ -507,7 +507,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"company\": \"Salesforce\",\n  \"domain\": \"salesforce.com\",\n  \"role_title\": \"Solution Engineer\",\n  \"status\": \"Applied\",\n  \"priority\": \"High\",\n  \"url\": \"https://salesforce.com/careers/\u2026\",\n  \"job_source\": \"LinkedIn\",\n  \"location\": \"Remote\",\n  \"salary_range\": \"$130k\u2013$160k\",\n  \"dua\": false\n}"
+              "raw": "{\n  \"company\": \"Salesforce\",\n  \"domain\": \"salesforce.com\",\n  \"role_title\": \"Solution Engineer\",\n  \"status\": \"Applied\",\n  \"priority\": \"High\",\n  \"url\": \"https://salesforce.com/careers/…\",\n  \"job_source\": \"LinkedIn\",\n  \"location\": \"Remote\",\n  \"salary_range\": \"$130k–$160k\",\n  \"dua\": false\n}"
             }
           }
         },
@@ -524,7 +524,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/api/applications/{{app_id}}",
-            "description": "Partial update \u2014 send only changed fields. Diffs are recorded in the application `audit_log`.\n\n**Side effects:**\n- Setting `status: Applied` auto-sets `date_applied` to today if not already present\n- Changing `url` triggers background JD extraction: creates/updates the Drive folder and saves `job_description.md`",
+            "description": "Partial update — send only changed fields. Diffs are recorded in the application `audit_log`.\n\n**Side effects:**\n- Setting `status: Applied` auto-sets `date_applied` to today if not already present\n- Changing `url` triggers background JD extraction: creates/updates the Drive folder and saves `job_description.md`",
             "header": [
               {
                 "key": "Content-Type",
@@ -611,7 +611,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"resume\",\n  \"folder_name\": \"Salesforce_SolutionEngineer\",\n  \"folder_url\": \"https://drive.google.com/drive/folders/\u2026\",\n  \"gdrive_folder_id\": \"1abc123\"\n}"
+              "raw": "{\n  \"type\": \"resume\",\n  \"folder_name\": \"Salesforce_SolutionEngineer\",\n  \"folder_url\": \"https://drive.google.com/drive/folders/…\",\n  \"gdrive_folder_id\": \"1abc123\"\n}"
             }
           }
         },
@@ -628,7 +628,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/applications/{{app_id}}/score",
-            "description": "Run (or re-run) Claude-based resume\u2194JD match scoring. Synchronous \u2014 waits for the result. Requires a job description resolvable from the app's linked Drive folder or posting URL, plus an uploaded master resume and profile guide.\n\nReturns `{score, category, dimensions, rationale}`:\n- `score`: 0\u2013100\n- `category`: `Strong Match` (\u226580) | `Good Match` (\u226560) | `Stretch` (\u226540) | `Long Shot`\n- `dimensions`: `{skills, role_type, seniority, differentiators}` (each 0\u2013100)\n- `rationale`: 1\u20132 sentence summary of strongest alignment and biggest gap\n\nScoring result is persisted to the application record."
+            "description": "Run (or re-run) Claude-based resume↔JD match scoring. Synchronous — waits for the result. Requires a job description resolvable from the app's linked Drive folder or posting URL, plus an uploaded master resume and profile guide.\n\nReturns `{score, category, dimensions, rationale}`:\n- `score`: 0–100\n- `category`: `Strong Match` (≥80) | `Good Match` (≥60) | `Stretch` (≥40) | `Long Shot`\n- `dimensions`: `{skills, role_type, seniority, differentiators}` (each 0–100)\n- `rationale`: 1–2 sentence summary of strongest alignment and biggest gap\n\nScoring result is persisted to the application record."
           }
         },
         {
@@ -644,7 +644,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/applications/{{app_id}}/setup-folder",
-            "description": "Create a Google Drive folder for this application and attempt to capture `job_description.md` from the posting URL \u2014 all in the background. Returns 202 immediately with `{status: \"started\"}`. The folder is linked to the application record once created. JD extraction is best-effort: LinkedIn and other login-walled URLs will create the folder but not capture a JD."
+            "description": "Create a Google Drive folder for this application and attempt to capture `job_description.md` from the posting URL — all in the background. Returns 202 immediately with `{status: \"started\"}`. The folder is linked to the application record once created. JD extraction is best-effort: LinkedIn and other login-walled URLs will create the folder but not capture a JD."
           }
         }
       ]
@@ -712,21 +712,21 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/postman",
-            "description": "Download this Postman collection as JSON. Backs the \u2b07 download button on `/api-docs.html`."
+            "description": "Download this Postman collection as JSON. Backs the ⬇ download button on `/api-docs.html`."
           }
         }
       ]
     },
     {
       "name": "Application Runs",
-      "description": "Start and monitor a resume + ATS resume + cover letter generation run.\n\n**Lifecycle:** POST \u2192 SSE stream \u2192 `done` event contains file names \u2192 download files.\n\nRuns are serialised per user (one active at a time per user). Up to 5 in-flight + queued entries per user. Admin accounts cannot create runs.\n\n**`done` event shape:**\n```json\n{\n  \"type\": \"done\",\n  \"run_id\": \"\u2026\",\n  \"framing_angle\": \"\u2026\",\n  \"folder_url\": \"https://drive.google.com/\u2026\",\n  \"replacements_warning\": null,\n  \"files\": {\n    \"resume\": \"Resume_\u2026docx\",\n    \"ats\": \"Resume_\u2026_ATS.docx\",\n    \"cover_letter\": \"CoverLetter_\u2026.docx\"\n  }\n}\n```\n`replacements_warning` is non-null if fewer than 70% of XML edits succeeded \u2014 some resume sections may need manual review.",
+      "description": "Start and monitor a resume + ATS resume + cover letter generation run.\n\n**Lifecycle:** POST → SSE stream → `done` event contains file names → download files.\n\nRuns are serialised per user (one active at a time per user). Up to 5 in-flight + queued entries per user. Admin accounts cannot create runs.\n\n**`done` event shape:**\n```json\n{\n  \"type\": \"done\",\n  \"run_id\": \"…\",\n  \"framing_angle\": \"…\",\n  \"folder_url\": \"https://drive.google.com/…\",\n  \"replacements_warning\": null,\n  \"files\": {\n    \"resume\": \"Resume_…docx\",\n    \"ats\": \"Resume_…_ATS.docx\",\n    \"cover_letter\": \"CoverLetter_….docx\"\n  }\n}\n```\n`replacements_warning` is non-null if fewer than 70% of XML edits succeeded — some resume sections may need manual review.",
       "item": [
         {
           "name": "POST /api/run",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/run",
-            "description": "Start a resume generation run. Returns {run_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream to ensure the stream hits the same Fly.io machine.\n\n**JD source (mutually exclusive):**\n- `job_posting`: paste the full JD text directly\n- `jd_folder_id`: Google Drive folder ID \u2014 server loads `job_description.md` from the folder server-side (preferred when re-running from tracker)\n\nIf `app_id` is set and `job_posting` was pasted (not loaded via `jd_folder_id`), the server saves `job_description.md` to the run's Drive output folder and registers a `job_description` linked run on the application.",
+            "description": "Start a resume generation run. Returns {run_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream to ensure the stream hits the same Fly.io machine.\n\n**JD source (mutually exclusive):**\n- `job_posting`: paste the full JD text directly\n- `jd_folder_id`: Google Drive folder ID — server loads `job_description.md` from the folder server-side (preferred when re-running from tracker)\n\nIf `app_id` is set and `job_posting` was pasted (not loaded via `jd_folder_id`), the server saves `job_description.md` to the run's Drive output folder and registers a `job_description` linked run on the application.",
             "header": [
               {
                 "key": "Content-Type",
@@ -735,7 +735,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_posting\": \"Paste full JD here\u2026\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"jd_folder_id\": null,\n  \"model\": null\n}"
+              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"contact\": \"Jane Smith\",\n  \"app_id\": \"optional-application-uuid\",\n  \"jd_folder_id\": null,\n  \"model\": null\n}"
             }
           }
         },
@@ -780,7 +780,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/prep",
-            "description": "Start an interview prep run. Returns {prep_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream.",
+            "description": "Start an interview prep run. interviewer accepts freeform multi-line text (one interviewer per line — name/role/LinkedIn, etc.); interview_date, interview_time, and location are all optional and each only shown in the generated doc if provided. Returns {prep_id, machine_id}. Set fly-force-instance-id cookie to machine_id before opening the SSE stream.",
             "header": [
               {
                 "key": "Content-Type",
@@ -789,7 +789,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"job_posting\": \"Paste full JD here\u2026\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"interviewer\": \"Jane Smith \u2014 Engineering Manager\",\n  \"focus\": \"Lean into the agentic AI angle\",\n  \"app_id\": \"optional-application-uuid\",\n  \"model\": null\n}"
+              "raw": "{\n  \"job_posting\": \"Paste full JD here…\",\n  \"company\": \"Acme Corp\",\n  \"role\": \"Solutions Engineer\",\n  \"round_type\": \"Hiring Manager\",\n  \"interviewer\": \"Jane Smith — Engineering Manager — linkedin.com/in/janesmith\",\n  \"interview_date\": \"2026-07-20\",\n  \"interview_time\": \"14:00\",\n  \"location\": \"Zoom: https://zoom.us/j/123 or a physical address\",\n  \"focus\": \"Lean into the agentic AI angle\",\n  \"app_id\": \"optional-application-uuid\",\n  \"model\": null\n}"
             }
           }
         },
@@ -834,7 +834,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/aq",
-            "description": "Start an application question run. Returns {aq_id, machine_id}. The agent may emit a `clarification` SSE event if it needs more context before answering \u2014 submit answers via POST /api/aq/{aq_id}/clarify to unblock.",
+            "description": "Start an application question run. Returns {aq_id, machine_id}. The agent may emit a `clarification` SSE event if it needs more context before answering — submit answers via POST /api/aq/{aq_id}/clarify to unblock.",
             "header": [
               {
                 "key": "Content-Type",
@@ -870,7 +870,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/aq/{{aq_id}}/stream",
-            "description": "SSE stream for AQ run. Event types: `progress` (status updates), `clarification` (agent needs follow-up answers \u2014 submit via /clarify), `done` (includes answer, char_count, follow_ups), `error`.",
+            "description": "SSE stream for AQ run. Event types: `progress` (status updates), `clarification` (agent needs follow-up answers — submit via /clarify), `done` (includes answer, char_count, follow_ups), `error`.",
             "header": [
               {
                 "key": "Accept",
@@ -1197,7 +1197,7 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/config/model",
-            "description": "Returns `{model, default}` \u2014 the currently active model and the compile-time default."
+            "description": "Returns `{model, default}` — the currently active model and the compile-time default."
           }
         },
         {
@@ -1236,13 +1236,13 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/audit/me",
-            "description": "Returns the current user's audit event log, newest first (up to 500 events). Each event: `{id, action, actor, timestamp, ip, details}`. Events are stored as individual S3 objects \u2014 no cross-machine race conditions."
+            "description": "Returns the current user's audit event log, newest first (up to 500 events). Each event: `{id, action, actor, timestamp, ip, details}`. Events are stored as individual S3 objects — no cross-machine race conditions."
           }
         }
       ]
     },
     {
-      "name": "Admin \u2014 Users",
+      "name": "Admin — Users",
       "description": "All endpoints require `role: admin`. Accept the session cookie or `Authorization: Bearer {BOT_API_KEY}`.\n\nRole and active-status changes are immediately reflected because the per-request user cache is invalidated on write.",
       "item": [
         {
@@ -1258,7 +1258,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/api/admin/users/{{user_id}}",
-            "description": "Edit `display_name`, `email` (safe rename across all S3 indexes), `role`, `email_verified`, `active`. Changes are reflected immediately \u2014 user cache is invalidated after write.",
+            "description": "Edit `display_name`, `email` (safe rename across all S3 indexes), `role`, `email_verified`, `active`. Changes are reflected immediately — user cache is invalidated after write.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1297,7 +1297,7 @@
                 "role"
               ]
             },
-            "description": "Set only the role of a user (`user` or `admin`). Simpler alternative to `PUT /api/admin/users/{id}` \u2014 accepted by the Slack bot for role management. Invalidates the user record cache.",
+            "description": "Set only the role of a user (`user` or `admin`). Simpler alternative to `PUT /api/admin/users/{id}` — accepted by the Slack bot for role management. Invalidates the user record cache.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"role\": \"user\"\n}",
@@ -1335,7 +1335,7 @@
       ]
     },
     {
-      "name": "Admin \u2014 Applications",
+      "name": "Admin — Applications",
       "item": [
         {
           "name": "GET /api/admin/applications",
@@ -1400,7 +1400,7 @@
       ]
     },
     {
-      "name": "Admin \u2014 Runs",
+      "name": "Admin — Runs",
       "item": [
         {
           "name": "GET /api/admin/runs",
@@ -1413,7 +1413,7 @@
       ]
     },
     {
-      "name": "Admin \u2014 Audit Log",
+      "name": "Admin — Audit Log",
       "item": [
         {
           "name": "GET /api/admin/audit",
@@ -1519,15 +1519,15 @@
       ]
     },
     {
-      "name": "Admin \u2014 Webhooks",
-      "description": "Create and manage outbound webhooks for event streaming. Webhooks fire on every `user_audit.log()` call that matches subscribed events and active filters.\n\n**Payload formats:** `generic` | `slack` | `ms_teams` | `grafana_loki`\n\n**Filters (all AND, blank = skip):**\n- `filter_actors`: comma-separated emails/user_ids\n- `filter_source`: `user` | `application`\n- `filter_categories`: array of `auth|profile|applications|runs|admin`\n- `filter_app_id`: specific application UUID\n\n**Security:** `secret` is stored encrypted at rest with AES-256-GCM. If set, each delivery includes `X-Hub-Signature-256: sha256={hmac}`. Rotating `SESSION_SECRET` invalidates stored secrets \u2014 re-save each webhook to re-encrypt. SSRF guard is applied at both creation time and delivery time.",
+      "name": "Admin — Webhooks",
+      "description": "Create and manage outbound webhooks for event streaming. Webhooks fire on every `user_audit.log()` call that matches subscribed events and active filters.\n\n**Payload formats:** `generic` | `slack` | `ms_teams` | `grafana_loki`\n\n**Filters (all AND, blank = skip):**\n- `filter_actors`: comma-separated emails/user_ids\n- `filter_source`: `user` | `application`\n- `filter_categories`: array of `auth|profile|applications|runs|admin`\n- `filter_app_id`: specific application UUID\n\n**Security:** `secret` is stored encrypted at rest with AES-256-GCM. If set, each delivery includes `X-Hub-Signature-256: sha256={hmac}`. Rotating `SESSION_SECRET` invalidates stored secrets — re-save each webhook to re-encrypt. SSRF guard is applied at both creation time and delivery time.",
       "item": [
         {
           "name": "GET /api/admin/webhooks",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/admin/webhooks",
-            "description": "List all webhooks (summary from index \u2014 secrets not included)."
+            "description": "List all webhooks (summary from index — secrets not included)."
           }
         },
         {
@@ -1544,7 +1544,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Slack \u2014 Auth Events\",\n  \"url\": \"https://hooks.slack.com/services/\u2026\",\n  \"payload_format\": \"slack\",\n  \"events\": [\"*\"],\n  \"secret\": \"\",\n  \"active\": true,\n  \"filter_actors\": \"cdl825@gmail.com\",\n  \"filter_source\": \"user\",\n  \"filter_categories\": [\"auth\"],\n  \"filter_app_id\": \"\",\n  \"headers\": {},\n  \"query_params\": {}\n}"
+              "raw": "{\n  \"name\": \"Slack — Auth Events\",\n  \"url\": \"https://hooks.slack.com/services/…\",\n  \"payload_format\": \"slack\",\n  \"events\": [\"*\"],\n  \"secret\": \"\",\n  \"active\": true,\n  \"filter_actors\": \"cdl825@gmail.com\",\n  \"filter_source\": \"user\",\n  \"filter_categories\": [\"auth\"],\n  \"filter_app_id\": \"\",\n  \"headers\": {},\n  \"query_params\": {}\n}"
             }
           }
         },
@@ -1631,7 +1631,7 @@
       ]
     },
     {
-      "name": "Admin \u2014 Knowledge Base",
+      "name": "Admin — Knowledge Base",
       "description": "Admin-only endpoints for managing KB articles and categories. All writes are persisted to Tigris (`kb/data.json`) and reflected immediately on the next `GET /api/kb/articles` call.\n\n**Article fields:** `id` (auto-generated slug if omitted), `category` (must match a category `id`), `title`, `snippet` (plain-text teaser), `read_time`, `body` (HTML, supports Quill output), `admin_only`.\n\n**Category fields:** `id` (kebab-case), `label`, `icon` (emoji), `desc`, `admin_only`.",
       "item": [
         {
@@ -1639,7 +1639,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/admin/kb/articles",
-            "description": "Create a new KB article. `id` is optional \u2014 omit to auto-generate a short UUID. Returns 400 if the `id` already exists.",
+            "description": "Create a new KB article. `id` is optional — omit to auto-generate a short UUID. Returns 400 if the `id` already exists.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1657,7 +1657,7 @@
           "request": {
             "method": "PUT",
             "url": "{{base_url}}/api/admin/kb/articles/{{article_id}}",
-            "description": "Update an existing KB article. All fields are optional \u2014 only provided fields are changed. Returns 404 if the article doesn't exist.",
+            "description": "Update an existing KB article. All fields are optional — only provided fields are changed. Returns 404 if the article doesn't exist.",
             "header": [
               {
                 "key": "Content-Type",
@@ -1776,7 +1776,7 @@
                 }
               ]
             },
-            "description": "Unauthenticated. Verifies a signed one-time notification token and executes the encoded action. Used in outbound nudge/follow-up email links. Actions: `status` (update application status), `snooze` (suppress notifications for N days). For `status=Applied` without a `date_applied` in the token, redirects to `/confirm-applied.html?token=\u2026` so the user can pick the date. All other actions redirect to `#tracker`. Token TTL is set at issue time (default 7 days)."
+            "description": "Unauthenticated. Verifies a signed one-time notification token and executes the encoded action. Used in outbound nudge/follow-up email links. Actions: `status` (update application status), `snooze` (suppress notifications for N days). For `status=Applied` without a `date_applied` in the token, redirects to `/confirm-applied.html?token=…` so the user can pick the date. All other actions redirect to `#tracker`. Token TTL is set at issue time (default 7 days)."
           },
           "response": []
         }
@@ -1784,7 +1784,7 @@
     },
     {
       "name": "Teams Bot",
-      "description": "Bot-key-authenticated endpoints the Teams bot calls on itself to link a Teams (Azure AD) identity to a Job Apply account. Not for end-user use \u2014 see README.md 'Teams Commands' for the confirm/whoami/unlink chat flow.",
+      "description": "Bot-key-authenticated endpoints the Teams bot calls on itself to link a Teams (Azure AD) identity to a Job Apply account. Not for end-user use — see README.md 'Teams Commands' for the confirm/whoami/unlink chat flow.",
       "item": [
         {
           "name": "POST /api/teams/link-status",
@@ -1879,7 +1879,7 @@
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/teams/link-claim",
-            "description": "Cookie-authenticated (not bot key). Called by frontend/teams-link.html after the user signs in \u2014 links whichever account they just authenticated as to the Teams identity named in the token from link-token. 400 if the token is missing/expired/already used.",
+            "description": "Cookie-authenticated (not bot key). Called by frontend/teams-link.html after the user signs in — links whichever account they just authenticated as to the Teams identity named in the token from link-token. 400 if the token is missing/expired/already used.",
             "header": [
               {
                 "key": "Content-Type",

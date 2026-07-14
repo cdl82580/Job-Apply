@@ -18,6 +18,7 @@ CLI:
 """
 
 import argparse
+import base64
 import html
 import json
 import os
@@ -41,7 +42,7 @@ if _env_path.exists():
             _k, _v = _line.split("=", 1)
             os.environ.setdefault(_k.strip(), _v.strip())
 
-from scripts.brand_color import get_brand_color
+from scripts.brand_color import get_brand_color, get_brand_logo
 
 try:
     import anthropic
@@ -167,6 +168,9 @@ class InterviewPrepConfig:
     user_id:       str | None             = None
     user_label:    str | None             = None
     interviewer:   str                    = ""
+    interview_date: str                   = ""
+    interview_time: str                   = ""
+    location:       str                   = ""
 
 
 @dataclass
@@ -2171,6 +2175,10 @@ def _build_prep_docx_js(
     interviewer: str,
     output_path: Path,
     colors: dict,
+    interview_date: str = "",
+    interview_time: str = "",
+    location: str = "",
+    logo: dict | None = None,
 ) -> str:
     """Return a Node.js script that produces the interview prep DOCX.
 
@@ -2214,21 +2222,65 @@ def _build_prep_docx_js(
         return para([tr(f"{number}. {title}", bold=True, size=21, color=color)],
                     before=200, after=70, border_bottom_color=color)
 
+    def logo_dims(width, height, max_w: int = 160, max_h: int = 50) -> tuple[int, int]:
+        if width and height and width > 0 and height > 0:
+            scale = min(max_w / width, max_h / height, 2.0)
+            return max(1, round(width * scale)), max(1, round(height * scale))
+        return 120, 40
+
     paras: list[str] = []
 
     # =========================================================================
     # HEADER BLOCK
     # =========================================================================
-    interviewer_display = (
-        interviewer.strip() if interviewer and interviewer.strip()
-        else "[Name] — [Title/Role]"
-    )
+    if logo and logo.get("bytes"):
+        logo_b64  = base64.b64encode(logo["bytes"]).decode("ascii")
+        fmt_raw   = str(logo.get("format") or "png").lower()
+        docx_type = "jpg" if fmt_raw in ("jpeg", "jpg") else fmt_raw
+        out_w, out_h = logo_dims(logo.get("width"), logo.get("height"))
+        image_run = (
+            f'new ImageRun({{ type: "{docx_type}", '
+            f'data: Buffer.from("{logo_b64}", "base64"), '
+            f'transformation: {{ width: {out_w}, height: {out_h} }} }})'
+        )
+        paras.append(para([image_run], before=0, after=50))
+
     paras.append(para([tr(f"{company} — {role}", bold=True, size=30, color=NAVY)],
                        before=0, after=40))
     paras.append(para([tr("Interview Prep Sheet · Corey Laverdiere", size=21, color=GRAY)],
                        before=0, after=30))
-    paras.append(para([tr(f"Interviewer: {interviewer_display}", italic=True, size=19, color=GRAY)],
-                       before=0, after=120, border_bottom_color=NAVY))
+
+    interviewer_lines = [ln.strip() for ln in (interviewer or "").splitlines() if ln.strip()]
+    logistics_parts = []
+    if interview_date and interview_date.strip():
+        logistics_parts.append(f"Date: {interview_date.strip()}")
+    if interview_time and interview_time.strip():
+        logistics_parts.append(f"Time: {interview_time.strip()}")
+    if location and location.strip():
+        logistics_parts.append(f"Location: {location.strip()}")
+    logistics_line = " · ".join(logistics_parts)
+
+    header_lines: list[tuple[list[str], dict]] = []
+    if interviewer_lines:
+        label = "Interviewers:" if len(interviewer_lines) > 1 else "Interviewer:"
+        header_lines.append(
+            ([tr(f"{label} {interviewer_lines[0]}", italic=True, size=19, color=GRAY)], {})
+        )
+        for line in interviewer_lines[1:]:
+            header_lines.append(
+                ([tr(line, italic=True, size=19, color=GRAY)], {"left": 200})
+            )
+    else:
+        header_lines.append(
+            ([tr("Interviewer: [Name] — [Title/Role]", italic=True, size=19, color=GRAY)], {})
+        )
+    if logistics_line:
+        header_lines.append(([tr(logistics_line, italic=True, size=19, color=GRAY)], {}))
+
+    for i, (children, kwargs) in enumerate(header_lines):
+        is_last = i == len(header_lines) - 1
+        paras.append(para(children, before=0, after=(120 if is_last else 4),
+                           border_bottom_color=(NAVY if is_last else ""), **kwargs))
 
     # =========================================================================
     # 1 — Elevator Pitch
@@ -2297,7 +2349,7 @@ def _build_prep_docx_js(
 
     return f"""\
 const {{
-  Document, Packer, Paragraph, TextRun, BorderStyle
+  Document, Packer, Paragraph, TextRun, BorderStyle, ImageRun
 }} = require('docx');
 const fs = require('fs');
 
@@ -2516,14 +2568,19 @@ Return ONLY valid JSON. No preamble, no markdown fences.
         f"{len(data.get('questions_to_ask', []))} questions to ask"
     )
 
-    # Step 2b: Brand colors
+    # Step 2b: Brand colors + logo
     print_step("2b", "Fetching Brand Colors", wfc)
     colors = get_brand_color(company)
+    logo   = get_brand_logo(company)
 
     # Step 3: Build DOCX
     print_step(3, "Building Interview Prep DOCX", wfc)
     js      = _build_prep_docx_js(
-        data, company, role, config.interviewer, prep_out, colors
+        data, company, role, config.interviewer, prep_out, colors,
+        interview_date=config.interview_date,
+        interview_time=config.interview_time,
+        location=config.location,
+        logo=logo,
     )
     js_path = run_dir / f"interview_prep_gen_{os.urandom(4).hex()}.js"
     write_file(js_path, js)

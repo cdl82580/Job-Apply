@@ -136,6 +136,58 @@ class TestPrepEndpoint:
             r = authed_client.post("/api/prep", json=body)
         assert r.status_code == 200
 
+    def test_interviewer_and_logistics_fields_reach_prep_config(self, authed_client, user_record):
+        """interviewer/interview_date/interview_time/location should be threaded
+        through to the InterviewPrepConfig used to build the doc."""
+        _seed_user_with_resume(user_record)
+        body = {
+            **PREP_BODY,
+            "interviewer": "Jane Smith - VP Eng\nJohn Doe - Peer",
+            "interview_date": "2026-07-20",
+            "interview_time": "14:00",
+            "location": "Zoom: https://zoom.us/j/123",
+        }
+        with patch("api.threading.Thread") as mock_thread, \
+             patch("api.generate_interview_prep") as mock_gen:
+            mock_thread.return_value = MagicMock()
+            r = authed_client.post("/api/prep", json=body)
+            assert r.status_code == 200
+
+            # Grab the _prep_fn closure passed to the background worker and
+            # invoke it directly, with generate_interview_prep mocked out.
+            _worker_args = mock_thread.call_args[1]["args"]
+            prep_fn = _worker_args[5]
+            mock_gen.return_value = MagicMock(run_dir="/tmp/x", folder_url=None,
+                                               prep_path=MagicMock(name="prep.docx"))
+            prep_fn(resume_path="/tmp/resume.docx", progress=lambda *_: None)
+
+        _, kwargs = mock_gen.call_args
+        config = kwargs["config"]
+        assert config.interviewer == "Jane Smith - VP Eng\nJohn Doe - Peer"
+        assert config.interview_date == "2026-07-20"
+        assert config.interview_time == "14:00"
+        assert config.location == "Zoom: https://zoom.us/j/123"
+
+    def test_logistics_fields_default_to_empty_string(self, authed_client, user_record):
+        _seed_user_with_resume(user_record)
+        with patch("api.threading.Thread") as mock_thread, \
+             patch("api.generate_interview_prep") as mock_gen:
+            mock_thread.return_value = MagicMock()
+            r = authed_client.post("/api/prep", json=PREP_BODY)
+            assert r.status_code == 200
+
+            _worker_args = mock_thread.call_args[1]["args"]
+            prep_fn = _worker_args[5]
+            mock_gen.return_value = MagicMock(run_dir="/tmp/x", folder_url=None,
+                                               prep_path=MagicMock(name="prep.docx"))
+            prep_fn(resume_path="/tmp/resume.docx", progress=lambda *_: None)
+
+        config = mock_gen.call_args.kwargs["config"]
+        assert config.interviewer == ""
+        assert config.interview_date == ""
+        assert config.interview_time == ""
+        assert config.location == ""
+
 
 THANKYOU_BODY = {
     "job_posting": JD,

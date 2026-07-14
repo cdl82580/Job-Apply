@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Fetch brand colors from Brandfetch API.
+Fetch brand colors and logos from Brandfetch API.
 
 API key is read from the BRANDFETCH_API_KEY environment variable or .env file
 in the project root. Never hardcode the key in source.
 
 Usage:
-    from scripts.brand_color import get_brand_color
+    from scripts.brand_color import get_brand_color, get_brand_logo
     colors = get_brand_color("Brightflag")
-    # {"primary": "1A3C5E", "border": "2B6CB0", "fill": "EEF4FB"}
+    # {"primary": "1A3C5E", "secondary": "00695C", "border": "2B6CB0", "fill": "EEF4FB"}
+    logo = get_brand_logo("Brightflag")
+    # {"bytes": b"...", "format": "png", "width": 512, "height": 512} or None
 """
 
 import os
@@ -21,11 +23,12 @@ try:
 except ImportError:
     requests = None  # type: ignore
 
-# Fallback palette — Corey's default navy scheme
+# Fallback palette — Corey's default navy/teal scheme
 DEFAULT_PALETTE = {
-    "primary": "1A3C5E",
-    "border":  "2B6CB0",
-    "fill":    "EEF4FB",
+    "primary":   "1A3C5E",
+    "secondary": "00695C",
+    "border":    "2B6CB0",
+    "fill":      "EEF4FB",
 }
 
 # Brandfetch search client token (autocomplete endpoint). Set BRANDFETCH_SEARCH_CLIENT in env.
@@ -34,6 +37,11 @@ _SEARCH_CLIENT = os.environ.get("BRANDFETCH_SEARCH_CLIENT", "")
 # Brand colors are spliced into generated JS/DOCX-XML downstream — only accept
 # well-formed 6-digit hex so a malformed API response can't break out of those contexts.
 _HEX_RE = re.compile(r"^[0-9A-F]{6}$")
+
+# Raster formats safe to embed via docx.js ImageRun.
+_LOGO_FORMATS = ("png", "jpeg", "jpg")
+
+_COLOR_PRIORITY = ("accent", "dark", "light")
 
 
 def _load_api_key() -> str:
@@ -62,20 +70,67 @@ def _lighten(hex6: str, factor: float) -> str:
     return f"{r:02X}{g:02X}{b:02X}"
 
 
-def _palette_from_hex(hex6: str) -> dict:
-    """Derive the three-color palette from a single brand hex value."""
+def _darken(hex6: str, factor: float) -> str:
+    """Blend hex6 color with black. factor=0 → original, factor=1 → black."""
+    r = int(hex6[0:2], 16)
+    g = int(hex6[2:4], 16)
+    b = int(hex6[4:6], 16)
+    r = round(r * (1 - factor))
+    g = round(g * (1 - factor))
+    b = round(b * (1 - factor))
+    return f"{r:02X}{g:02X}{b:02X}"
+
+
+def _resolve_domain(company_name: str) -> str | None:
+    """Look up company_name via Brandfetch's search endpoint. Returns the domain or None."""
+    search_url = f"https://api.brandfetch.io/v2/search/{quote(company_name)}"
+    search_resp = requests.get(search_url, params={"c": _SEARCH_CLIENT}, timeout=10)
+    search_data = search_resp.json()
+
+    if not isinstance(search_data, list) or not search_data:
+        print(f"  ⚠ Brandfetch: no results for '{company_name}'")
+        return None
+
+    domain = search_data[0].get("domain", "")
+    if not domain:
+        print("  ⚠ Brandfetch: no domain in search result")
+        return None
+
+    print(f"  ✓ Brandfetch: resolved '{company_name}' → {domain}")
+    return domain
+
+
+def _fetch_brand_data(domain: str, api_key: str) -> dict:
+    """Fetch the full Brandfetch brand record for a resolved domain."""
+    brand_url = f"https://api.brandfetch.io/v2/brands/domain/{quote(domain, safe='.')}"
+    brand_resp = requests.get(
+        brand_url,
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=10,
+    )
+    return brand_resp.json()
+
+
+def _palette_from_hex(hex6: str, secondary_hex: str | None) -> dict:
+    """Derive the four-color palette from a primary brand hex value.
+
+    secondary_hex, if given, is a second distinct brand color pulled straight
+    from Brandfetch. Otherwise a darkened shade of primary is used so it
+    reads as a genuinely different accent, not just a lighter tint.
+    """
     return {
-        "primary": hex6,
-        "border":  _lighten(hex6, 0.25),   # 25% lighter — section borders
-        "fill":    _lighten(hex6, 0.85),    # 85% lighter — competency table bg
+        "primary":   hex6,
+        "secondary": secondary_hex or _darken(hex6, 0.35),
+        "border":    _lighten(hex6, 0.25),   # 25% lighter — section borders
+        "fill":      _lighten(hex6, 0.85),    # 85% lighter — competency table bg
     }
 
 
 def get_brand_color(company_name: str) -> dict:
     """
-    Look up the brand accent/dark/light color for company_name via Brandfetch.
-    Returns a palette dict: {primary, border, fill} as 6-char uppercase hex strings.
-    Falls back to DEFAULT_PALETTE on any error.
+    Look up the brand accent/dark/light colors for company_name via Brandfetch.
+    Returns a palette dict: {primary, secondary, border, fill} as 6-char
+    uppercase hex strings. Falls back to DEFAULT_PALETTE on any error.
     """
     if requests is None:
         print("  ⚠ brand_color: 'requests' not installed — using default colors")
@@ -84,40 +139,19 @@ def get_brand_color(company_name: str) -> dict:
     try:
         api_key = _load_api_key()
 
-        # ── Step 1: search for the company's domain ───────────────────────────
-        search_url = f"https://api.brandfetch.io/v2/search/{quote(company_name)}"
-        search_resp = requests.get(
-            search_url,
-            params={"c": _SEARCH_CLIENT},
-            timeout=10,
-        )
-        search_data = search_resp.json()
-
-        if not isinstance(search_data, list) or not search_data:
-            print(f"  ⚠ Brandfetch: no results for '{company_name}' — using default colors")
-            return DEFAULT_PALETTE
-
-        domain = search_data[0].get("domain", "")
+        domain = _resolve_domain(company_name)
         if not domain:
-            print(f"  ⚠ Brandfetch: no domain in search result — using default colors")
+            print("  ⚠ Brandfetch: using default colors")
             return DEFAULT_PALETTE
 
-        print(f"  ✓ Brandfetch: resolved '{company_name}' → {domain}")
+        brand_data = _fetch_brand_data(domain, api_key)
 
-        # ── Step 2: fetch brand data by domain ────────────────────────────────
-        brand_url = f"https://api.brandfetch.io/v2/brands/domain/{quote(domain, safe='.')}"
-        brand_resp = requests.get(
-            brand_url,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10,
-        )
-        brand_data = brand_resp.json()
-
-        # ── Step 3: pick color by priority ────────────────────────────────────
+        # ── Pick primary color by priority, then look for a second, distinct
+        #    color among the remaining priorities to use as secondary ────────
         colors = brand_data.get("colors", [])
         hex_val = None
         chosen_type = None
-        for priority in ("accent", "dark", "light"):
+        for priority in _COLOR_PRIORITY:
             match = next((c for c in colors if c.get("type") == priority), None)
             if match and match.get("hex"):
                 candidate = match["hex"].lstrip("#").upper()
@@ -131,11 +165,77 @@ def get_brand_color(company_name: str) -> dict:
             print("  ⚠ Brandfetch: no usable color in brand data — using default colors")
             return DEFAULT_PALETTE
 
-        palette = _palette_from_hex(hex_val)
+        secondary_hex = None
+        for priority in _COLOR_PRIORITY:
+            if priority == chosen_type:
+                continue
+            match = next((c for c in colors if c.get("type") == priority), None)
+            if match and match.get("hex"):
+                candidate = match["hex"].lstrip("#").upper()
+                if _HEX_RE.match(candidate) and candidate != hex_val:
+                    secondary_hex = candidate
+                    break
+
+        palette = _palette_from_hex(hex_val, secondary_hex)
         print(f"  ✓ Brandfetch: {chosen_type} color #{hex_val} → "
-              f"border #{palette['border']}, fill #{palette['fill']}")
+              f"secondary #{palette['secondary']}, border #{palette['border']}, fill #{palette['fill']}")
         return palette
 
     except Exception as exc:
         print(f"  ⚠ Brandfetch lookup failed ({exc}) — using default colors")
         return DEFAULT_PALETTE
+
+
+def get_brand_logo(company_name: str) -> dict | None:
+    """
+    Look up and download company_name's logo via Brandfetch.
+    Returns {"bytes": raw image bytes, "format": "png"/"jpeg", "width": int|None,
+    "height": int|None}, or None if no logo is available or anything fails.
+    """
+    if requests is None:
+        return None
+
+    try:
+        api_key = _load_api_key()
+
+        domain = _resolve_domain(company_name)
+        if not domain:
+            return None
+
+        brand_data = _fetch_brand_data(domain, api_key)
+
+        logos = brand_data.get("logos", [])
+        # Prefer an actual "logo" (wordmark/lockup) over "icon"/"symbol".
+        ordered_logos = (
+            [l for l in logos if l.get("type") == "logo"]
+            + [l for l in logos if l.get("type") != "logo"]
+        )
+
+        for logo in ordered_logos:
+            formats = logo.get("formats", [])
+            fmt_match = next(
+                (f for f in formats if str(f.get("format", "")).lower() in _LOGO_FORMATS),
+                None,
+            )
+            if not fmt_match or not fmt_match.get("src"):
+                continue
+
+            img_resp = requests.get(fmt_match["src"], timeout=10)
+            if img_resp.status_code != 200 or not img_resp.content:
+                continue
+
+            print(f"  ✓ Brandfetch: fetched logo for '{company_name}' "
+                  f"({fmt_match.get('format')}, {fmt_match.get('width')}x{fmt_match.get('height')})")
+            return {
+                "bytes":  img_resp.content,
+                "format": str(fmt_match["format"]).lower(),
+                "width":  fmt_match.get("width"),
+                "height": fmt_match.get("height"),
+            }
+
+        print(f"  ⚠ Brandfetch: no usable logo image for '{company_name}'")
+        return None
+
+    except Exception as exc:
+        print(f"  ⚠ Brandfetch logo lookup failed ({exc}) — skipping logo")
+        return None

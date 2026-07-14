@@ -199,7 +199,8 @@ def _post_run(job_posting: str, company: str, role: str, contact: str = "") -> d
 
 
 def _post_prep(job_posting: str, company: str, role: str,
-               round_type: str, focus: str = "", interviewer: str = "") -> dict:
+               round_type: str, focus: str = "", interviewer: str = "",
+               interview_date: str = "", interview_time: str = "", location: str = "") -> dict:
     r = _api("post", "/api/prep", json={
         "job_posting": job_posting,
         "company": company,
@@ -207,6 +208,9 @@ def _post_prep(job_posting: str, company: str, role: str,
         "round_type": round_type,
         "focus": focus or None,
         "interviewer": interviewer or None,
+        "interview_date": interview_date or None,
+        "interview_time": interview_time or None,
+        "location": location or None,
     })
     r.raise_for_status()
     return r.json()
@@ -1351,14 +1355,16 @@ def apply_view_submit(ack, body, client, view):
 # ---------------------------------------------------------------------------
 
 def _start_prep_run(channel: str, client, company: str, role: str, round_type: str,
-                     interviewer: str, focus: str, job_posting: str, domain: str = "") -> None:
+                     interviewer: str, focus: str, job_posting: str, domain: str = "",
+                     interview_date: str = "", interview_time: str = "", location: str = "") -> None:
     def _run():
         client.chat_postMessage(
             channel=channel,
             text=f":hourglass_flowing_sand: Generating *{round_type.replace('_', ' ').title()}* prep for *{role}* at *{company}*…",
         )
         try:
-            prep_data = _post_prep(job_posting, company, role, round_type, focus, interviewer)
+            prep_data = _post_prep(job_posting, company, role, round_type, focus, interviewer,
+                                    interview_date, interview_time, location)
             prep_id   = prep_data["prep_id"]
             status    = _poll_prep(prep_id)
         except Exception as exc:
@@ -1435,9 +1441,34 @@ def prep_command(ack, body, client):
                     "type": "input",
                     "block_id": "interviewer",
                     "optional": True,
-                    "label": {"type": "plain_text", "text": "Interviewer name (optional)"},
+                    "label": {"type": "plain_text", "text": "Interviewer(s) (optional)"},
+                    "element": {"type": "plain_text_input", "action_id": "value", "multiline": True,
+                                "placeholder": {"type": "plain_text",
+                                                "text": "One per line, e.g. Jane Smith — VP Engineering — linkedin.com/in/janesmith"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "interview_date",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Date (optional)"},
+                    "element": {"type": "datepicker", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Select a date"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "interview_time",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Time (optional)"},
+                    "element": {"type": "timepicker", "action_id": "value",
+                                "placeholder": {"type": "plain_text", "text": "Select a time"}},
+                },
+                {
+                    "type": "input",
+                    "block_id": "location",
+                    "optional": True,
+                    "label": {"type": "plain_text", "text": "Location (optional)"},
                     "element": {"type": "plain_text_input", "action_id": "value",
-                                "placeholder": {"type": "plain_text", "text": "Jane Smith, VP Engineering"}},
+                                "placeholder": {"type": "plain_text", "text": "Address or video call link"}},
                 },
                 {
                     "type": "input",
@@ -1454,12 +1485,15 @@ def prep_command(ack, body, client):
 
 @app.view("prep_select_submit")
 def prep_select_view_submit(ack, body, client, view):
-    vals        = view["state"]["values"]
-    app_id      = vals["app_block"]["app_select"]["selected_option"]["value"]
-    round_type  = vals["round_type"]["value"]["selected_option"]["value"]
-    interviewer = (vals["interviewer"]["value"]["value"] or "").strip()
-    focus       = (vals["focus"]["value"]["value"] or "").strip()
-    channel     = body["user"]["id"]
+    vals           = view["state"]["values"]
+    app_id         = vals["app_block"]["app_select"]["selected_option"]["value"]
+    round_type     = vals["round_type"]["value"]["selected_option"]["value"]
+    interviewer    = (vals["interviewer"]["value"]["value"] or "").strip()
+    interview_date = (vals["interview_date"]["value"].get("selected_date") or "")
+    interview_time = (vals["interview_time"]["value"].get("selected_time") or "")
+    location       = (vals["location"]["value"]["value"] or "").strip()
+    focus          = (vals["focus"]["value"]["value"] or "").strip()
+    channel        = body["user"]["id"]
 
     try:
         record = _get_app(app_id)
@@ -1474,12 +1508,14 @@ def prep_select_view_submit(ack, body, client, view):
 
     if job_posting:
         ack()
-        _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting, domain)
+        _start_prep_run(channel, client, company, role, round_type, interviewer, focus, job_posting, domain,
+                         interview_date, interview_time, location)
         return
 
     metadata = json.dumps({
         "company": company, "role": role, "domain": domain,
         "round_type": round_type, "interviewer": interviewer, "focus": focus,
+        "interview_date": interview_date, "interview_time": interview_time, "location": location,
     })
     ack(response_action="update", view=_jd_paste_view("prep_final_submit", metadata))
 
@@ -1494,6 +1530,7 @@ def prep_final_view_submit(ack, body, client, view):
         channel, client, meta.get("company", ""), meta.get("role", ""),
         meta.get("round_type", ""), meta.get("interviewer", ""), meta.get("focus", ""), job_posting,
         meta.get("domain", ""),
+        meta.get("interview_date", ""), meta.get("interview_time", ""), meta.get("location", ""),
     )
 
 

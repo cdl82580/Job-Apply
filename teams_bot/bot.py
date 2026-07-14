@@ -1747,6 +1747,9 @@ class JobApplyBot(ActivityHandler):
         app_id = (data.get("app_id") or "").strip()
         round_type = (data.get("round_type") or "").strip()
         interviewer = (data.get("interviewer") or "").strip()
+        interview_date = (data.get("interview_date") or "").strip()
+        interview_time = (data.get("interview_time") or "").strip()
+        location = (data.get("location") or "").strip()
         focus = (data.get("focus") or "").strip()
         if not app_id or not round_type:
             await ctx.send_activity(MessageFactory.text("❌ Application and interview round are required."))
@@ -1764,12 +1767,14 @@ class JobApplyBot(ActivityHandler):
             await self._submit_prep(ctx, {
                 "company": company, "role": role, "round_type": round_type,
                 "interviewer": interviewer, "focus": focus, "job_posting": job_posting,
+                "interview_date": interview_date, "interview_time": interview_time, "location": location,
             }, user)
             return
 
         card = self._jd_paste_card("prep_final_submit", {
             "app_id": app_id, "company": company, "role": role,
             "round_type": round_type, "interviewer": interviewer, "focus": focus,
+            "interview_date": interview_date, "interview_time": interview_time, "location": location,
         })
         await ctx.send_activity(MessageFactory.attachment(_card_attachment(card)))
 
@@ -1782,6 +1787,8 @@ class JobApplyBot(ActivityHandler):
             "company": data.get("company", ""), "role": data.get("role", ""),
             "round_type": data.get("round_type", ""), "interviewer": data.get("interviewer", ""),
             "focus": data.get("focus", ""), "job_posting": job_posting,
+            "interview_date": data.get("interview_date", ""), "interview_time": data.get("interview_time", ""),
+            "location": data.get("location", ""),
         }, user)
 
     async def _submit_aq_select(self, ctx: TurnContext, data: dict, user: dict):
@@ -1926,6 +1933,9 @@ class JobApplyBot(ActivityHandler):
         role = (data.get("role") or "").strip()
         round_type = (data.get("round_type") or "").strip()
         interviewer = (data.get("interviewer") or "").strip()
+        interview_date = (data.get("interview_date") or "").strip()
+        interview_time = (data.get("interview_time") or "").strip()
+        location = (data.get("location") or "").strip()
         focus = (data.get("focus") or "").strip()
         job_posting = (data.get("job_posting") or "").strip()
 
@@ -1946,7 +1956,8 @@ class JobApplyBot(ActivityHandler):
         def _run():
             try:
                 prep_data = api_client.post_prep(
-                    job_posting, company, role, round_type, focus, interviewer, user_email=user_email
+                    job_posting, company, role, round_type, focus, interviewer,
+                    interview_date, interview_time, location, user_email=user_email
                 )
                 prep_id = prep_data["prep_id"]
                 status = api_client.poll_prep(prep_id, user_email=user_email)

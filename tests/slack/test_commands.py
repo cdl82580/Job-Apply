@@ -479,6 +479,21 @@ class TestPrepCommand:
         assert client.chat_postMessage.call_args[1]["channel"] == "U999"
         assert "No applications" in client.chat_postMessage.call_args[1]["text"]
 
+    def test_modal_has_multiline_interviewer_and_logistics_blocks(self):
+        client = make_client()
+        with patch.object(bot, "_get_apps", return_value=SAMPLE_APPS):
+            bot.prep_command(ack=make_ack(), body=make_body(), client=client)
+        view_arg = client.views_open.call_args[1].get("view", {})
+        blocks = {b["block_id"]: b for b in view_arg["blocks"] if "block_id" in b}
+
+        assert blocks["interviewer"]["element"]["multiline"] is True
+        assert blocks["interview_date"]["element"]["type"] == "datepicker"
+        assert blocks["interview_time"]["element"]["type"] == "timepicker"
+        assert blocks["location"]["element"]["type"] == "plain_text_input"
+        assert blocks["interview_date"]["optional"] is True
+        assert blocks["interview_time"]["optional"] is True
+        assert blocks["location"]["optional"] is True
+
 
 # ── /thankyou (modal open) ───────────────────────────────────────────────────
 

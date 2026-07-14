@@ -143,6 +143,28 @@ class TestPostPrep:
             payload = mock_api.call_args[1]["json"]
             assert payload.get("focus") is None
 
+    def test_sends_logistics_fields(self):
+        resp = fake_response(200, {"prep_id": "prep-123", "machine_id": None})
+        with patch.object(bot, "_api", return_value=resp) as mock_api:
+            bot._post_prep("JD", "Acme", "Engineer", "Phone Screen",
+                            interviewer="Jane Smith - VP Eng\nJohn Doe - Peer",
+                            interview_date="2026-07-20", interview_time="14:00",
+                            location="Zoom: https://zoom.us/j/123")
+            payload = mock_api.call_args[1]["json"]
+            assert payload["interviewer"] == "Jane Smith - VP Eng\nJohn Doe - Peer"
+            assert payload["interview_date"] == "2026-07-20"
+            assert payload["interview_time"] == "14:00"
+            assert payload["location"] == "Zoom: https://zoom.us/j/123"
+
+    def test_empty_logistics_fields_send_none(self):
+        resp = fake_response(200, {"prep_id": "p1", "machine_id": None})
+        with patch.object(bot, "_api", return_value=resp) as mock_api:
+            bot._post_prep("JD", "Co", "Role", "Phone Screen")
+            payload = mock_api.call_args[1]["json"]
+            assert payload.get("interview_date") is None
+            assert payload.get("interview_time") is None
+            assert payload.get("location") is None
+
 
 # ── _poll_run ─────────────────────────────────────────────────────────────────
 

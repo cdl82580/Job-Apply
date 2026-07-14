@@ -966,6 +966,25 @@
         <textarea id="prepFocus" rows="2"
           placeholder="e.g. lean into the agentic AI angle, they mentioned MCP"></textarea>
       </div>
+      <div class="field">
+        <label for="prepInterviewer">Interviewer(s) <span class="opt">(optional)</span></label>
+        <textarea id="prepInterviewer" rows="2"
+          placeholder="One per line, e.g.&#10;Jane Smith — Engineering Manager — linkedin.com/in/janesmith&#10;John Doe — Senior Engineer"></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="prepDate">Date <span class="opt">(optional)</span></label>
+          <input id="prepDate" type="date">
+        </div>
+        <div class="field">
+          <label for="prepTime">Time <span class="opt">(optional)</span></label>
+          <input id="prepTime" type="time">
+        </div>
+      </div>
+      <div class="field">
+        <label for="prepLocation">Location <span class="opt">(optional)</span></label>
+        <input id="prepLocation" type="text" placeholder="e.g. 123 Main St, Suite 400 or Zoom/Meet link">
+      </div>
       <button class="btn" type="button" id="prepSubmitBtn">Generate Prep Doc</button>
       <div class="inline-err" id="prepFormErr" style="margin-top:.75rem"></div>
     </div>
@@ -2334,10 +2353,14 @@
     const errEl = document.getElementById('prepFormErr');
     errEl.style.display = 'none';
 
-    const company = document.getElementById('prepCompany').value.trim();
-    const role    = document.getElementById('prepRole').value.trim();
-    const round   = document.getElementById('prepRound').value;
-    const focus   = document.getElementById('prepFocus').value.trim();
+    const company     = document.getElementById('prepCompany').value.trim();
+    const role        = document.getElementById('prepRole').value.trim();
+    const round       = document.getElementById('prepRound').value;
+    const focus       = document.getElementById('prepFocus').value.trim();
+    const interviewer = document.getElementById('prepInterviewer').value.trim();
+    const prepDate     = document.getElementById('prepDate').value.trim();
+    const prepTime     = document.getElementById('prepTime').value.trim();
+    const prepLocation = document.getElementById('prepLocation').value.trim();
 
     if (!_prepAppId) {
       errEl.textContent = 'Select an application from the tracker first.';
@@ -2382,6 +2405,10 @@
           job_posting: jd, company, role,
           round_type:  round,
           focus:       focus || null,
+          interviewer: interviewer || null,
+          interview_date: prepDate || null,
+          interview_time: prepTime || null,
+          location:    prepLocation || null,
           ...(_prepAppId ? { app_id: _prepAppId } : {}),
         }),
       });

@@ -48,8 +48,25 @@
     {
       "type": "Input.Text",
       "id": "interviewer",
-      "label": "Interviewer name (optional)",
-      "placeholder": "John Doe"
+      "label": "Interviewer(s) (optional)",
+      "isMultiline": true,
+      "placeholder": "One per line, e.g. Jane Smith — VP Engineering — linkedin.com/in/janesmith"
+    },
+    {
+      "type": "Input.Date",
+      "id": "interview_date",
+      "label": "Date (optional)"
+    },
+    {
+      "type": "Input.Time",
+      "id": "interview_time",
+      "label": "Time (optional)"
+    },
+    {
+      "type": "Input.Text",
+      "id": "location",
+      "label": "Location (optional)",
+      "placeholder": "Address or video call link"
     },
     {
       "type": "Input.Text",

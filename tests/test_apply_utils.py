@@ -126,3 +126,86 @@ class TestPrepDocxBuild:
         assert "Acme" in js
         assert "Solutions Engineer" in js
         assert len(js) > 1000  # substantive output
+
+    def test_blank_interviewer_shows_placeholder(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert "[Name]" in js and "[Title/Role]" in js
+
+    def test_multiline_interviewer_becomes_separate_paragraphs(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer",
+            "Jane Smith - VP Eng\nJohn Doe - Peer",
+            Path("/tmp/test_out.docx"), {},
+        )
+        # Two distinct interviewer lines should show up as two separate TextRuns,
+        # not collapsed into one line by whitespace normalization.
+        assert js.count("new Paragraph(") >= 2
+        assert "Interviewers:" in js
+        assert "Jane Smith" in js and "John Doe" in js
+
+    def test_single_interviewer_uses_singular_label(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "Jane Smith",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert "Interviewer:" in js
+        assert "Interviewers:" not in js
+
+    def test_logistics_line_shows_only_provided_parts(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+            interview_date="2026-07-20",
+        )
+        assert "Date: 2026-07-20" in js
+        assert "Time:" not in js
+        assert "Location:" not in js
+
+    def test_logistics_line_omitted_when_all_blank(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+        )
+        assert "Date:" not in js
+        assert "Time:" not in js
+        assert "Location:" not in js
+
+    def test_logo_embeds_image_run(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {},
+            logo={"bytes": b"fakepngbytes", "format": "png", "width": 200, "height": 60},
+        )
+        assert "new ImageRun(" in js
+        assert "Buffer.from(" in js
+
+    def test_no_logo_skips_image_run(self):
+        from apply import _build_prep_docx_js
+        from pathlib import Path
+
+        js = _build_prep_docx_js(
+            {}, "Acme", "Solutions Engineer", "",
+            Path("/tmp/test_out.docx"), {}, logo=None,
+        )
+        assert "new ImageRun(" not in js
