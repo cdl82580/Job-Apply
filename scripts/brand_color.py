@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Fetch brand colors and logos from Brandfetch API.
+Fetch brand colors (Brandfetch) and logos (logo.dev) for a company.
 
-API key is read from the BRANDFETCH_API_KEY environment variable or .env file
-in the project root. Never hardcode the key in source.
+Colors come from Brandfetch (BRANDFETCH_API_KEY env var or .env file).
+Logo images come from logo.dev instead — the same source already used
+everywhere else in the app (tracker, agent picker, Slack/Teams cards) for a
+consistent look, and it sidesteps Brandfetch quirks like a domain whose only
+logo asset is a "light" variant meant for a dark background, which
+disappears against this app's white document/page backgrounds.
 
 Usage:
     from scripts.brand_color import get_brand_color, get_brand_logo
@@ -38,10 +42,22 @@ _SEARCH_CLIENT = os.environ.get("BRANDFETCH_SEARCH_CLIENT", "")
 # well-formed 6-digit hex so a malformed API response can't break out of those contexts.
 _HEX_RE = re.compile(r"^[0-9A-F]{6}$")
 
-# Raster formats safe to embed via docx.js ImageRun.
-_LOGO_FORMATS = ("png", "jpeg", "jpg")
-
 _COLOR_PRIORITY = ("accent", "dark", "light")
+
+# Public logo.dev token — same one already hardcoded as a fallback in
+# slack_bot.py and the frontend pages that render company logos.
+_LOGODEV_PUBLIC_KEY = (
+    os.environ.get("LOGODEV_PUBLIC_KEY")
+    or os.environ.get("LOGODEV_API_KEY")
+    or "pk_U3oIYbhyTvinmftvOvCTJg"
+)
+
+
+def _png_dimensions(data: bytes) -> tuple[int, int] | None:
+    """Parse width/height straight from a PNG's IHDR chunk — no imaging library needed."""
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
 def _load_api_key() -> str:
@@ -195,59 +211,35 @@ def get_brand_color(company_name: str, domain: str | None = None) -> dict:
 
 def get_brand_logo(company_name: str, domain: str | None = None) -> dict | None:
     """
-    Look up and download company_name's logo via Brandfetch.
+    Download company_name's logo via logo.dev — see the module docstring for
+    why logo.dev rather than Brandfetch's own logo assets.
 
-    See get_brand_color() for why a pre-resolved domain (when available)
-    should always be passed instead of relying on a name search.
+    If domain isn't given, it's resolved via Brandfetch's company-name search
+    first (that lookup already exists for get_brand_color(), so this adds no
+    extra API dependency).
 
-    Returns {"bytes": raw image bytes, "format": "png"/"jpeg", "width": int|None,
+    Returns {"bytes": raw image bytes, "format": "png", "width": int|None,
     "height": int|None}, or None if no logo is available or anything fails.
     """
     if requests is None:
         return None
 
     try:
-        api_key = _load_api_key()
-
         domain = domain.strip() if domain else _resolve_domain(company_name)
         if not domain:
             return None
 
-        brand_data = _fetch_brand_data(domain, api_key)
+        url = f"https://img.logo.dev/{domain}?token={_LOGODEV_PUBLIC_KEY}&format=png&retina=true&size=256"
+        img_resp = requests.get(url, timeout=10)
+        if img_resp.status_code != 200 or not img_resp.content:
+            print(f"  ⚠ logo.dev: no usable logo for '{domain}'")
+            return None
 
-        logos = brand_data.get("logos", [])
-        # Prefer the "icon" mark (square, reads well small in a doc header)
-        # over the full "logo" wordmark/lockup, which is often wide and thin.
-        ordered_logos = (
-            [l for l in logos if l.get("type") == "icon"]
-            + [l for l in logos if l.get("type") != "icon"]
-        )
-
-        for logo in ordered_logos:
-            formats = logo.get("formats", [])
-            fmt_match = next(
-                (f for f in formats if str(f.get("format", "")).lower() in _LOGO_FORMATS),
-                None,
-            )
-            if not fmt_match or not fmt_match.get("src"):
-                continue
-
-            img_resp = requests.get(fmt_match["src"], timeout=10)
-            if img_resp.status_code != 200 or not img_resp.content:
-                continue
-
-            print(f"  ✓ Brandfetch: fetched logo for '{company_name}' "
-                  f"({fmt_match.get('format')}, {fmt_match.get('width')}x{fmt_match.get('height')})")
-            return {
-                "bytes":  img_resp.content,
-                "format": str(fmt_match["format"]).lower(),
-                "width":  fmt_match.get("width"),
-                "height": fmt_match.get("height"),
-            }
-
-        print(f"  ⚠ Brandfetch: no usable logo image for '{company_name}'")
-        return None
+        dims = _png_dimensions(img_resp.content)
+        width, height = dims if dims else (None, None)
+        print(f"  ✓ logo.dev: fetched logo for '{domain}' ({width}x{height})")
+        return {"bytes": img_resp.content, "format": "png", "width": width, "height": height}
 
     except Exception as exc:
-        print(f"  ⚠ Brandfetch logo lookup failed ({exc}) — skipping logo")
+        print(f"  ⚠ logo.dev logo lookup failed ({exc}) — skipping logo")
         return None

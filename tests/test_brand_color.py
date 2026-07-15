@@ -103,86 +103,66 @@ class TestGetBrandColor:
         assert result == brand_color.DEFAULT_PALETTE
 
 
+# A real, valid 1x1 PNG — used to exercise the IHDR dimension parser end to end.
+_TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00"
+    b"\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
 class TestGetBrandLogo:
+    """get_brand_logo now fetches the actual image from logo.dev — the same
+    source used everywhere else in the app for company logos — rather than
+    Brandfetch's logo assets, which can be a "light" variant that disappears
+    against a white document background. Brandfetch's name search is still
+    used as a fallback to resolve a domain when none is given, since
+    get_brand_color() already depends on that same lookup."""
+
     def test_no_domain_returns_none(self):
         with patch.object(brand_color.requests, "get", return_value=_resp([])):
             assert brand_color.get_brand_logo("Acme") is None
 
-    def test_no_logos_returns_none(self):
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": []})
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp]):
-            assert brand_color.get_brand_logo("Acme") is None
-
-    def test_no_raster_format_returns_none(self):
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": [
-            {"type": "logo", "formats": [{"format": "svg", "src": "https://x/logo.svg"}]},
-        ]})
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp]):
-            assert brand_color.get_brand_logo("Acme") is None
-
-    def test_given_domain_skips_name_search(self):
-        brand_resp = _resp({"logos": [
-            {"type": "icon", "formats": [{"format": "png", "src": "https://x/icon.png"}]},
-        ]})
-        img_resp = _resp(content=b"icon-bytes")
-        with patch.object(brand_color.requests, "get", side_effect=[brand_resp, img_resp]) as mock_get:
+    def test_given_domain_skips_name_search_and_fetches_from_logodev(self):
+        img_resp = _resp(content=_TINY_PNG)
+        with patch.object(brand_color.requests, "get", return_value=img_resp) as mock_get:
             result = brand_color.get_brand_logo("Melior", domain="getmelior.com")
-        assert result["bytes"] == b"icon-bytes"
+        assert result["bytes"] == _TINY_PNG
+        assert result["format"] == "png"
+        assert result["width"] == 1 and result["height"] == 1
+        mock_get.assert_called_once()
+        called_url = mock_get.call_args[0][0]
+        assert called_url.startswith("https://img.logo.dev/getmelior.com?")
+        assert "search" not in called_url
+
+    def test_blank_domain_resolves_via_name_search_then_logodev(self):
+        search_resp = _resp([{"domain": "acme.com"}])
+        img_resp = _resp(content=_TINY_PNG)
+        with patch.object(brand_color.requests, "get", side_effect=[search_resp, img_resp]) as mock_get:
+            result = brand_color.get_brand_logo("Acme", domain="")
+        assert result["bytes"] == _TINY_PNG
         assert mock_get.call_count == 2
-        brand_call_url = mock_get.call_args_list[0][0][0]
-        assert "getmelior.com" in brand_call_url
+        assert "img.logo.dev/acme.com" in mock_get.call_args_list[-1][0][0]
 
-    def test_downloads_and_returns_logo_bytes(self):
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": [
-            {"type": "logo", "formats": [
-                {"format": "png", "src": "https://x/logo.png", "width": 200, "height": 60},
-            ]},
-        ]})
-        img_resp = _resp(content=b"\x89PNG-fake-bytes", status_code=200)
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp, img_resp]):
-            result = brand_color.get_brand_logo("Acme")
-        assert result == {"bytes": b"\x89PNG-fake-bytes", "format": "png", "width": 200, "height": 60}
+    def test_parses_real_png_dimensions(self):
+        with patch.object(brand_color.requests, "get", return_value=_resp(content=_TINY_PNG)):
+            result = brand_color.get_brand_logo("Acme", domain="acme.com")
+        assert result["width"] == 1
+        assert result["height"] == 1
 
-    def test_prefers_icon_type_over_logo(self):
-        """The square "icon" mark reads better small in a doc header than the
-        wide "logo" wordmark, so icon should win when both exist."""
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": [
-            {"type": "logo", "formats": [{"format": "png", "src": "https://x/logo.png"}]},
-            {"type": "icon", "formats": [{"format": "png", "src": "https://x/icon.png"}]},
-        ]})
-        img_resp = _resp(content=b"icon-bytes")
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp, img_resp]) as mock_get:
-            result = brand_color.get_brand_logo("Acme")
-        assert result["bytes"] == b"icon-bytes"
-        assert mock_get.call_args_list[-1][0][0] == "https://x/icon.png"
-
-    def test_falls_back_to_logo_type_when_no_icon(self):
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": [
-            {"type": "logo", "formats": [{"format": "png", "src": "https://x/logo.png"}]},
-        ]})
-        img_resp = _resp(content=b"logo-bytes")
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp, img_resp]) as mock_get:
-            result = brand_color.get_brand_logo("Acme")
-        assert result["bytes"] == b"logo-bytes"
-        assert mock_get.call_args_list[-1][0][0] == "https://x/logo.png"
+    def test_unparseable_bytes_returns_none_dimensions(self):
+        with patch.object(brand_color.requests, "get", return_value=_resp(content=b"not-a-real-png")):
+            result = brand_color.get_brand_logo("Acme", domain="acme.com")
+        assert result["width"] is None
+        assert result["height"] is None
 
     def test_image_download_failure_returns_none(self):
-        search_resp = _resp([{"domain": "acme.com"}])
-        brand_resp = _resp({"logos": [
-            {"type": "logo", "formats": [{"format": "png", "src": "https://x/logo.png"}]},
-        ]})
-        img_resp = _resp(status_code=404, content=b"")
-        with patch.object(brand_color.requests, "get", side_effect=[search_resp, brand_resp, img_resp]):
-            assert brand_color.get_brand_logo("Acme") is None
+        with patch.object(brand_color.requests, "get", return_value=_resp(status_code=404, content=b"")):
+            assert brand_color.get_brand_logo("Acme", domain="acme.com") is None
 
     def test_exception_returns_none(self):
         with patch.object(brand_color.requests, "get", side_effect=Exception("network down")):
-            assert brand_color.get_brand_logo("Acme") is None
+            assert brand_color.get_brand_logo("Acme", domain="acme.com") is None
 
     def test_requests_unavailable_returns_none(self):
         with patch.object(brand_color, "requests", None):
